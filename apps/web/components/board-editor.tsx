@@ -38,6 +38,8 @@ const nodeTypes: NodeTypes = {
   workflowCard: WorkflowCardNode
 };
 
+type ActiveView = "board" | "trash";
+
 const projectItems = [
   ["P", "Product Pipeline", "projectPurple"],
   ["M", "Marketing Plan", "projectGreen"],
@@ -60,7 +62,17 @@ function ComingSoonBadge() {
   return <span className="comingSoonBadge">Soon</span>;
 }
 
-function LeftSidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
+function LeftSidebar({
+  activeView,
+  onOpenBoard,
+  onOpenSearch,
+  onOpenTrash
+}: {
+  activeView: ActiveView;
+  onOpenBoard: () => void;
+  onOpenSearch: () => void;
+  onOpenTrash: () => void;
+}) {
   return (
     <aside className="leftSidebar">
       <div className="brandRow">
@@ -72,10 +84,10 @@ function LeftSidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
       </div>
 
       <nav className="primaryNav" aria-label="Primary">
-        <a className="navItem navItemActive" href="#">
+        <button className={`navItem ${activeView === "board" ? "navItemActive" : ""}`} type="button" onClick={onOpenBoard}>
           <Grid2X2 size={18} />
           Board
-        </a>
+        </button>
         <button className="navItem navItemMuted" type="button" disabled>
           <FileText size={18} />
           Files
@@ -113,10 +125,9 @@ function LeftSidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
           Templates
           <ComingSoonBadge />
         </button>
-        <button className="navItem navItemMuted" type="button" disabled>
+        <button className={`navItem ${activeView === "trash" ? "navItemActive" : ""}`} type="button" onClick={onOpenTrash}>
           <Trash2 size={18} />
           Trash
-          <ComingSoonBadge />
         </button>
       </div>
 
@@ -247,11 +258,13 @@ function Inspector({
   card,
   board,
   onClose,
+  onDeleteCard,
   onSaveCard
 }: {
   card: Card;
   board: Board;
   onClose: () => void;
+  onDeleteCard: (card: Card) => Promise<void>;
   onSaveCard: (cardId: string, input: UpdateCardInput) => Promise<Card | null>;
 }) {
   const incoming = board.connections.filter((connection) => connection.targetCardId === card.id);
@@ -263,6 +276,8 @@ function Inspector({
   const [positionY, setPositionY] = useState(String(Math.round(card.position.y)));
   const [tags, setTags] = useState(card.tags);
   const [newTag, setNewTag] = useState("");
+  const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState("");
 
@@ -274,6 +289,7 @@ function Inspector({
     setPositionY(String(Math.round(card.position.y)));
     setTags(card.tags);
     setNewTag("");
+    setIsDeleteConfirming(false);
   }, [card.id, card.title, card.description, card.status, card.position.x, card.position.y, card.tags]);
 
   useEffect(() => {
@@ -334,6 +350,15 @@ function Inspector({
       }
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function moveToTrash() {
+    setIsDeleting(true);
+    try {
+      await onDeleteCard(card);
+    } finally {
+      setIsDeleting(false);
     }
   }
 
@@ -500,12 +525,81 @@ function Inspector({
       </section>
 
       <footer className="inspectorMeta">
+        <button
+          className="dangerButton"
+          type="button"
+          disabled={isDeleting}
+          onClick={() => setIsDeleteConfirming(true)}
+        >
+          <Trash2 size={15} />
+          Move to Trash
+        </button>
+        {isDeleteConfirming ? (
+          <div className="confirmBox" role="alert">
+            <strong>Move this card to Trash?</strong>
+            <p>You can restore it from the Trash screen.</p>
+            <div className="confirmActions">
+              <button className="secondaryButton" type="button" onClick={() => setIsDeleteConfirming(false)}>
+                Cancel
+              </button>
+              <button className="dangerButton" type="button" disabled={isDeleting} onClick={() => void moveToTrash()}>
+                {isDeleting ? "Moving" : "Move"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <span>Created</span>
         <strong>Jun 24, 2026, 10:23</strong>
         <span>Updated</span>
         <strong>Today, 09:41</strong>
       </footer>
     </aside>
+  );
+}
+
+function TrashPanel({
+  cards,
+  isLoading,
+  onOpenBoard,
+  onRestoreCard
+}: {
+  cards: Card[];
+  isLoading: boolean;
+  onOpenBoard: () => void;
+  onRestoreCard: (card: Card) => Promise<void>;
+}) {
+  return (
+    <section className="trashPanel" aria-label="Trash">
+      <header className="trashHeader">
+        <div>
+          <span className="eyebrow">Safe deletion</span>
+          <h1>Trash</h1>
+          <p>Deleted cards stay here until they are restored. Permanent deletion is intentionally not exposed yet.</p>
+        </div>
+        <button className="secondaryButton" type="button" onClick={onOpenBoard}>
+          Back to board
+        </button>
+      </header>
+
+      {isLoading ? <div className="trashState">Loading deleted cards</div> : null}
+      {!isLoading && cards.length === 0 ? <div className="trashState">Trash is empty</div> : null}
+      {!isLoading && cards.length > 0 ? (
+        <div className="trashList">
+          {cards.map((card) => (
+            <article className="trashItem" key={card.id}>
+              <div>
+                <strong>{card.title}</strong>
+                <span>{card.typeKey} · moved to Trash</span>
+                {card.description ? <p>{card.description}</p> : null}
+              </div>
+              <button className="secondaryButton" type="button" onClick={() => void onRestoreCard(card)}>
+                Restore
+              </button>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -673,7 +767,10 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
 
 export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [board, setBoard] = useState(initialBoard);
+  const [activeView, setActiveView] = useState<ActiveView>("board");
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
+  const [deletedCards, setDeletedCards] = useState<Card[]>([]);
+  const [isTrashLoading, setIsTrashLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState("Local demo");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -792,6 +889,78 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     }
   }
 
+  async function loadTrash() {
+    setIsTrashLoading(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/boards/${board.id}/trash`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Trash request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { cards?: Card[] };
+      setDeletedCards(payload.cards ?? []);
+      setSyncStatus("Synced");
+    } catch {
+      setSyncStatus("Trash unavailable");
+    } finally {
+      setIsTrashLoading(false);
+    }
+  }
+
+  async function deleteCard(card: Card) {
+    setSyncStatus("Saving");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/cards/${card.id}`, {
+        method: "DELETE"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Delete card failed with ${response.status}`);
+      }
+
+      setBoard((current) => ({
+        ...current,
+        cards: current.cards.filter((item) => item.id !== card.id)
+      }));
+      setDeletedCards((current) => [card, ...current.filter((item) => item.id !== card.id)]);
+      setSelectedCardId(undefined);
+      setActiveView("trash");
+      setSyncStatus("Synced");
+    } catch {
+      setSyncStatus("Delete failed");
+    }
+  }
+
+  async function restoreCard(card: Card) {
+    setSyncStatus("Saving");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/cards/${card.id}/restore`, {
+        method: "POST"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Restore card failed with ${response.status}`);
+      }
+
+      const restoredCard = (await response.json()) as Card;
+      setBoard((current) => ({
+        ...current,
+        cards: [...current.cards.filter((item) => item.id !== restoredCard.id), restoredCard]
+      }));
+      setDeletedCards((current) => current.filter((item) => item.id !== restoredCard.id));
+      setSelectedCardId(restoredCard.id);
+      setActiveView("board");
+      setSyncStatus("Synced");
+    } catch {
+      setSyncStatus("Restore failed");
+    }
+  }
+
   function updateCardPositionLocally(cardId: string, position: Card["position"]) {
     setBoard((current) => ({
       ...current,
@@ -827,6 +996,12 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
 
   const selectedCard = board.cards.find((card) => card.id === selectedCardId);
 
+  useEffect(() => {
+    if (activeView === "trash") {
+      void loadTrash();
+    }
+  }, [activeView]);
+
   function handleNodesChange(changes: NodeChange<WorkflowNode>[]) {
     const nextNodes = applyNodeChanges(changes, nodes);
 
@@ -847,39 +1022,61 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
       <p>The canvas is optimized for desktop workspaces. Open it on a wider screen to edit workflow boards.</p>
     </div>
     <main className={`appShell ${selectedCard ? "" : "appShellNoInspector"}`}>
-      <LeftSidebar onOpenSearch={() => setIsSearchOpen(true)} />
+      <LeftSidebar
+        activeView={activeView}
+        onOpenBoard={() => {
+          setActiveView("board");
+        }}
+        onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenTrash={() => {
+          setSelectedCardId(undefined);
+          setActiveView("trash");
+        }}
+      />
       <section className="mainArea">
         <TopBar syncStatus={syncStatus} onOpenSearch={() => setIsSearchOpen(true)} />
         <div className="boardSurface">
-          {!selectedCard ? <BoardBrief board={board} /> : null}
-          <CanvasToolbar onAddCard={addCard} />
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            defaultViewport={{ x: 300, y: -20, zoom: 0.72 }}
-            minZoom={0.45}
-            maxZoom={1.4}
-            nodesDraggable
-            elementsSelectable
-            onNodesChange={handleNodesChange}
-            onNodeClick={(_, node) => setSelectedCardId(node.id)}
-            onNodeDragStop={(_, node) => {
-              updateCardPositionLocally(node.id, node.position);
-              void updateCard(node.id, { position: node.position });
-            }}
-          >
-            <Background color="#d8dde8" gap={24} size={1} />
-          </ReactFlow>
-          <BoardMiniPreview board={board} />
-          {selectedCard ? <DetailPanel card={selectedCard} board={board} /> : null}
+          {activeView === "board" ? (
+            <>
+              {!selectedCard ? <BoardBrief board={board} /> : null}
+              <CanvasToolbar onAddCard={addCard} />
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                nodeTypes={nodeTypes}
+                defaultViewport={{ x: 300, y: -20, zoom: 0.72 }}
+                minZoom={0.45}
+                maxZoom={1.4}
+                nodesDraggable
+                elementsSelectable
+                onNodesChange={handleNodesChange}
+                onNodeClick={(_, node) => setSelectedCardId(node.id)}
+                onNodeDragStop={(_, node) => {
+                  updateCardPositionLocally(node.id, node.position);
+                  void updateCard(node.id, { position: node.position });
+                }}
+              >
+                <Background color="#d8dde8" gap={24} size={1} />
+              </ReactFlow>
+              <BoardMiniPreview board={board} />
+              {selectedCard ? <DetailPanel card={selectedCard} board={board} /> : null}
+            </>
+          ) : (
+            <TrashPanel
+              cards={deletedCards}
+              isLoading={isTrashLoading}
+              onOpenBoard={() => setActiveView("board")}
+              onRestoreCard={restoreCard}
+            />
+          )}
         </div>
       </section>
-      {selectedCard ? (
+      {activeView === "board" && selectedCard ? (
         <Inspector
           card={selectedCard}
           board={board}
           onClose={() => setSelectedCardId(undefined)}
+          onDeleteCard={deleteCard}
           onSaveCard={updateCard}
         />
       ) : null}

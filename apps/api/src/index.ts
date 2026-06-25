@@ -71,6 +71,33 @@ server.patch("/cards/:cardId", async (request, reply) => {
   return card;
 });
 
+server.delete("/cards/:cardId", async (request, reply) => {
+  const { cardId } = request.params as { cardId: string };
+  const card = await repository.deleteCard(cardId);
+
+  if (!card) {
+    return reply.code(404).send({ error: "Card not found" });
+  }
+
+  return { deleted: true, card };
+});
+
+server.post("/cards/:cardId/restore", async (request, reply) => {
+  const { cardId } = request.params as { cardId: string };
+  const card = await repository.restoreCard(cardId);
+
+  if (!card) {
+    return reply.code(404).send({ error: "Deleted card not found" });
+  }
+
+  return card;
+});
+
+server.get("/boards/:boardId/trash", async (request) => {
+  const { boardId } = request.params as { boardId: string };
+  return { cards: await repository.listDeletedCards(boardId) };
+});
+
 server.get("/search", async (request) => {
   const { q = "" } = request.query as { q?: string };
   return { cards: await repository.searchCards(q) };

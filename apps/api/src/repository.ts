@@ -16,6 +16,9 @@ export type BoardRepository = {
   getBoard(boardId: string): Promise<Board | null>;
   createCard(boardId: string, input: CreateCardInput): Promise<Card | null>;
   updateCard(cardId: string, input: UpdateCardInput): Promise<Card | null>;
+  deleteCard(cardId: string): Promise<Card | null>;
+  restoreCard(cardId: string): Promise<Card | null>;
+  listDeletedCards(boardId: string): Promise<Card[]>;
   searchCards(query: string): Promise<Card[]>;
 };
 
@@ -130,6 +133,7 @@ function applyCardInput(existing: Card, input: UpdateCardInput): Card {
 
 export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRepository {
   const memoryBoard: Board = structuredClone(sourceBoard);
+  const deletedCards: Card[] = [];
 
   return {
     mode: "memory",
@@ -170,6 +174,32 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
 
       memoryBoard.cards[index] = applyCardInput(existingCard, input);
       return memoryBoard.cards[index];
+    },
+
+    async deleteCard(cardId) {
+      const index = memoryBoard.cards.findIndex((card) => card.id === cardId);
+      const existingCard = memoryBoard.cards[index];
+      if (index === -1 || !existingCard) return null;
+
+      memoryBoard.cards.splice(index, 1);
+      deletedCards.unshift(existingCard);
+      return existingCard;
+    },
+
+    async restoreCard(cardId) {
+      const index = deletedCards.findIndex((card) => card.id === cardId);
+      const deletedCard = deletedCards[index];
+      if (index === -1 || !deletedCard) return null;
+
+      deletedCards.splice(index, 1);
+      const restoredCard: Card = { ...deletedCard };
+      memoryBoard.cards.push(restoredCard);
+      return restoredCard;
+    },
+
+    async listDeletedCards(boardId) {
+      if (boardId !== memoryBoard.id) return [];
+      return deletedCards;
     },
 
     async searchCards(query) {
@@ -225,6 +255,23 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
         left join card_types ct on ct.id = c.type_id
         where c.id = $1
           and c.deleted_at is null
+        limit 1
+      `,
+      [cardId]
+    );
+
+    const row = result.rows[0];
+    return row ? cardFromRow(row) : null;
+  }
+
+  async function getDeletedCard(cardId: string): Promise<Card | null> {
+    const result = await pool.query(
+      `
+        select c.*, ct.key as type_key
+        from cards c
+        left join card_types ct on ct.id = c.type_id
+        where c.id = $1
+          and c.deleted_at is not null
         limit 1
       `,
       [cardId]
@@ -383,6 +430,57 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
 
       const row = result.rows[0];
       return row ? cardFromRow({ ...row, type_key: nextCard.typeKey }) : null;
+    },
+
+    async deleteCard(cardId) {
+      const existingCard = await getCard(cardId);
+      if (!existingCard) return null;
+
+      await pool.query(
+        `
+          update cards
+          set deleted_at = now()
+          where id = $1
+            and deleted_at is null
+        `,
+        [cardId]
+      );
+
+      return existingCard;
+    },
+
+    async restoreCard(cardId) {
+      const deletedCard = await getDeletedCard(cardId);
+      if (!deletedCard) return null;
+
+      const result = await pool.query(
+        `
+          update cards
+          set deleted_at = null
+          where id = $1
+          returning *
+        `,
+        [cardId]
+      );
+
+      const row = result.rows[0];
+      return row ? cardFromRow({ ...row, type_key: deletedCard.typeKey }) : null;
+    },
+
+    async listDeletedCards(boardId) {
+      const result = await pool.query(
+        `
+          select c.*, ct.key as type_key
+          from cards c
+          left join card_types ct on ct.id = c.type_id
+          where c.board_id = $1
+            and c.deleted_at is not null
+          order by c.deleted_at desc, c.updated_at desc
+        `,
+        [boardId]
+      );
+
+      return result.rows.map(cardFromRow);
     },
 
     async searchCards(query) {

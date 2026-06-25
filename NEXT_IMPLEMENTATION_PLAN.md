@@ -383,6 +383,8 @@ MVP:
 
 ### 4.4. Trash
 
+Статус: выполнено.
+
 Назначение: безопасное удаление и восстановление.
 
 MVP:
@@ -404,6 +406,17 @@ MVP:
    - permanent delete requires role.
 
 Зависимости: auth/roles before production.
+
+Итог реализации:
+
+- добавлены repository-операции `deleteCard`, `restoreCard`, `listDeletedCards`;
+- добавлены API endpoints `DELETE /cards/:cardId`, `POST /cards/:cardId/restore`, `GET /boards/:boardId/trash`;
+- soft-delete использует `deleted_at` и не затирает исходный `status`;
+- в UI включен пункт `Trash`;
+- в inspector добавлено подтверждаемое действие `Move to Trash`;
+- добавлен экран Trash с empty/loading/list состояниями и restore action;
+- добавлены repository tests для delete/restore/list;
+- проведены `typecheck`, `test`, `build` и browser-level сценарий delete/restore/status-preservation.
 
 ### 4.5. Share
 
@@ -511,6 +524,8 @@ MVP:
 
 ### 4.9. Add tag
 
+Статус: выполнено в коммите `157fa74`.
+
 Назначение: простое редактирование metadata карточки.
 
 MVP:
@@ -534,11 +549,20 @@ MVP:
 
 Зависимости: none. This is the smallest useful next feature.
 
+Итог реализации:
+
+- включено inline-редактирование tags в inspector;
+- добавлено удаление tag через chip action;
+- добавлена нормализация `trim/lowercase/kebab-case`;
+- добавлена защита от дублей;
+- сохранение работает через существующий `PATCH /cards/:cardId`;
+- проведены `typecheck`, `test`, `build` и browser-level сценарий add/remove/persist.
+
 ## 5. Recommended immediate sprint order
 
-1. Add tag.
-2. Trash soft-delete/restore for cards.
-3. Files list read-only.
+1. Add tag. Done.
+2. Trash soft-delete/restore for cards. Done.
+3. Files list read-only. Current next.
 4. Attach file upload to card.
 5. Templates picker for Add card.
 6. Share modal with copy link, then membership.

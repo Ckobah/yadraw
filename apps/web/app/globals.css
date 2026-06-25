@@ -903,6 +903,36 @@ button:disabled {
   color: #98a2b3;
 }
 
+.secondaryButton,
+.dangerButton {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-weight: 750;
+}
+
+.secondaryButton {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted-strong);
+}
+
+.dangerButton {
+  border: 1px solid #ffd0d0;
+  background: #fff5f5;
+  color: #c93434;
+}
+
+.dangerButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .saveFeedback {
   display: inline-flex;
   gap: 6px;
@@ -1025,9 +1055,111 @@ button:disabled {
   margin-top: auto;
 }
 
+.confirmBox {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #ffd0d0;
+  border-radius: 8px;
+  background: #fffafa;
+  padding: 12px;
+}
+
+.confirmBox p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.confirmActions {
+  display: flex;
+  gap: 8px;
+}
+
 .inspectorMeta span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.trashPanel {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 34px;
+  background:
+    linear-gradient(rgba(247, 248, 251, 0.92), rgba(247, 248, 251, 0.92)),
+    radial-gradient(circle at 20% 10%, rgba(239, 90, 138, 0.1), transparent 32%),
+    radial-gradient(circle at 80% 90%, rgba(47, 128, 237, 0.08), transparent 36%);
+}
+
+.trashHeader {
+  display: flex;
+  max-width: 980px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.trashHeader h1 {
+  margin: 4px 0 8px;
+  font-size: 30px;
+}
+
+.trashHeader p {
+  max-width: 560px;
+  margin: 0;
+  color: var(--muted-strong);
+  line-height: 1.5;
+}
+
+.trashList {
+  display: grid;
+  max-width: 980px;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.trashItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(28, 39, 63, 0.07);
+}
+
+.trashItem div {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.trashItem strong {
+  font-size: 15px;
+}
+
+.trashItem span,
+.trashItem p,
+.trashState {
+  color: var(--muted);
+}
+
+.trashItem p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.trashState {
+  max-width: 980px;
+  margin-top: 28px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 26px;
+  text-align: center;
 }
 
 .dialogBackdrop {

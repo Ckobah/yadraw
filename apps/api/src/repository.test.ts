@@ -76,6 +76,35 @@ describe("memory board repository", () => {
     await expect(repository.searchCards("logistics")).resolves.toHaveLength(1);
   });
 
+  it("soft-deletes cards into trash and restores them", async () => {
+    const repository = createMemoryRepository();
+    const cardId = "6bb48e57-ed49-4fd6-bdbc-a449b2756be9";
+
+    await expect(repository.deleteCard(cardId)).resolves.toMatchObject({
+      id: cardId,
+      title: "2. Enrich Data"
+    });
+
+    const boardAfterDelete = await repository.getBoard(demoIds.board);
+    expect(boardAfterDelete?.cards.some((card) => card.id === cardId)).toBe(false);
+
+    await expect(repository.listDeletedCards(demoIds.board)).resolves.toMatchObject([
+      {
+        id: cardId,
+        status: "active"
+      }
+    ]);
+
+    await expect(repository.restoreCard(cardId)).resolves.toMatchObject({
+      id: cardId,
+      status: "active"
+    });
+
+    const boardAfterRestore = await repository.getBoard(demoIds.board);
+    expect(boardAfterRestore?.cards.some((card) => card.id === cardId)).toBe(true);
+    await expect(repository.listDeletedCards(demoIds.board)).resolves.toEqual([]);
+  });
+
   it("returns null for missing boards and cards", async () => {
     const repository = createMemoryRepository();
 
@@ -84,5 +113,8 @@ describe("memory board repository", () => {
     ).resolves.toBeNull();
     await expect(repository.getBoard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.updateCard("a57baac3-0d79-4b95-bfdd-6366d7681c81", { title: "Missing" })).resolves.toBeNull();
+    await expect(repository.deleteCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
+    await expect(repository.restoreCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
+    await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
   });
 });
