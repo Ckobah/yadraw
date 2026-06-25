@@ -47,12 +47,24 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 .appShell {
   display: grid;
-  grid-template-columns: 248px minmax(680px, 1fr) 380px;
+  grid-template-columns: 248px minmax(0, 1fr) 380px;
   height: 100vh;
   min-height: 760px;
   overflow: hidden;
+}
+
+.appShellNoInspector {
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.mobileFallback {
+  display: none;
 }
 
 .leftSidebar,
@@ -136,13 +148,31 @@ button {
   min-height: 42px;
   padding: 0 10px;
   border-radius: 8px;
+  border: 0;
+  background: transparent;
   color: var(--muted-strong);
   text-decoration: none;
+  text-align: left;
 }
 
 .navItemActive {
   background: #f1edff;
   color: var(--purple);
+}
+
+.navItemMuted {
+  opacity: 0.58;
+}
+
+.comingSoonBadge {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
 }
 
 .sidebarSection {
@@ -238,6 +268,15 @@ button {
   color: #fff;
 }
 
+.primaryButtonDisabled,
+.shareButtonDisabled,
+.squareButton:disabled,
+.toolGroup button:disabled,
+.attachButton:disabled,
+.tagList button:disabled {
+  opacity: 0.48;
+}
+
 .accountRow {
   gap: 10px;
 }
@@ -270,9 +309,12 @@ button {
   display: grid;
   grid-template-rows: 76px 1fr;
   min-width: 0;
+  overflow: hidden;
 }
 
 .topBar {
+  position: relative;
+  z-index: 10;
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.95);
@@ -372,9 +414,60 @@ button {
 
 .boardSurface {
   position: relative;
+  width: 100%;
   min-width: 0;
+  overflow: hidden;
   background-image: radial-gradient(circle, rgba(123, 136, 161, 0.22) 1px, transparent 1px);
   background-size: 24px 24px;
+}
+
+.boardBrief {
+  position: absolute;
+  z-index: 8;
+  top: 18px;
+  left: 250px;
+  width: min(340px, calc(100% - 272px));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 34px rgba(28, 39, 63, 0.1);
+}
+
+.boardBrief h1 {
+  margin: 4px 0 6px;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.boardBrief p {
+  margin: 0;
+  color: var(--muted-strong);
+  line-height: 1.45;
+}
+
+.eyebrow {
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.briefStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.briefStats span {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .canvasToolbar {
@@ -423,6 +516,10 @@ button {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 10px 24px rgba(38, 47, 75, 0.08);
+}
+
+.react-flow__node-workflowCard {
+  visibility: visible !important;
 }
 
 .workflowNodeSelected {
@@ -693,6 +790,8 @@ button {
 }
 
 .inspector {
+  position: relative;
+  z-index: 12;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -804,6 +903,16 @@ button {
   color: #98a2b3;
 }
 
+.saveFeedback {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .tagList {
   display: flex;
   flex-wrap: wrap;
@@ -885,9 +994,88 @@ button {
   font-size: 12px;
 }
 
+.dialogBackdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding-top: 86px;
+  background: rgba(16, 24, 40, 0.24);
+}
+
+.searchDialog {
+  width: min(620px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.24);
+}
+
+.searchDialogHeader {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.searchDialogHeader input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  outline: 0;
+}
+
+.searchResults {
+  display: grid;
+  max-height: 460px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.searchResult {
+  display: grid;
+  gap: 5px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 12px;
+  text-align: left;
+}
+
+.searchResult:hover,
+.searchResult:focus-visible {
+  background: #f5f7fb;
+  outline: 0;
+}
+
+.searchResult strong {
+  color: var(--text);
+}
+
+.searchResult span,
+.searchResult p,
+.emptySearch {
+  color: var(--muted);
+}
+
+.searchResult p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.emptySearch {
+  padding: 22px;
+  text-align: center;
+}
+
 @media (max-width: 1180px) {
   .appShell {
-    grid-template-columns: 74px minmax(520px, 1fr) 340px;
+    grid-template-columns: 74px minmax(0, 1fr) 340px;
   }
 
   .leftSidebar {
@@ -912,5 +1100,43 @@ button {
 
   .detailPanel {
     width: calc(100% - 44px);
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    overflow: hidden;
+  }
+
+  .appShell,
+  .dialogBackdrop {
+    display: none;
+  }
+
+  .mobileFallback {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    padding: 28px;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.92)),
+      radial-gradient(circle at 30% 20%, rgba(47, 128, 237, 0.18), transparent 34%),
+      radial-gradient(circle at 70% 80%, rgba(46, 173, 99, 0.16), transparent 32%);
+  }
+
+  .mobileFallback > * {
+    max-width: 330px;
+  }
+
+  .mobileFallback h1 {
+    margin: 18px 0 8px;
+    font-size: 30px;
+  }
+
+  .mobileFallback p {
+    margin: 0;
+    color: var(--muted-strong);
+    line-height: 1.5;
+    text-align: center;
   }
 }

@@ -9,6 +9,7 @@ import {
   type NodeTypes
 } from "@xyflow/react";
 import {
+  CheckCircle2,
   Bell,
   Bot,
   Boxes,
@@ -55,7 +56,11 @@ function AvatarStack() {
   );
 }
 
-function LeftSidebar() {
+function ComingSoonBadge() {
+  return <span className="comingSoonBadge">Soon</span>;
+}
+
+function LeftSidebar({ onOpenSearch }: { onOpenSearch: () => void }) {
   return (
     <aside className="leftSidebar">
       <div className="brandRow">
@@ -71,18 +76,20 @@ function LeftSidebar() {
           <Grid2X2 size={18} />
           Board
         </a>
-        <a className="navItem" href="#">
+        <button className="navItem navItemMuted" type="button" disabled>
           <FileText size={18} />
           Files
-        </a>
-        <a className="navItem" href="#">
+          <ComingSoonBadge />
+        </button>
+        <button className="navItem" type="button" onClick={onOpenSearch}>
           <Search size={18} />
           Search
-        </a>
-        <a className="navItem" href="#">
+        </button>
+        <button className="navItem navItemMuted" type="button" disabled>
           <Sparkles size={18} />
           AI Assistant
-        </a>
+          <ComingSoonBadge />
+        </button>
       </nav>
 
       <div className="sidebarSection">
@@ -93,22 +100,24 @@ function LeftSidebar() {
           </button>
         </div>
         {projectItems.map(([letter, label, className]) => (
-          <a className="projectItem" href="#" key={label}>
+          <button className="projectItem navItemMuted" type="button" disabled key={label}>
             <span className={`projectBadge ${className}`}>{letter}</span>
             {label}
-          </a>
+          </button>
         ))}
       </div>
 
       <div className="sidebarFooterNav">
-        <a className="navItem" href="#">
+        <button className="navItem navItemMuted" type="button" disabled>
           <Layers3 size={18} />
           Templates
-        </a>
-        <a className="navItem" href="#">
+          <ComingSoonBadge />
+        </button>
+        <button className="navItem navItemMuted" type="button" disabled>
           <Trash2 size={18} />
           Trash
-        </a>
+          <ComingSoonBadge />
+        </button>
       </div>
 
       <div className="assistantPrompt">
@@ -120,7 +129,7 @@ function LeftSidebar() {
           AI Assistant
         </strong>
         <p>Ask anything about your board</p>
-        <button className="primaryButton" type="button">Ask AI</button>
+        <button className="primaryButton primaryButtonDisabled" type="button" disabled>Ask AI</button>
       </div>
 
       <div className="accountRow">
@@ -135,7 +144,7 @@ function LeftSidebar() {
   );
 }
 
-function TopBar({ syncStatus }: { syncStatus: string }) {
+function TopBar({ syncStatus, onOpenSearch }: { syncStatus: string; onOpenSearch: () => void }) {
   return (
     <header className="topBar">
       <div className="breadcrumbs">
@@ -151,19 +160,19 @@ function TopBar({ syncStatus }: { syncStatus: string }) {
 
       <div className="topActions">
         <AvatarStack />
-        <button className="shareButton" type="button">
+        <button className="shareButton shareButtonDisabled" type="button" disabled>
           <Share2 size={17} />
           Share
         </button>
-        <button className="squareButton" type="button" aria-label="Run workflow">
+        <button className="squareButton" type="button" aria-label="Run workflow" disabled>
           <Play size={18} />
         </button>
-        <button className="searchBox" type="button">
+        <button className="searchBox" type="button" onClick={onOpenSearch}>
           <Search size={17} />
           Search
           <kbd>⌘K</kbd>
         </button>
-        <button className="squareButton" type="button" aria-label="Notifications">
+        <button className="squareButton" type="button" aria-label="Notifications" disabled>
           <Bell size={18} />
         </button>
         <span className="syncStatus">{syncStatus}</span>
@@ -183,10 +192,10 @@ function CanvasToolbar({ onAddCard }: { onAddCard: () => void }) {
         <button className="toolIconActive" type="button" aria-label="Select">
           <MousePointer2 size={17} />
         </button>
-        <button type="button" aria-label="Pan">
+        <button type="button" aria-label="Pan" disabled>
           <Upload size={17} />
         </button>
-        <button type="button" aria-label="Zoom">
+        <button type="button" aria-label="Zoom" disabled>
           <ZoomIn size={17} />
         </button>
       </span>
@@ -237,11 +246,13 @@ function BoardMiniPreview({ board }: { board: Board }) {
 function Inspector({
   card,
   board,
+  onClose,
   onSaveCard
 }: {
   card: Card;
   board: Board;
-  onSaveCard: (cardId: string, input: UpdateCardInput) => Promise<void>;
+  onClose: () => void;
+  onSaveCard: (cardId: string, input: UpdateCardInput) => Promise<Card | null>;
 }) {
   const incoming = board.connections.filter((connection) => connection.targetCardId === card.id);
   const outgoing = board.connections.filter((connection) => connection.sourceCardId === card.id);
@@ -251,6 +262,7 @@ function Inspector({
   const [positionX, setPositionX] = useState(String(Math.round(card.position.x)));
   const [positionY, setPositionY] = useState(String(Math.round(card.position.y)));
   const [isSaving, setIsSaving] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState("");
 
   useEffect(() => {
     setTitle(card.title);
@@ -259,6 +271,10 @@ function Inspector({
     setPositionX(String(Math.round(card.position.x)));
     setPositionY(String(Math.round(card.position.y)));
   }, [card.id, card.title, card.description, card.status, card.position.x, card.position.y]);
+
+  useEffect(() => {
+    setSaveFeedback("");
+  }, [card.id]);
 
   const nextPosition = {
     x: Number(positionX),
@@ -276,13 +292,25 @@ function Inspector({
     if (!hasValidPosition) return;
 
     setIsSaving(true);
+    setSaveFeedback("");
     try {
-      await onSaveCard(card.id, {
+      const savedCard = await onSaveCard(card.id, {
         title,
         description,
         status,
         position: nextPosition
       });
+
+      if (savedCard) {
+        setTitle(savedCard.title);
+        setDescription(savedCard.description ?? "");
+        setStatus(savedCard.status);
+        setPositionX(String(Math.round(savedCard.position.x)));
+        setPositionY(String(Math.round(savedCard.position.y)));
+        setSaveFeedback("Saved");
+      } else {
+        setSaveFeedback("Save failed");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -294,7 +322,7 @@ function Inspector({
         <div>
           <h2>{card.title}</h2>
         </div>
-        <button className="miniIconButton" type="button" aria-label="Close inspector">
+        <button className="miniIconButton" type="button" aria-label="Close inspector" onClick={onClose}>
           <X size={16} />
         </button>
       </header>
@@ -317,6 +345,7 @@ function Inspector({
             <dd>
               <input
                 className="formControl"
+                aria-label="Card title"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
               />
@@ -327,6 +356,7 @@ function Inspector({
             <dd>
               <textarea
                 className="formControl textAreaControl"
+                aria-label="Card description"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
               />
@@ -337,6 +367,7 @@ function Inspector({
             <dd>
               <select
                 className="formControl"
+                aria-label="Card status"
                 value={status}
                 onChange={(event) => setStatus(event.target.value as CardStatus)}
               >
@@ -356,6 +387,7 @@ function Inspector({
                 <input
                   className="formControl"
                   type="number"
+                  aria-label="Card X position"
                   value={positionX}
                   onChange={(event) => setPositionX(event.target.value)}
                 />
@@ -365,6 +397,7 @@ function Inspector({
                 <input
                   className="formControl"
                   type="number"
+                  aria-label="Card Y position"
                   value={positionY}
                   onChange={(event) => setPositionY(event.target.value)}
                 />
@@ -375,7 +408,7 @@ function Inspector({
             <dt>Tags</dt>
             <dd className="tagList">
               {card.tags.map((tag) => <span key={tag}>{tag}</span>)}
-              <button type="button" aria-label="Add tag"><Plus size={14} /></button>
+              <button type="button" aria-label="Add tag" disabled><Plus size={14} /></button>
             </dd>
           </div>
         </dl>
@@ -383,10 +416,20 @@ function Inspector({
           className="savePropertiesButton"
           type="button"
           disabled={!isDirty || isSaving || !hasValidPosition}
-          onClick={saveProperties}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            void saveProperties();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              void saveProperties();
+            }
+          }}
         >
           {isSaving ? "Saving" : "Save changes"}
         </button>
+        {saveFeedback ? <div className="saveFeedback"><CheckCircle2 size={14} />{saveFeedback}</div> : null}
       </section>
 
       <section className="ioSection">
@@ -405,7 +448,7 @@ function Inspector({
             {file.sizeBytes ? <small>{(file.sizeBytes / 1000).toFixed(1)} KB</small> : null}
           </div>
         ))}
-        <button className="attachButton" type="button">
+        <button className="attachButton" type="button" disabled>
           <Plus size={15} />
           Attach file
         </button>
@@ -418,6 +461,103 @@ function Inspector({
         <strong>Today, 09:41</strong>
       </footer>
     </aside>
+  );
+}
+
+function BoardBrief({ board }: { board: Board }) {
+  const activeCards = board.cards.filter((card) => card.status === "active").length;
+
+  return (
+    <section className="boardBrief" aria-label="Board summary">
+      <span className="eyebrow">Product Pipeline</span>
+      <h1>{board.name}</h1>
+      <p>{board.description}</p>
+      <div className="briefStats">
+        <span>{board.cards.length} cards</span>
+        <span>{board.connections.length} connections</span>
+        <span>{activeCards} active</span>
+      </div>
+    </section>
+  );
+}
+
+function SearchDialog({
+  board,
+  isOpen,
+  onClose,
+  onSelectCard
+}: {
+  board: Board;
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectCard: (cardId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const results = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return board.cards;
+
+    return board.cards.filter((card) => {
+      const haystack = [
+        card.title,
+        card.description,
+        card.typeKey,
+        card.status,
+        card.tags.join(" "),
+        JSON.stringify(card.data)
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(needle);
+    });
+  }, [board.cards, query]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="dialogBackdrop" role="presentation" onMouseDown={onClose}>
+      <section className="searchDialog" role="dialog" aria-modal="true" aria-label="Search board" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="searchDialogHeader">
+          <Search size={18} />
+          <input
+            autoFocus
+            aria-label="Search cards"
+            value={query}
+            placeholder="Search cards, tags, data"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          <button className="miniIconButton" type="button" aria-label="Close search" onClick={onClose}>
+            <X size={15} />
+          </button>
+        </header>
+        <div className="searchResults">
+          {results.map((card) => (
+            <button
+              className="searchResult"
+              type="button"
+              key={card.id}
+              onClick={() => {
+                onSelectCard(card.id);
+                onClose();
+              }}
+            >
+              <strong>{card.title}</strong>
+              <span>{card.typeKey} · {card.status}</span>
+              {card.description ? <p>{card.description}</p> : null}
+            </button>
+          ))}
+          {results.length === 0 ? <div className="emptySearch">No cards found</div> : null}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -488,8 +628,9 @@ const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
 
 export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [board, setBoard] = useState(initialBoard);
-  const [selectedCardId, setSelectedCardId] = useState(initialBoard.cards[1]?.id ?? initialBoard.cards[0]?.id);
+  const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
   const [syncStatus, setSyncStatus] = useState("Local demo");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -510,7 +651,6 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         if (cancelled) return;
 
         setBoard(nextBoard);
-        setSelectedCardId((current) => current ?? nextBoard.cards[1]?.id ?? nextBoard.cards[0]?.id);
         setSyncStatus("Synced");
       } catch {
         if (!cancelled) {
@@ -578,7 +718,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     }
   }
 
-  async function updateCard(cardId: string, input: UpdateCardInput) {
+  async function updateCard(cardId: string, input: UpdateCardInput): Promise<Card | null> {
     setSyncStatus("Saving");
 
     try {
@@ -600,8 +740,10 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         cards: current.cards.map((item) => (item.id === card.id ? card : item))
       }));
       setSyncStatus("Synced");
+      return card;
     } catch {
       setSyncStatus("Save failed");
+      return null;
     }
   }
 
@@ -638,7 +780,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     [board.connections]
   );
 
-  const selectedCard = board.cards.find((card) => card.id === selectedCardId) ?? board.cards[0];
+  const selectedCard = board.cards.find((card) => card.id === selectedCardId);
 
   function handleNodesChange(changes: NodeChange<WorkflowNode>[]) {
     const nextNodes = applyNodeChanges(changes, nodes);
@@ -653,17 +795,24 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   }
 
   return (
-    <main className="appShell">
-      <LeftSidebar />
+    <>
+    <div className="mobileFallback">
+      <div className="brandMark">Y</div>
+      <h1>Yadraw</h1>
+      <p>The canvas is optimized for desktop workspaces. Open it on a wider screen to edit workflow boards.</p>
+    </div>
+    <main className={`appShell ${selectedCard ? "" : "appShellNoInspector"}`}>
+      <LeftSidebar onOpenSearch={() => setIsSearchOpen(true)} />
       <section className="mainArea">
-        <TopBar syncStatus={syncStatus} />
+        <TopBar syncStatus={syncStatus} onOpenSearch={() => setIsSearchOpen(true)} />
         <div className="boardSurface">
+          {!selectedCard ? <BoardBrief board={board} /> : null}
           <CanvasToolbar onAddCard={addCard} />
           <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            fitView
+            defaultViewport={{ x: 300, y: -20, zoom: 0.72 }}
             minZoom={0.45}
             maxZoom={1.4}
             nodesDraggable
@@ -681,7 +830,21 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
           {selectedCard ? <DetailPanel card={selectedCard} board={board} /> : null}
         </div>
       </section>
-      {selectedCard ? <Inspector card={selectedCard} board={board} onSaveCard={updateCard} /> : null}
+      {selectedCard ? (
+        <Inspector
+          card={selectedCard}
+          board={board}
+          onClose={() => setSelectedCardId(undefined)}
+          onSaveCard={updateCard}
+        />
+      ) : null}
     </main>
+    <SearchDialog
+      board={board}
+      isOpen={isSearchOpen}
+      onClose={() => setIsSearchOpen(false)}
+      onSelectCard={setSelectedCardId}
+    />
+    </>
   );
 }
