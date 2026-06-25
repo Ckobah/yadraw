@@ -261,6 +261,8 @@ function Inspector({
   const [status, setStatus] = useState<CardStatus>(card.status);
   const [positionX, setPositionX] = useState(String(Math.round(card.position.x)));
   const [positionY, setPositionY] = useState(String(Math.round(card.position.y)));
+  const [tags, setTags] = useState(card.tags);
+  const [newTag, setNewTag] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState("");
 
@@ -270,7 +272,9 @@ function Inspector({
     setStatus(card.status);
     setPositionX(String(Math.round(card.position.x)));
     setPositionY(String(Math.round(card.position.y)));
-  }, [card.id, card.title, card.description, card.status, card.position.x, card.position.y]);
+    setTags(card.tags);
+    setNewTag("");
+  }, [card.id, card.title, card.description, card.status, card.position.x, card.position.y, card.tags]);
 
   useEffect(() => {
     setSaveFeedback("");
@@ -281,12 +285,27 @@ function Inspector({
     y: Number(positionY)
   };
   const hasValidPosition = Number.isFinite(nextPosition.x) && Number.isFinite(nextPosition.y);
+  const normalizedNewTag = newTag.trim().replace(/\s+/g, "-").toLowerCase();
+  const canAddTag = Boolean(normalizedNewTag) && !tags.includes(normalizedNewTag);
+  const tagsKey = tags.join("\n");
+  const savedTagsKey = card.tags.join("\n");
   const isDirty =
     title !== card.title ||
     description !== (card.description ?? "") ||
     status !== card.status ||
+    tagsKey !== savedTagsKey ||
     nextPosition.x !== card.position.x ||
     nextPosition.y !== card.position.y;
+
+  function addTag() {
+    if (!canAddTag) return;
+    setTags((current) => [...current, normalizedNewTag]);
+    setNewTag("");
+  }
+
+  function removeTag(tag: string) {
+    setTags((current) => current.filter((item) => item !== tag));
+  }
 
   async function saveProperties() {
     if (!hasValidPosition) return;
@@ -298,6 +317,7 @@ function Inspector({
         title,
         description,
         status,
+        tags,
         position: nextPosition
       });
 
@@ -307,6 +327,7 @@ function Inspector({
         setStatus(savedCard.status);
         setPositionX(String(Math.round(savedCard.position.x)));
         setPositionY(String(Math.round(savedCard.position.y)));
+        setTags(savedCard.tags);
         setSaveFeedback("Saved");
       } else {
         setSaveFeedback("Save failed");
@@ -406,9 +427,33 @@ function Inspector({
           </div>
           <div>
             <dt>Tags</dt>
-            <dd className="tagList">
-              {card.tags.map((tag) => <span key={tag}>{tag}</span>)}
-              <button type="button" aria-label="Add tag" disabled><Plus size={14} /></button>
+            <dd className="tagEditor">
+              <div className="tagList">
+                {tags.map((tag) => (
+                  <button className="tagChip" type="button" key={tag} aria-label={`Remove ${tag} tag`} onClick={() => removeTag(tag)}>
+                    {tag}
+                    <X size={12} />
+                  </button>
+                ))}
+              </div>
+              <form
+                className="tagForm"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  addTag();
+                }}
+              >
+                <input
+                  className="formControl"
+                  aria-label="New tag"
+                  value={newTag}
+                  placeholder="Add tag"
+                  onChange={(event) => setNewTag(event.target.value)}
+                />
+                <button type="submit" aria-label="Add tag" disabled={!canAddTag}>
+                  <Plus size={14} />
+                </button>
+              </form>
             </dd>
           </div>
         </dl>

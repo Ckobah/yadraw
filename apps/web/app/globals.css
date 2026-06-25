@@ -828,7 +828,7 @@ button:disabled {
   margin: 0;
 }
 
-.propertyList div {
+.propertyList > div {
   display: grid;
   gap: 7px;
 }
@@ -922,13 +922,49 @@ button:disabled {
 .tagList span,
 .tagList button {
   display: inline-flex;
+  gap: 5px;
   min-height: 28px;
+  max-width: 100%;
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   padding: 0 9px;
   color: var(--muted-strong);
+}
+
+.tagChip {
+  max-width: 100%;
+}
+
+.tagChip svg {
+  flex: 0 0 auto;
+  color: #98a2b3;
+}
+
+.tagEditor {
+  display: grid;
+  gap: 9px;
+}
+
+.tagForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+}
+
+.tagForm button {
+  display: grid;
+  min-height: 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--purple);
+}
+
+.tagForm button:disabled {
+  opacity: 0.48;
 }
 
 .ioSection {
