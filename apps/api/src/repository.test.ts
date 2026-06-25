@@ -135,6 +135,40 @@ describe("memory board repository", () => {
     expect(files).toHaveLength(4);
   });
 
+  it("attaches file metadata to a card and exposes it in board files", async () => {
+    const repository = createMemoryRepository();
+    const cardId = "6bb48e57-ed49-4fd6-bdbc-a449b2756be9";
+
+    const card = await repository.attachFile(cardId, {
+      filename: " brief.pdf ",
+      mimeType: "application/pdf",
+      sizeBytes: 18_432,
+      role: "attachment"
+    });
+
+    expect(card?.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: "brief.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 18_432,
+          role: "attachment"
+        })
+      ])
+    );
+
+    const files = await repository.listFiles(demoIds.board);
+    expect(files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: "brief.pdf",
+          cardId,
+          cardTitle: "2. Enrich Data"
+        })
+      ])
+    );
+  });
+
   it("returns null for missing boards and cards", async () => {
     const repository = createMemoryRepository();
 
@@ -147,5 +181,11 @@ describe("memory board repository", () => {
     await expect(repository.restoreCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(repository.listFiles("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
+    await expect(
+      repository.attachFile("a57baac3-0d79-4b95-bfdd-6366d7681c81", {
+        filename: "missing.txt",
+        role: "attachment"
+      })
+    ).resolves.toBeNull();
   });
 });

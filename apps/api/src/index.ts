@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { config } from "dotenv";
 import Fastify from "fastify";
+import { z } from "zod";
 import {
   createCardInputSchema,
   updateCardInputSchema
@@ -21,6 +22,13 @@ const corsOrigins = (process.env.CORS_ORIGIN ?? "http://127.0.0.1:3000,http://lo
 
 await server.register(cors, {
   origin: corsOrigins
+});
+
+const attachFileInputSchema = z.object({
+  filename: z.string().trim().min(1).max(160),
+  mimeType: z.string().trim().min(1).max(120).optional(),
+  sizeBytes: z.number().int().nonnegative().max(25_000_000).optional(),
+  role: z.string().trim().min(1).max(60).default("attachment")
 });
 
 const repository = process.env.DATABASE_URL
@@ -101,6 +109,26 @@ server.get("/boards/:boardId/trash", async (request) => {
 server.get("/boards/:boardId/files", async (request) => {
   const { boardId } = request.params as { boardId: string };
   return { files: await repository.listFiles(boardId) };
+});
+
+server.post("/cards/:cardId/files", async (request, reply) => {
+  const { cardId } = request.params as { cardId: string };
+  const input = attachFileInputSchema.safeParse(request.body);
+
+  if (!input.success) {
+    return reply.code(400).send({
+      error: "Invalid file attachment",
+      fields: input.error.flatten().fieldErrors
+    });
+  }
+
+  const card = await repository.attachFile(cardId, input.data);
+
+  if (!card) {
+    return reply.code(404).send({ error: "Card not found" });
+  }
+
+  return reply.code(201).send(card);
 });
 
 server.get("/search", async (request) => {

@@ -18,6 +18,13 @@ export type BoardFile = FileRef & {
   cardStatus: Card["status"];
 };
 
+export type AttachFileInput = {
+  filename: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  role: string;
+};
+
 export type BoardRepository = {
   mode: "postgres" | "memory";
   getBoard(boardId: string): Promise<Board | null>;
@@ -27,6 +34,7 @@ export type BoardRepository = {
   restoreCard(cardId: string): Promise<Card | null>;
   listDeletedCards(boardId: string): Promise<Card[]>;
   listFiles(boardId: string): Promise<BoardFile[]>;
+  attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
   searchCards(query: string): Promise<Card[]>;
 };
 
@@ -139,6 +147,27 @@ function applyCardInput(existing: Card, input: UpdateCardInput): Card {
   };
 }
 
+function normalizeFileName(filename: string): string {
+  return filename
+    .split(/[/\\]/)
+    .at(-1)
+    ?.replace(/[\u0000-\u001f]/g, "")
+    .trim()
+    .slice(0, 160) ?? "attachment";
+}
+
+function buildFileRef(input: AttachFileInput): FileRef {
+  const filename = normalizeFileName(input.filename);
+
+  return {
+    id: randomUUID(),
+    filename: filename || "attachment",
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    role: input.role
+  };
+}
+
 function boardFilesFromCards(cards: Card[]): BoardFile[] {
   return cards.flatMap((card) =>
     card.files.map((file) => ({
@@ -227,6 +256,19 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
       return boardFilesFromCards(memoryBoard.cards);
     },
 
+    async attachFile(cardId, input) {
+      const index = memoryBoard.cards.findIndex((card) => card.id === cardId);
+      const existingCard = memoryBoard.cards[index];
+      if (index === -1 || !existingCard) return null;
+
+      const nextFile = buildFileRef(input);
+      memoryBoard.cards[index] = applyCardInput(existingCard, {
+        files: [...existingCard.files, nextFile]
+      });
+
+      return memoryBoard.cards[index];
+    },
+
     async searchCards(query) {
       const needle = query.trim().toLowerCase();
       if (!needle) return memoryBoard.cards;
@@ -304,6 +346,51 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
 
     const row = result.rows[0];
     return row ? cardFromRow(row) : null;
+  }
+
+  async function updateCardRecord(cardId: string, input: UpdateCardInput): Promise<Card | null> {
+    const existingCard = await getCard(cardId);
+    if (!existingCard) return null;
+
+    const nextCard = applyCardInput(existingCard, input);
+    const boardResult = await pool.query<{ workspace_id: string }>(
+      "select workspace_id from boards where id = $1 and deleted_at is null limit 1",
+      [nextCard.boardId]
+    );
+    const workspaceId = boardResult.rows[0]?.workspace_id;
+    if (!workspaceId) return null;
+
+    const typeId = await getCardTypeId(workspaceId, nextCard.typeKey);
+    const result = await pool.query(
+      `
+        update cards
+        set type_id = $2,
+            title = $3,
+            description = $4,
+            status = $5,
+            data = $6::jsonb,
+            position = $7::jsonb,
+            size = $8::jsonb,
+            style = $9::jsonb
+        where id = $1
+          and deleted_at is null
+        returning *
+      `,
+      [
+        cardId,
+        typeId,
+        nextCard.title,
+        nextCard.description ?? null,
+        nextCard.status,
+        JSON.stringify(dataWithCardMeta(nextCard)),
+        JSON.stringify(nextCard.position),
+        JSON.stringify(nextCard.size),
+        JSON.stringify(nextCard.style)
+      ]
+    );
+
+    const row = result.rows[0];
+    return row ? cardFromRow({ ...row, type_key: nextCard.typeKey }) : null;
   }
 
   return {
@@ -413,48 +500,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async updateCard(cardId, input) {
-      const existingCard = await getCard(cardId);
-      if (!existingCard) return null;
-
-      const nextCard = applyCardInput(existingCard, input);
-      const boardResult = await pool.query<{ workspace_id: string }>(
-        "select workspace_id from boards where id = $1 and deleted_at is null limit 1",
-        [nextCard.boardId]
-      );
-      const workspaceId = boardResult.rows[0]?.workspace_id;
-      if (!workspaceId) return null;
-
-      const typeId = await getCardTypeId(workspaceId, nextCard.typeKey);
-      const result = await pool.query(
-        `
-          update cards
-          set type_id = $2,
-              title = $3,
-              description = $4,
-              status = $5,
-              data = $6::jsonb,
-              position = $7::jsonb,
-              size = $8::jsonb,
-              style = $9::jsonb
-          where id = $1
-            and deleted_at is null
-          returning *
-        `,
-        [
-          cardId,
-          typeId,
-          nextCard.title,
-          nextCard.description ?? null,
-          nextCard.status,
-          JSON.stringify(dataWithCardMeta(nextCard)),
-          JSON.stringify(nextCard.position),
-          JSON.stringify(nextCard.size),
-          JSON.stringify(nextCard.style)
-        ]
-      );
-
-      const row = result.rows[0];
-      return row ? cardFromRow({ ...row, type_key: nextCard.typeKey }) : null;
+      return updateCardRecord(cardId, input);
     },
 
     async deleteCard(cardId) {
@@ -522,6 +568,16 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
 
       return boardFilesFromCards(result.rows.map(cardFromRow));
+    },
+
+    async attachFile(cardId, input) {
+      const existingCard = await getCard(cardId);
+      if (!existingCard) return null;
+
+      const nextFile = buildFileRef(input);
+      return updateCardRecord(cardId, {
+        files: [...existingCard.files, nextFile]
+      });
     },
 
     async searchCards(query) {

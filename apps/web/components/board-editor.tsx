@@ -30,7 +30,7 @@ import {
   X,
   ZoomIn
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { boardSchema, type Board, type Card, type CardStatus, type FileRef, type UpdateCardInput } from "@yadraw/shared";
 import { WorkflowCardNode, type WorkflowNode } from "./workflow-node";
 
@@ -267,12 +267,16 @@ function Inspector({
   board,
   onClose,
   onDeleteCard,
+  attachNotice,
+  onAttachFile,
   onSaveCard
 }: {
   card: Card;
   board: Board;
   onClose: () => void;
   onDeleteCard: (card: Card) => Promise<void>;
+  attachNotice: { cardId: string; kind: "success" | "error"; message: string } | null;
+  onAttachFile: (cardId: string, file: File) => Promise<Card | null>;
   onSaveCard: (cardId: string, input: UpdateCardInput) => Promise<Card | null>;
 }) {
   const incoming = board.connections.filter((connection) => connection.targetCardId === card.id);
@@ -284,6 +288,9 @@ function Inspector({
   const [positionY, setPositionY] = useState(String(Math.round(card.position.y)));
   const [tags, setTags] = useState(card.tags);
   const [newTag, setNewTag] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isAttaching, setIsAttaching] = useState(false);
+  const [attachFeedback, setAttachFeedback] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [isDeleteConfirming, setIsDeleteConfirming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -297,6 +304,7 @@ function Inspector({
     setPositionY(String(Math.round(card.position.y)));
     setTags(card.tags);
     setNewTag("");
+    setAttachFeedback(null);
     setIsDeleteConfirming(false);
   }, [card.id, card.title, card.description, card.status, card.position.x, card.position.y, card.tags]);
 
@@ -320,6 +328,7 @@ function Inspector({
     tagsKey !== savedTagsKey ||
     nextPosition.x !== card.position.x ||
     nextPosition.y !== card.position.y;
+  const visibleAttachFeedback = attachFeedback ?? (attachNotice?.cardId === card.id ? attachNotice : null);
 
   function addTag() {
     if (!canAddTag) return;
@@ -367,6 +376,29 @@ function Inspector({
       await onDeleteCard(card);
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  async function attachSelectedFile(file: File | undefined) {
+    if (!file) return;
+
+    if (file.size > 25_000_000) {
+      setAttachFeedback({ kind: "error", message: "File is larger than 25 MB" });
+      return;
+    }
+
+    setIsAttaching(true);
+    setAttachFeedback(null);
+    try {
+      const savedCard = await onAttachFile(card.id, file);
+      setAttachFeedback(savedCard
+        ? { kind: "success", message: "File attached" }
+        : { kind: "error", message: "Attach failed" });
+    } finally {
+      setIsAttaching(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   }
 
@@ -526,10 +558,28 @@ function Inspector({
             {file.sizeBytes ? <small>{(file.sizeBytes / 1000).toFixed(1)} KB</small> : null}
           </div>
         ))}
-        <button className="attachButton" type="button" disabled>
+        <input
+          className="visuallyHidden"
+          ref={fileInputRef}
+          type="file"
+          aria-label="Choose file to attach"
+          onChange={(event) => void attachSelectedFile(event.target.files?.[0])}
+        />
+        <button
+          className="attachButton"
+          type="button"
+          disabled={isAttaching}
+          onClick={() => fileInputRef.current?.click()}
+        >
           <Plus size={15} />
-          Attach file
+          {isAttaching ? "Attaching" : "Attach file"}
         </button>
+        {visibleAttachFeedback ? (
+          <div className={`attachFeedback ${visibleAttachFeedback.kind === "error" ? "attachFeedbackError" : ""}`}>
+            <CheckCircle2 size={14} />
+            {visibleAttachFeedback.message}
+          </div>
+        ) : null}
       </section>
 
       <footer className="inspectorMeta">
@@ -896,6 +946,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [activeView, setActiveView] = useState<ActiveView>("board");
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
   const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
+  const [attachNotice, setAttachNotice] = useState<{ cardId: string; kind: "success" | "error"; message: string } | null>(null);
   const [isFilesLoading, setIsFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState("");
   const [deletedCards, setDeletedCards] = useState<Card[]>([]);
@@ -1059,6 +1110,53 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
       setSyncStatus("Files unavailable");
     } finally {
       setIsFilesLoading(false);
+    }
+  }
+
+  async function attachFile(cardId: string, file: File): Promise<Card | null> {
+    setSyncStatus("Saving");
+    setAttachNotice(null);
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/cards/${cardId}/files`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          mimeType: file.type || undefined,
+          sizeBytes: file.size,
+          role: "attachment"
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Attach file failed with ${response.status}`);
+      }
+
+      const card = (await response.json()) as Card;
+      setBoard((current) => ({
+        ...current,
+        cards: current.cards.map((item) => (item.id === card.id ? card : item))
+      }));
+      setBoardFiles((current) => [
+        ...current.filter((item) => item.cardId !== card.id),
+        ...card.files.map((item) => ({
+          ...item,
+          cardId: card.id,
+          cardTitle: card.title,
+          cardTypeKey: card.typeKey,
+          cardStatus: card.status
+        }))
+      ]);
+      setAttachNotice({ cardId, kind: "success", message: "File attached" });
+      setSyncStatus("Synced");
+      return card;
+    } catch {
+      setAttachNotice({ cardId, kind: "error", message: "Attach failed" });
+      setSyncStatus("Attach failed");
+      return null;
     }
   }
 
@@ -1249,6 +1347,8 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
           board={board}
           onClose={() => setSelectedCardId(undefined)}
           onDeleteCard={deleteCard}
+          attachNotice={attachNotice}
+          onAttachFile={attachFile}
           onSaveCard={updateCard}
         />
       ) : null}

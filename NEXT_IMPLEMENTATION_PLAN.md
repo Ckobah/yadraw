@@ -307,7 +307,7 @@
 
 ### 4.1. Files
 
-Статус: выполнено как read-only MVP.
+Статус: выполнено как read-only MVP в коммите `fc23f27`.
 
 Назначение: отдельный экран всех файлов workspace/project/board.
 
@@ -515,6 +515,8 @@ MVP:
 
 ### 4.8. Attach file
 
+Статус: выполнено как attachment metadata MVP.
+
 Назначение: привязка файла к конкретной карточке.
 
 MVP:
@@ -539,6 +541,23 @@ MVP:
    - file appears in card inspector.
 
 Зависимости: Files MVP and MinIO client.
+
+Итог реализации:
+
+- включена кнопка `Attach file` в inspector;
+- добавлен системный выбор файла с loading/success/error состояниями;
+- добавлена клиентская проверка лимита 25 MB;
+- добавлен API `POST /cards/:cardId/files` с Zod-валидацией filename, MIME, size и role;
+- добавлен repository method `attachFile` для memory и PostgreSQL режимов;
+- имя файла нормализуется на backend перед сохранением в card metadata;
+- после привязки обновляются card inspector и read-only `Files` screen;
+- добавлены repository tests для attach flow и missing-card поведения;
+- проведены `typecheck`, `test` и browser-level сценарий первого пользователя: выбрать карточку, прикрепить файл, увидеть файл в inspector и в разделе `Files`.
+
+Ограничение текущего этапа:
+
+- бинарное хранение файла, multipart upload, download/preview, detach и MinIO runtime остаются следующим расширением Files runtime.
+- строгий MIME allowlist остается частью будущего binary upload слоя; текущий endpoint валидирует форму MIME-значения и размер metadata-записи.
 
 ### 4.9. Add tag
 
@@ -581,8 +600,8 @@ MVP:
 1. Add tag. Done.
 2. Trash soft-delete/restore for cards. Done.
 3. Files list read-only. Done.
-4. Attach file upload to card. Current next.
-5. Templates picker for Add card.
+4. Attach file metadata to card. Done.
+5. Templates picker for Add card. Current next.
 6. Share modal with copy link, then membership.
 7. Notifications popover.
 8. Run workflow dry-run.
