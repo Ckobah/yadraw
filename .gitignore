@@ -10,5 +10,6 @@ coverage/
 
 *.log
 *.tmp
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
