@@ -11,6 +11,13 @@ import {
   type UpdateCardInput
 } from "@yadraw/shared";
 
+export type BoardFile = FileRef & {
+  cardId: string;
+  cardTitle: string;
+  cardTypeKey: string;
+  cardStatus: Card["status"];
+};
+
 export type BoardRepository = {
   mode: "postgres" | "memory";
   getBoard(boardId: string): Promise<Board | null>;
@@ -19,6 +26,7 @@ export type BoardRepository = {
   deleteCard(cardId: string): Promise<Card | null>;
   restoreCard(cardId: string): Promise<Card | null>;
   listDeletedCards(boardId: string): Promise<Card[]>;
+  listFiles(boardId: string): Promise<BoardFile[]>;
   searchCards(query: string): Promise<Card[]>;
 };
 
@@ -131,6 +139,18 @@ function applyCardInput(existing: Card, input: UpdateCardInput): Card {
   };
 }
 
+function boardFilesFromCards(cards: Card[]): BoardFile[] {
+  return cards.flatMap((card) =>
+    card.files.map((file) => ({
+      ...file,
+      cardId: card.id,
+      cardTitle: card.title,
+      cardTypeKey: card.typeKey,
+      cardStatus: card.status
+    }))
+  );
+}
+
 export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRepository {
   const memoryBoard: Board = structuredClone(sourceBoard);
   const deletedCards: Card[] = [];
@@ -200,6 +220,11 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
     async listDeletedCards(boardId) {
       if (boardId !== memoryBoard.id) return [];
       return deletedCards;
+    },
+
+    async listFiles(boardId) {
+      if (boardId !== memoryBoard.id) return [];
+      return boardFilesFromCards(memoryBoard.cards);
     },
 
     async searchCards(query) {
@@ -481,6 +506,22 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
 
       return result.rows.map(cardFromRow);
+    },
+
+    async listFiles(boardId) {
+      const result = await pool.query(
+        `
+          select c.*, ct.key as type_key
+          from cards c
+          left join card_types ct on ct.id = c.type_id
+          where c.board_id = $1
+            and c.deleted_at is null
+          order by c.created_at asc, c.title asc
+        `,
+        [boardId]
+      );
+
+      return boardFilesFromCards(result.rows.map(cardFromRow));
     },
 
     async searchCards(query) {

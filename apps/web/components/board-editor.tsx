@@ -31,14 +31,21 @@ import {
   ZoomIn
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { boardSchema, type Board, type Card, type CardStatus, type UpdateCardInput } from "@yadraw/shared";
+import { boardSchema, type Board, type Card, type CardStatus, type FileRef, type UpdateCardInput } from "@yadraw/shared";
 import { WorkflowCardNode, type WorkflowNode } from "./workflow-node";
 
 const nodeTypes: NodeTypes = {
   workflowCard: WorkflowCardNode
 };
 
-type ActiveView = "board" | "trash";
+type ActiveView = "board" | "files" | "trash";
+
+type BoardFile = FileRef & {
+  cardId: string;
+  cardTitle: string;
+  cardTypeKey: string;
+  cardStatus: CardStatus;
+};
 
 const projectItems = [
   ["P", "Product Pipeline", "projectPurple"],
@@ -65,11 +72,13 @@ function ComingSoonBadge() {
 function LeftSidebar({
   activeView,
   onOpenBoard,
+  onOpenFiles,
   onOpenSearch,
   onOpenTrash
 }: {
   activeView: ActiveView;
   onOpenBoard: () => void;
+  onOpenFiles: () => void;
   onOpenSearch: () => void;
   onOpenTrash: () => void;
 }) {
@@ -88,10 +97,9 @@ function LeftSidebar({
           <Grid2X2 size={18} />
           Board
         </button>
-        <button className="navItem navItemMuted" type="button" disabled>
+        <button className={`navItem ${activeView === "files" ? "navItemActive" : ""}`} type="button" onClick={onOpenFiles}>
           <FileText size={18} />
           Files
-          <ComingSoonBadge />
         </button>
         <button className="navItem" type="button" onClick={onOpenSearch}>
           <Search size={18} />
@@ -603,6 +611,124 @@ function TrashPanel({
   );
 }
 
+function formatFileSize(sizeBytes?: number) {
+  if (!sizeBytes) return "Unknown size";
+  if (sizeBytes < 1000) return `${sizeBytes} B`;
+  if (sizeBytes < 1_000_000) return `${(sizeBytes / 1000).toFixed(1)} KB`;
+  return `${(sizeBytes / 1_000_000).toFixed(1)} MB`;
+}
+
+function FilesPanel({
+  files,
+  isLoading,
+  error,
+  onOpenBoard,
+  onSelectCard
+}: {
+  files: BoardFile[];
+  isLoading: boolean;
+  error: string;
+  onOpenBoard: () => void;
+  onSelectCard: (cardId: string) => void;
+}) {
+  const [selectedFileId, setSelectedFileId] = useState<string | undefined>();
+  const selectedFile = files.find((file) => file.id === selectedFileId) ?? files[0];
+
+  useEffect(() => {
+    if (files.length === 0) {
+      setSelectedFileId(undefined);
+      return;
+    }
+
+    if (!files.some((file) => file.id === selectedFileId)) {
+      setSelectedFileId(files[0]?.id);
+    }
+  }, [files, selectedFileId]);
+
+  return (
+    <section className="filesPanel" aria-label="Files">
+      <header className="filesHeader">
+        <div>
+          <span className="eyebrow">Board assets</span>
+          <h1>Files</h1>
+          <p>Read-only inventory of files currently linked to cards on this board.</p>
+        </div>
+        <button className="secondaryButton" type="button" onClick={onOpenBoard}>
+          Back to board
+        </button>
+      </header>
+
+      {isLoading ? <div className="filesState">Loading files</div> : null}
+      {!isLoading && error ? <div className="filesState filesStateError">{error}</div> : null}
+      {!isLoading && !error && files.length === 0 ? <div className="filesState">No linked files yet</div> : null}
+      {!isLoading && !error && files.length > 0 ? (
+        <div className="filesLayout">
+          <div className="filesTable" role="table" aria-label="Board files">
+            <div className="filesTableHeader" role="row">
+              <span>File</span>
+              <span>Role</span>
+              <span>Size</span>
+              <span>Linked card</span>
+              <span>Status</span>
+            </div>
+            {files.map((file) => (
+              <button
+                className={`filesTableRow ${selectedFile?.id === file.id ? "filesTableRowActive" : ""}`}
+                type="button"
+                role="row"
+                key={file.id}
+                onClick={() => setSelectedFileId(file.id)}
+              >
+                <span><FileText size={16} />{file.filename}</span>
+                <span>{file.role}</span>
+                <span>{formatFileSize(file.sizeBytes)}</span>
+                <span>{file.cardTitle}</span>
+                <span>Linked</span>
+              </button>
+            ))}
+          </div>
+
+          {selectedFile ? (
+            <aside className="fileDetail" aria-label="File details">
+              <FileText size={22} />
+              <h2>{selectedFile.filename}</h2>
+              <dl>
+                <div>
+                  <dt>Role</dt>
+                  <dd>{selectedFile.role}</dd>
+                </div>
+                <div>
+                  <dt>Type</dt>
+                  <dd>{selectedFile.mimeType ?? "Not specified"}</dd>
+                </div>
+                <div>
+                  <dt>Size</dt>
+                  <dd>{formatFileSize(selectedFile.sizeBytes)}</dd>
+                </div>
+                <div>
+                  <dt>Linked card</dt>
+                  <dd>{selectedFile.cardTitle}</dd>
+                </div>
+                <div>
+                  <dt>Card type</dt>
+                  <dd>{selectedFile.cardTypeKey}</dd>
+                </div>
+                <div>
+                  <dt>Card status</dt>
+                  <dd>{selectedFile.cardStatus}</dd>
+                </div>
+              </dl>
+              <button className="secondaryButton" type="button" onClick={() => onSelectCard(selectedFile.cardId)}>
+                Open linked card
+              </button>
+            </aside>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function BoardBrief({ board }: { board: Board }) {
   const activeCards = board.cards.filter((card) => card.status === "active").length;
 
@@ -769,6 +895,9 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [board, setBoard] = useState(initialBoard);
   const [activeView, setActiveView] = useState<ActiveView>("board");
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
+  const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
+  const [isFilesLoading, setIsFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState("");
   const [deletedCards, setDeletedCards] = useState<Card[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState("Local demo");
@@ -910,6 +1039,29 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     }
   }
 
+  async function loadFiles() {
+    setIsFilesLoading(true);
+    setFilesError("");
+    try {
+      const response = await fetch(`${apiBaseUrl}/boards/${board.id}/files`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Files request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { files?: BoardFile[] };
+      setBoardFiles(payload.files ?? []);
+      setSyncStatus("Synced");
+    } catch {
+      setFilesError("Files are unavailable right now");
+      setSyncStatus("Files unavailable");
+    } finally {
+      setIsFilesLoading(false);
+    }
+  }
+
   async function deleteCard(card: Card) {
     setSyncStatus("Saving");
 
@@ -926,6 +1078,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         ...current,
         cards: current.cards.filter((item) => item.id !== card.id)
       }));
+      setBoardFiles((current) => current.filter((file) => file.cardId !== card.id));
       setDeletedCards((current) => [card, ...current.filter((item) => item.id !== card.id)]);
       setSelectedCardId(undefined);
       setActiveView("trash");
@@ -997,6 +1150,10 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const selectedCard = board.cards.find((card) => card.id === selectedCardId);
 
   useEffect(() => {
+    if (activeView === "files") {
+      void loadFiles();
+    }
+
     if (activeView === "trash") {
       void loadTrash();
     }
@@ -1026,6 +1183,10 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         activeView={activeView}
         onOpenBoard={() => {
           setActiveView("board");
+        }}
+        onOpenFiles={() => {
+          setSelectedCardId(undefined);
+          setActiveView("files");
         }}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenTrash={() => {
@@ -1061,6 +1222,17 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
               <BoardMiniPreview board={board} />
               {selectedCard ? <DetailPanel card={selectedCard} board={board} /> : null}
             </>
+          ) : activeView === "files" ? (
+            <FilesPanel
+              files={boardFiles}
+              isLoading={isFilesLoading}
+              error={filesError}
+              onOpenBoard={() => setActiveView("board")}
+              onSelectCard={(cardId) => {
+                setSelectedCardId(cardId);
+                setActiveView("board");
+              }}
+            />
           ) : (
             <TrashPanel
               cards={deletedCards}

@@ -98,6 +98,11 @@ server.get("/boards/:boardId/trash", async (request) => {
   return { cards: await repository.listDeletedCards(boardId) };
 });
 
+server.get("/boards/:boardId/files", async (request) => {
+  const { boardId } = request.params as { boardId: string };
+  return { files: await repository.listFiles(boardId) };
+});
+
 server.get("/search", async (request) => {
   const { q = "" } = request.query as { q?: string };
   return { cards: await repository.searchCards(q) };

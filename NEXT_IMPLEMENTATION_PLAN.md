@@ -307,6 +307,8 @@
 
 ### 4.1. Files
 
+Статус: выполнено как read-only MVP.
+
 Назначение: отдельный экран всех файлов workspace/project/board.
 
 MVP:
@@ -329,6 +331,22 @@ MVP:
    - permission denied after auth layer.
 
 Зависимости: Auth/membership желательно до production, но dev MVP можно сделать до полной авторизации.
+
+Итог реализации:
+
+- добавлен repository method `listFiles`;
+- добавлен API endpoint `GET /boards/:boardId/files`;
+- список файлов собирается из файлов, уже привязанных к активным карточкам;
+- файлы карточек, перемещенных в Trash, исключаются из списка;
+- в UI включен пункт `Files`;
+- добавлен read-only экран Files с loading/error/empty/list состояниями;
+- добавлена detail-панель выбранного файла и переход к linked card;
+- добавлены repository tests для list files и исключения trashed card files;
+- проведены `typecheck` и `test`.
+
+Ограничения текущего MVP:
+
+- upload/download, detach, MinIO runtime и permanent file delete остаются в следующем этапе `Attach file` / Files runtime.
 
 ### 4.2. AI Assistant
 
@@ -383,7 +401,7 @@ MVP:
 
 ### 4.4. Trash
 
-Статус: выполнено.
+Статус: выполнено в коммите `e084b71`.
 
 Назначение: безопасное удаление и восстановление.
 
@@ -562,8 +580,8 @@ MVP:
 
 1. Add tag. Done.
 2. Trash soft-delete/restore for cards. Done.
-3. Files list read-only. Current next.
-4. Attach file upload to card.
+3. Files list read-only. Done.
+4. Attach file upload to card. Current next.
 5. Templates picker for Add card.
 6. Share modal with copy link, then membership.
 7. Notifications popover.

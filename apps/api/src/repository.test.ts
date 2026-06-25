@@ -105,6 +105,36 @@ describe("memory board repository", () => {
     await expect(repository.listDeletedCards(demoIds.board)).resolves.toEqual([]);
   });
 
+  it("lists active board files with linked card context", async () => {
+    const repository = createMemoryRepository();
+
+    const files = await repository.listFiles(demoIds.board);
+
+    expect(files).toHaveLength(5);
+    expect(files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filename: "prompt.md",
+          role: "source_document",
+          cardId: "6bb48e57-ed49-4fd6-bdbc-a449b2756be9",
+          cardTitle: "2. Enrich Data",
+          cardTypeKey: "ai_action",
+          cardStatus: "active"
+        })
+      ])
+    );
+  });
+
+  it("excludes files from cards moved to trash", async () => {
+    const repository = createMemoryRepository();
+
+    await repository.deleteCard("6bb48e57-ed49-4fd6-bdbc-a449b2756be9");
+
+    const files = await repository.listFiles(demoIds.board);
+    expect(files.map((file) => file.filename)).not.toContain("prompt.md");
+    expect(files).toHaveLength(4);
+  });
+
   it("returns null for missing boards and cards", async () => {
     const repository = createMemoryRepository();
 
@@ -116,5 +146,6 @@ describe("memory board repository", () => {
     await expect(repository.deleteCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.restoreCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
+    await expect(repository.listFiles("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
   });
 });
