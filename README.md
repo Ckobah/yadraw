@@ -1,22 +1,12 @@
 # Yadraw
 
-**Visual workspace for JSON cards, workflows, files, and AI-ready knowledge graphs.**
+Structured visual workspace for typed cards, JSON data, and board connections.
 
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-1f8f4d?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-202020?style=for-the-badge&logo=fastify)](https://fastify.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL%20%2B%20pgvector-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-
-Yadraw is an early-stage product foundation for building structured visual systems: boards, JSON-backed cards, typed connections, attached files, semantic search, and AI-assisted workflow automation.
-
-It is designed as a serious base for a product where every node on the canvas can be both a visual object and a structured data object.
-
-## Screenshots
-
-![Yadraw workspace overview](docs/screenshots/yadraw-workspace-inspector.png)
-
-![Yadraw card detail](docs/screenshots/yadraw-card-detail.png)
 
 ## Languages
 
@@ -27,107 +17,119 @@ It is designed as a serious base for a product where every node on the canvas ca
 
 ## English
 
-### What It Is
+### What Yadraw Is
 
-Yadraw is a visual editor for JSON-native operational workflows. The core idea is simple: each card is not only a visual block, but also a typed data entity that can hold metadata, inputs, outputs, files, status, layout, and future AI/search context.
+Yadraw is an early-stage product for building visual systems where every canvas object is also structured data.
 
-The current implementation is the first production-oriented foundation:
+The product direction is a professional board editor for:
 
-- a professional Next.js board UI
-- editable cards with inspector fields
-- Fastify API with board/card endpoints
-- PostgreSQL-backed storage with memory fallback
-- shared Zod contracts for frontend and backend
-- database schema for workspaces, projects, boards, cards, connections, files, snapshots, AI actions, and embeddings
-- local Docker infrastructure with PostgreSQL, Redis, and MinIO
-- tests for shared schemas and repository behavior
-- initial security review and baseline browser/API hardening
+- typed cards
+- JSON-backed card data
+- explicit card ports
+- typed connections
+- persistent board state
+- future workflow, file, search, and AI capabilities
 
-### Product Direction
+The current repository contains two layers:
 
-Yadraw is intended to become a workspace where teams can model, run, inspect, and search structured processes:
+- the existing prototype UI and API, still useful as a visual reference
+- the new v2 foundation, which is being built in smaller, cleaner steps
 
-- AI pipelines
-- data sync flows
-- document and file workflows
-- operational playbooks
-- integration maps
-- knowledge graphs
-- visual JSON databases
+### Current Status
 
-The long-term goal is not just drawing diagrams. The goal is a canvas where every object is queryable, versioned, executable, and connected to real data.
+Yadraw is not yet a finished product. The current work is focused on replacing the original broad prototype with a reliable v2 core.
+
+Implemented in the v2 foundation:
+
+- v2 product scope and non-goals
+- clean v2 database design
+- v2 PostgreSQL migration
+- deterministic local seed
+- v2 Zod API contracts
+- v2 repository interface
+- v2 memory repository for unit tests
+- v2 PostgreSQL repository
+- v2 service layer with validation
+- unit tests for contracts and service behavior
+- optional PostgreSQL integration test
+
+Still intentionally out of scope for the v2 foundation:
+
+- authentication
+- workspace membership and roles
+- file uploads
+- AI assistant
+- embeddings and semantic search
+- workflow execution
+- real-time collaboration
+- notifications
+- polished v2 frontend
+
+See:
+
+- [V2_FOUNDATION.md](V2_FOUNDATION.md)
+- [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
 
 ### Architecture
 
 ```mermaid
 flowchart LR
-  User["User"] --> Web["Next.js Web App"]
-  Web --> API["Fastify API"]
-  API --> Shared["Shared Zod Contracts"]
-  API --> Postgres["PostgreSQL + pgvector"]
-  API --> Redis["Redis"]
-  API --> MinIO["MinIO / S3-compatible storage"]
-  Postgres --> Search["Semantic Search / Embeddings"]
-  MinIO --> Files["Workspace Files"]
+  Web["Next.js Web App"] --> API["Fastify API"]
+  API --> Contracts["Shared Zod Contracts"]
+  API --> Service["v2 Service Layer"]
+  Service --> Repository["v2 Repository"]
+  Repository --> Postgres["PostgreSQL"]
 ```
+
+The v2 direction is deliberately simple: the database is the source of truth, domain entities are explicit, and UI-shaped data is mapped at the API boundary.
 
 ### Repository Layout
 
 ```text
 apps/
-  web/          Next.js visual board editor
-  api/          Fastify API service
+  web/          Next.js prototype board UI
+  api/          Fastify API and v2 backend foundation
 
 packages/
-  shared/       Domain schemas, TypeScript types, demo board data
-  db/           SQL migrations and database package shell
+  shared/       Shared schemas, types, and v2 API contracts
+  db/           SQL migrations and local seed files
 
 infra/
   docker/       Local PostgreSQL, Redis, and MinIO stack
 
 docs/
-  screenshots/  README images
+  screenshots/  Prototype screenshots
 ```
 
-### Current Capabilities
+### Prototype Screenshots
 
-| Area | Status |
-| --- | --- |
-| Visual board shell | Implemented |
-| Card inspector | Implemented |
-| Card create/update | Implemented |
-| PostgreSQL persistence | Implemented |
-| Memory fallback | Implemented |
-| Shared schema validation | Implemented |
-| Docker local infrastructure | Implemented |
-| Tests | Implemented |
-| Security baseline | Started |
-| Authentication and workspace authorization | Planned |
-| File uploads | Planned |
-| AI search and embeddings | Planned |
-| Workflow execution | Planned |
+The screenshots below represent the existing prototype UI, not the final v2 interface.
 
-### Quick Start
+![Yadraw workspace overview](docs/screenshots/yadraw-workspace-inspector.png)
 
-Requirements:
+![Yadraw card detail](docs/screenshots/yadraw-card-detail.png)
+
+### Requirements
 
 - Node.js 22+
-- npm 11+
-- Docker Desktop
+- npm
+- Docker Desktop with WSL2 enabled
 
-Install dependencies:
+### Install
 
 ```bash
 npm install
 ```
 
-Start local infrastructure:
+### Run The Prototype
+
+Start infrastructure:
 
 ```bash
 npm run infra:up
 ```
 
-Create local environment:
+Create a local environment file:
 
 ```bash
 copy .env.example .env
@@ -151,157 +153,204 @@ Open:
 http://127.0.0.1:3000
 ```
 
-### API
+### v2 Database
+
+The v2 schema is kept separate from the original migrations:
 
 ```text
-GET  /health
-GET  /boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
-GET  /search?q=enrich
-POST /boards/:boardId/cards
-PATCH /cards/:cardId
+packages/db/migrations/v2/001_core_foundation.sql
+packages/db/seeds/v2_local_seed.sql
 ```
 
-Example health response:
+The v2 migration defines only the core model:
 
-```json
-{"ok":true,"service":"yadraw-api","storage":"postgres"}
+- `workspaces`
+- `projects`
+- `boards`
+- `card_types`
+- `card_type_ports`
+- `cards`
+- `connections`
+
+The seed creates one local workspace, one project, one board, two card types, and three ports.
+
+### v2 Integration Test
+
+The PostgreSQL integration test is opt-in. It is skipped unless `V2_DATABASE_URL` is set.
+
+Example:
+
+```bash
+set V2_DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:55433/yadraw_v2_verify
+npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
 ```
-
-If PostgreSQL is unavailable, the API falls back to the in-memory demo board.
 
 ### Quality Checks
 
 ```bash
-npm run test
 npm run typecheck
+npm run test
 npm run build
 ```
 
-Current test coverage includes:
+Current tests cover:
 
-- shared domain schemas
-- card defaults and validation
-- in-memory repository behavior
-- card creation, update, search, and missing-entity handling
+- legacy shared schemas
+- legacy in-memory repository behavior
+- v2 API contracts
+- v2 service validation
+- v2 memory repository workflow
+- optional v2 PostgreSQL persistence workflow
 
-### Security Notes
+### Security
 
-The repository includes [SECURITY_REVIEW.md](SECURITY_REVIEW.md) with the current review results.
+The current security notes are documented in [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
-Implemented baseline protections:
+Implemented baseline protections include:
 
 - CORS allowlist via `CORS_ORIGIN`
 - browser security headers in Next.js
 - parameterized SQL queries
 - `.env` excluded from Git
-- no direct DOM XSS sinks found in the current application scan
 
-Known next security milestone:
+Authentication and workspace authorization are still planned work.
 
-- API authentication
-- workspace membership checks
-- role-based permissions
-- CSP with nonces/report-only rollout
+### Roadmap
+
+Near-term v2 work:
+
+1. Wire v2 Fastify routes.
+2. Build a minimal v2 board UI.
+3. Load a seeded board from PostgreSQL.
+4. Create and edit cards through v2 contracts.
+5. Create and delete typed connections.
+6. Preserve board state after reload.
+
+Later work:
+
+- authentication and roles
+- undo/redo
+- files and attachments
+- search
+- AI assistant
+- workflow execution
+- collaboration
+
+### License
+
+Private project foundation. License to be defined.
 
 ---
 
 ## Русский
 
-### Что Это
+### Что Такое Yadraw
 
-Yadraw - визуальный редактор для JSON-native рабочих процессов. Главная идея: каждая карточка на доске является не только визуальным блоком, но и типизированной сущностью данных с метаданными, входами, выходами, файлами, статусом, позицией и будущим контекстом для AI-поиска.
+Yadraw - ранняя стадия продукта для визуальных систем, где каждый объект на canvas является не только блоком интерфейса, но и структурированными данными.
 
-Текущая версия - первый серьезный фундамент продукта:
+Продуктовое направление:
 
-- профессиональный интерфейс доски на Next.js
-- редактируемые карточки и боковой инспектор
-- API на Fastify для досок и карточек
-- хранение в PostgreSQL с fallback в память
-- общие Zod-контракты для frontend и backend
-- схема базы для workspace, проектов, досок, карточек, связей, файлов, снапшотов, AI-действий и embeddings
-- локальная инфраструктура Docker: PostgreSQL, Redis, MinIO
-- тесты для схем и серверного хранилища
-- первичная проверка безопасности и базовое усиление API/web
+- типизированные карточки
+- JSON-данные внутри карточек
+- явные порты карточек
+- типизированные связи
+- сохранение состояния доски
+- будущие workflow, файлы, поиск и AI-функции
 
-### Продуктовое Направление
+Сейчас в репозитории есть два слоя:
 
-Yadraw должен стать рабочим пространством, где команды смогут моделировать, запускать, проверять и искать структурированные процессы:
+- существующий прототип UI и API, который остается визуальным ориентиром
+- новый v2 foundation, который строится маленькими и более чистыми шагами
 
-- AI-пайплайны
-- синхронизации данных
-- процессы с документами и файлами
-- операционные сценарии
-- карты интеграций
-- графы знаний
-- визуальные JSON-базы
+### Текущий Статус
 
-Цель - не просто редактор диаграмм. Цель - canvas, где каждый объект можно искать, версионировать, выполнять и связывать с реальными данными.
+Yadraw пока не готовый продукт. Сейчас основная работа - заменить широкий прототип надежным v2-ядром.
+
+Уже сделано для v2 foundation:
+
+- зафиксированы scope и non-goals
+- спроектирована чистая v2-схема БД
+- добавлена v2 PostgreSQL migration
+- добавлен детерминированный local seed
+- добавлены v2 Zod API-контракты
+- добавлен v2 repository interface
+- добавлен v2 memory repository для unit-тестов
+- добавлен v2 PostgreSQL repository
+- добавлен v2 service layer с валидацией
+- добавлены тесты контрактов и service behavior
+- добавлен опциональный PostgreSQL integration test
+
+Сознательно не входит в v2 foundation:
+
+- авторизация
+- workspace membership и роли
+- загрузка файлов
+- AI assistant
+- embeddings и semantic search
+- workflow execution
+- real-time collaboration
+- notifications
+- финальный v2 frontend
+
+См.:
+
+- [V2_FOUNDATION.md](V2_FOUNDATION.md)
+- [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
 
 ### Архитектура
 
 ```mermaid
 flowchart LR
-  User["Пользователь"] --> Web["Next.js Web App"]
-  Web --> API["Fastify API"]
-  API --> Shared["Общие Zod-контракты"]
-  API --> Postgres["PostgreSQL + pgvector"]
-  API --> Redis["Redis"]
-  API --> MinIO["MinIO / S3 storage"]
-  Postgres --> Search["Семантический поиск / Embeddings"]
-  MinIO --> Files["Файлы workspace"]
+  Web["Next.js Web App"] --> API["Fastify API"]
+  API --> Contracts["Shared Zod Contracts"]
+  API --> Service["v2 Service Layer"]
+  Service --> Repository["v2 Repository"]
+  Repository --> Postgres["PostgreSQL"]
 ```
+
+Направление v2 простое: база данных является источником истины, доменные сущности описаны явно, а удобные для UI объекты собираются на границе API.
 
 ### Структура Репозитория
 
 ```text
 apps/
-  web/          визуальный редактор доски на Next.js
-  api/          серверный API на Fastify
+  web/          прототип UI доски на Next.js
+  api/          Fastify API и v2 backend foundation
 
 packages/
-  shared/       схемы домена, TypeScript-типы, demo board
-  db/           SQL-миграции и оболочка DB-пакета
+  shared/       общие схемы, типы и v2 API-контракты
+  db/           SQL-миграции и local seed-файлы
 
 infra/
-  docker/       локальный стек PostgreSQL, Redis и MinIO
+  docker/       локальный PostgreSQL, Redis и MinIO
 
 docs/
-  screenshots/  изображения для README
+  screenshots/  скриншоты прототипа
 ```
 
-### Что Уже Есть
+### Скриншоты Прототипа
 
-| Зона | Статус |
-| --- | --- |
-| Визуальная оболочка доски | Реализовано |
-| Инспектор карточки | Реализовано |
-| Создание и обновление карточек | Реализовано |
-| Хранение в PostgreSQL | Реализовано |
-| Fallback в память | Реализовано |
-| Общая валидация схем | Реализовано |
-| Локальная Docker-инфраструктура | Реализовано |
-| Тесты | Реализовано |
-| Базовая безопасность | Начато |
-| Авторизация и роли workspace | Запланировано |
-| Загрузка файлов | Запланировано |
-| AI-поиск и embeddings | Запланировано |
-| Выполнение workflow | Запланировано |
+Скриншоты ниже показывают существующий прототип UI, а не финальный v2-интерфейс.
 
-### Быстрый Запуск
+![Yadraw workspace overview](docs/screenshots/yadraw-workspace-inspector.png)
 
-Требования:
+![Yadraw card detail](docs/screenshots/yadraw-card-detail.png)
+
+### Требования
 
 - Node.js 22+
-- npm 11+
-- Docker Desktop
+- npm
+- Docker Desktop с включенным WSL2
 
-Установить зависимости:
+### Установка
 
 ```bash
 npm install
 ```
 
-Запустить локальную инфраструктуру:
+### Запуск Прототипа
+
+Запустить инфраструктуру:
 
 ```bash
 npm run infra:up
@@ -319,7 +368,7 @@ copy .env.example .env
 npm run dev:api
 ```
 
-Запустить web-приложение:
+Запустить web app:
 
 ```bash
 npm run dev:web
@@ -331,70 +380,89 @@ npm run dev:web
 http://127.0.0.1:3000
 ```
 
-### API
+### v2 База Данных
+
+v2-схема отделена от старых миграций:
 
 ```text
-GET  /health
-GET  /boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
-GET  /search?q=enrich
-POST /boards/:boardId/cards
-PATCH /cards/:cardId
+packages/db/migrations/v2/001_core_foundation.sql
+packages/db/seeds/v2_local_seed.sql
 ```
 
-Пример ответа health:
+v2 migration описывает только core-модель:
 
-```json
-{"ok":true,"service":"yadraw-api","storage":"postgres"}
+- `workspaces`
+- `projects`
+- `boards`
+- `card_types`
+- `card_type_ports`
+- `cards`
+- `connections`
+
+Seed создает один local workspace, один project, одну board, два card types и три ports.
+
+### v2 Integration Test
+
+PostgreSQL integration test запускается только при наличии `V2_DATABASE_URL`. Без этой переменной он пропускается.
+
+Пример:
+
+```bash
+set V2_DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:55433/yadraw_v2_verify
+npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
 ```
-
-Если PostgreSQL недоступен, API автоматически использует demo board в памяти.
 
 ### Проверки Качества
 
 ```bash
-npm run test
 npm run typecheck
+npm run test
 npm run build
 ```
 
 Сейчас тестами покрыты:
 
-- общие доменные схемы
-- дефолты и валидация карточек
-- поведение in-memory репозитория
-- создание, обновление, поиск и обработка отсутствующих сущностей
+- старые shared schemas
+- старое in-memory repository behavior
+- v2 API contracts
+- v2 service validation
+- v2 memory repository workflow
+- опциональный v2 PostgreSQL persistence workflow
 
 ### Безопасность
 
-Текущий отчет находится в [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
+Текущие security notes описаны в [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
 
-Уже сделано:
+Уже есть базовые меры:
 
 - CORS allowlist через `CORS_ORIGIN`
 - security headers в Next.js
 - параметризованные SQL-запросы
 - `.env` исключен из Git
-- в текущем скане не найдено прямых DOM XSS-синков
 
-Следующий важный security-этап:
+Авторизация и workspace permissions еще не реализованы.
 
-- авторизация API
-- проверка membership в workspace
-- роли и права доступа
-- CSP через nonce/report-only rollout
+### Roadmap
 
----
+Ближайшие v2-шаги:
 
-## Roadmap
+1. Подключить v2 Fastify routes.
+2. Собрать минимальный v2 board UI.
+3. Загружать seeded board из PostgreSQL.
+4. Создавать и редактировать cards через v2 contracts.
+5. Создавать и удалять typed connections.
+6. Сохранять board state после reload.
 
-1. Authentication and workspace authorization
-2. Connection creation and editing
-3. Undo/redo and board snapshots
-4. File upload and card attachments
-5. AI search with embeddings
-6. Workflow execution engine
-7. Production deployment profile
+Позже:
 
-## License
+- авторизация и роли
+- undo/redo
+- файлы и attachments
+- поиск
+- AI assistant
+- workflow execution
+- collaboration
+
+### Лицензия
 
 Private project foundation. License to be defined.
