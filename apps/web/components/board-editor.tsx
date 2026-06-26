@@ -42,6 +42,7 @@ import {
   type CardStatus,
   type CardTemplate,
   type FileRef,
+  type Notification,
   type UpdateCardInput,
   type WorkspaceMember
 } from "@yadraw/shared";
@@ -178,14 +179,37 @@ function LeftSidebar({
   );
 }
 
+function formatNotificationTime(value: string): string {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function TopBar({
   syncStatus,
   onOpenSearch,
-  onOpenShare
+  onOpenShare,
+  notifications,
+  unreadCount,
+  isNotificationsOpen,
+  isNotificationsLoading,
+  notificationsError,
+  onToggleNotifications,
+  onMarkNotificationRead
 }: {
   syncStatus: string;
   onOpenSearch: () => void;
   onOpenShare: () => void;
+  notifications: Notification[];
+  unreadCount: number;
+  isNotificationsOpen: boolean;
+  isNotificationsLoading: boolean;
+  notificationsError: string;
+  onToggleNotifications: () => void;
+  onMarkNotificationRead: (notificationId: string) => Promise<void>;
 }) {
   return (
     <header className="topBar">
@@ -214,9 +238,55 @@ function TopBar({
           Search
           <kbd>⌘K</kbd>
         </button>
-        <button className="squareButton" type="button" aria-label="Notifications" disabled>
-          <Bell size={18} />
-        </button>
+        <div className="notificationShell">
+          <button
+            className={`squareButton notificationButton ${isNotificationsOpen ? "notificationButtonActive" : ""}`}
+            type="button"
+            aria-label="Notifications"
+            aria-expanded={isNotificationsOpen}
+            onClick={onToggleNotifications}
+          >
+            <Bell size={18} />
+            {unreadCount > 0 ? <span className="notificationBadge">{unreadCount}</span> : null}
+          </button>
+          {isNotificationsOpen ? (
+            <section className="notificationPopover" aria-label="Notifications panel">
+              <header className="notificationHeader">
+                <div>
+                  <span className="eyebrow">Notifications</span>
+                  <h2>Updates</h2>
+                </div>
+                <span>{unreadCount} unread</span>
+              </header>
+
+              {isNotificationsLoading ? <div className="notificationState">Loading notifications</div> : null}
+              {notificationsError ? <div className="notificationState notificationStateError" role="alert">{notificationsError}</div> : null}
+
+              {!isNotificationsLoading && !notificationsError ? (
+                <div className="notificationList">
+                  {notifications.map((notification) => (
+                    <article className={`notificationItem ${notification.readAt ? "" : "notificationItemUnread"}`} key={notification.id}>
+                      <span className="notificationDot" />
+                      <div>
+                        <header>
+                          <strong>{notification.title}</strong>
+                          <time dateTime={notification.createdAt}>{formatNotificationTime(notification.createdAt)}</time>
+                        </header>
+                        {notification.body ? <p>{notification.body}</p> : null}
+                        {!notification.readAt ? (
+                          <button type="button" onClick={() => void onMarkNotificationRead(notification.id)}>
+                            Mark read
+                          </button>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                  {notifications.length === 0 ? <div className="notificationState">No notifications yet</div> : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+        </div>
         <span className="syncStatus">{syncStatus}</span>
       </div>
     </header>
@@ -1230,6 +1300,11 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
   const [isMembersLoading, setIsMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState("");
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState("");
   const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
   const [attachNotice, setAttachNotice] = useState<{ cardId: string; kind: "success" | "error"; message: string } | null>(null);
   const [isFilesLoading, setIsFilesLoading] = useState(false);
@@ -1272,6 +1347,10 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
       cancelled = true;
     };
   }, [initialBoard.id]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [board.workspaceId]);
 
   async function loadCardTemplates() {
     setIsTemplatesLoading(true);
@@ -1330,6 +1409,64 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   function openShareDialog() {
     setIsShareOpen(true);
     void loadWorkspaceMembers();
+  }
+
+  async function loadNotifications() {
+    setIsNotificationsLoading(true);
+    setNotificationsError("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/notifications`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Notifications request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { notifications?: Notification[]; unreadCount?: number };
+      const nextNotifications = payload.notifications ?? [];
+      setNotifications(nextNotifications);
+      setUnreadNotifications(payload.unreadCount ?? nextNotifications.filter((notification) => !notification.readAt).length);
+    } catch {
+      setNotifications([]);
+      setUnreadNotifications(0);
+      setNotificationsError("Could not load notifications.");
+    } finally {
+      setIsNotificationsLoading(false);
+    }
+  }
+
+  function toggleNotifications() {
+    setIsNotificationsOpen((current) => {
+      const next = !current;
+      if (next) {
+        void loadNotifications();
+      }
+      return next;
+    });
+  }
+
+  async function markNotificationRead(notificationId: string) {
+    try {
+      const response = await fetch(`${apiBaseUrl}/notifications/${notificationId}/read`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({})
+      });
+
+      if (!response.ok) {
+        throw new Error(`Mark notification read failed with ${response.status}`);
+      }
+
+      const notification = (await response.json()) as Notification;
+      setNotifications((current) => current.map((item) => (item.id === notification.id ? notification : item)));
+      setUnreadNotifications((current) => Math.max(0, current - 1));
+    } catch {
+      setNotificationsError("Could not mark notification as read.");
+    }
   }
 
   async function addCard(template: CardTemplate) {
@@ -1625,6 +1762,13 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
           syncStatus={syncStatus}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenShare={openShareDialog}
+          notifications={notifications}
+          unreadCount={unreadNotifications}
+          isNotificationsOpen={isNotificationsOpen}
+          isNotificationsLoading={isNotificationsLoading}
+          notificationsError={notificationsError}
+          onToggleNotifications={toggleNotifications}
+          onMarkNotificationRead={markNotificationRead}
         />
         <div className="boardSurface">
           {activeView === "board" ? (

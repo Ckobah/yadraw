@@ -33,6 +33,20 @@ export const workspaceMemberSchema = z.object({
   status: z.enum(["active", "pending"]).default("active")
 });
 
+export const notificationSchema = z.object({
+  id: uuidSchema,
+  workspaceId: uuidSchema,
+  userId: uuidSchema,
+  type: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().optional(),
+  objectType: z.string().optional(),
+  objectId: uuidSchema.optional(),
+  metadata: jsonObjectSchema.default({}),
+  readAt: z.string().datetime().optional(),
+  createdAt: z.string().datetime()
+});
+
 export const cardStatusSchema = z.enum([
   "draft",
   "active",
@@ -124,6 +138,7 @@ export const updateCardInputSchema = createCardInputSchema
 
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 export type WorkspaceMember = z.infer<typeof workspaceMemberSchema>;
+export type Notification = z.infer<typeof notificationSchema>;
 export type CardStatus = z.infer<typeof cardStatusSchema>;
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 export type CardType = z.infer<typeof cardTypeSchema>;
@@ -287,10 +302,16 @@ export const demoIds = {
   board: "b4f94635-6fd5-4a6b-8608-61a69c81fbe2"
 } as const;
 
+export const demoUserIds = {
+  owner: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
+  editor: "bb7ef8c4-2d05-4699-b2de-d9c02d1c1ec4",
+  viewer: "9f18a762-bf5b-4aa8-b934-f286cc51dc5b"
+} as const;
+
 export const demoWorkspaceMembers: WorkspaceMember[] = [
   {
     id: "fbb53c10-b74d-4e50-9088-608d60878a7d",
-    userId: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
+    userId: demoUserIds.owner,
     workspaceId: demoIds.workspace,
     name: "Alex Smith",
     email: "admin@acme.com",
@@ -299,7 +320,7 @@ export const demoWorkspaceMembers: WorkspaceMember[] = [
   },
   {
     id: "d8b569ac-3ced-43dc-85f4-193fd982fb1c",
-    userId: "bb7ef8c4-2d05-4699-b2de-d9c02d1c1ec4",
+    userId: demoUserIds.editor,
     workspaceId: demoIds.workspace,
     name: "Maya Chen",
     email: "maya@acme.com",
@@ -308,12 +329,52 @@ export const demoWorkspaceMembers: WorkspaceMember[] = [
   },
   {
     id: "27a26b32-b76d-41bc-9e38-07f7bbd8e059",
-    userId: "9f18a762-bf5b-4aa8-b934-f286cc51dc5b",
+    userId: demoUserIds.viewer,
     workspaceId: demoIds.workspace,
     name: "Nikolai Petrov",
     email: "nikolai@acme.com",
     role: "viewer",
     status: "active"
+  }
+];
+
+export const demoNotifications: Notification[] = [
+  {
+    id: "10d919f0-a73f-4317-a5bc-4579e276ca12",
+    workspaceId: demoIds.workspace,
+    userId: demoUserIds.owner,
+    type: "file_uploaded",
+    title: "File metadata attached",
+    body: "prompt.md is linked to 2. Enrich Data.",
+    objectType: "card",
+    objectId: "6bb48e57-ed49-4fd6-bdbc-a449b2756be9",
+    metadata: { filename: "prompt.md" },
+    createdAt: "2026-06-26T06:10:00.000Z"
+  },
+  {
+    id: "562ad694-e7fc-4132-b477-0779dc7fba99",
+    workspaceId: demoIds.workspace,
+    userId: demoUserIds.owner,
+    type: "card_saved",
+    title: "Board card saved",
+    body: "5. Vector Store was updated on the board.",
+    objectType: "card",
+    objectId: "1e6fa19e-0480-463f-b6bb-80983564246b",
+    metadata: { status: "active" },
+    readAt: "2026-06-26T06:20:00.000Z",
+    createdAt: "2026-06-26T06:05:00.000Z"
+  },
+  {
+    id: "8a6bf90c-8bf6-4f0c-86db-32145530d59d",
+    workspaceId: demoIds.workspace,
+    userId: demoUserIds.editor,
+    type: "share_invite",
+    title: "Workspace access changed",
+    body: "You were added to Acme Workspace as editor.",
+    objectType: "workspace",
+    objectId: demoIds.workspace,
+    metadata: { role: "editor" },
+    createdAt: "2026-06-26T06:00:00.000Z"
   }
 ];
 

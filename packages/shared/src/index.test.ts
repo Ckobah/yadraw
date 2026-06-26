@@ -6,7 +6,10 @@ import {
   cardTemplates,
   createCardInputSchema,
   demoBoard,
+  demoNotifications,
+  demoUserIds,
   demoWorkspaceMembers,
+  notificationSchema,
   updateCardInputSchema
 } from "./index.js";
 
@@ -93,5 +96,16 @@ describe("shared data schemas", () => {
       email: "admin@acme.com",
       status: "active"
     });
+  });
+
+  it("defines valid scoped demo notifications", () => {
+    expect(demoNotifications.map((notification) => notificationSchema.parse(notification))).toEqual(demoNotifications);
+
+    const alexNotifications = demoNotifications.filter((notification) => notification.userId === demoUserIds.owner);
+    const mayaNotifications = demoNotifications.filter((notification) => notification.userId === demoUserIds.editor);
+
+    expect(alexNotifications).toHaveLength(2);
+    expect(mayaNotifications).toHaveLength(1);
+    expect(alexNotifications.filter((notification) => !notification.readAt)).toHaveLength(1);
   });
 });

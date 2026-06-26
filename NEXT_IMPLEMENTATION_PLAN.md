@@ -526,6 +526,8 @@ MVP:
 
 ### 4.7. Notifications
 
+Статус: выполнено как Notifications popover MVP.
+
 Назначение: системные события пользователя.
 
 MVP:
@@ -549,6 +551,26 @@ MVP:
    - user only sees own notifications.
 
 Зависимости: auth for production-grade behavior.
+
+Итог реализации:
+
+- добавлен shared-контракт `Notification`;
+- добавлены demo notifications с явным user scope;
+- добавлена SQL-миграция `003_notifications.sql`;
+- добавлены repository methods `listNotifications` и `markNotificationRead`;
+- добавлены API endpoints `GET /notifications` и `PATCH /notifications/:id/read`;
+- API возвращает `unreadCount`;
+- bell button включен в top bar;
+- добавлен unread badge;
+- добавлен notification popover с loading/error/empty/list состояниями;
+- добавлено действие `Mark read`;
+- repository не позволяет отметить чужое уведомление прочитанным;
+- добавлены shared/API repository tests;
+- проведены `typecheck`, `test`, `build`, live migration/API checks и browser-level сценарий badge -> popover -> mark read.
+
+Ограничение текущего этапа:
+
+- реальные event producers для всех действий продукта, mark-all-read и production auth context остаются следующими расширениями.
 
 ### 4.8. Attach file
 
@@ -640,8 +662,8 @@ MVP:
 4. Attach file metadata to card. Done.
 5. Templates picker for Add card. Done.
 6. Share modal with copy link. Done.
-7. Notifications popover. Current next.
-8. Run workflow dry-run.
+7. Notifications popover. Done.
+8. Run workflow dry-run. Current next.
 9. AI Assistant deterministic board Q&A, then RAG.
 
 Reasoning:

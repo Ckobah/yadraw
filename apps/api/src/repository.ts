@@ -5,6 +5,7 @@ import {
   cardTemplates,
   demoBoard,
   demoIds,
+  demoNotifications,
   demoWorkspaceMembers,
   type Board,
   type Card,
@@ -13,6 +14,7 @@ import {
   type CreateCardInput,
   type FileRef,
   getCardTemplate,
+  type Notification,
   type UpdateCardInput,
   type WorkspaceMember
 } from "@yadraw/shared";
@@ -41,6 +43,8 @@ export type BoardRepository = {
   listDeletedCards(boardId: string): Promise<Card[]>;
   listCardTemplates(boardId: string): Promise<CardTemplate[]>;
   listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[] | null>;
+  listNotifications(userId: string): Promise<Notification[]>;
+  markNotificationRead(notificationId: string, userId: string): Promise<Notification | null>;
   listFiles(boardId: string): Promise<BoardFile[]>;
   attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
   searchCards(query: string): Promise<Card[]>;
@@ -226,6 +230,22 @@ function memberFromRow(row: QueryResultRow): WorkspaceMember {
   };
 }
 
+function notificationFromRow(row: QueryResultRow): Notification {
+  return {
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    userId: String(row.user_id),
+    type: String(row.type),
+    title: String(row.title),
+    body: row.body ? String(row.body) : undefined,
+    objectType: row.object_type ? String(row.object_type) : undefined,
+    objectId: row.object_id ? String(row.object_id) : undefined,
+    metadata: asObject(row.metadata),
+    readAt: row.read_at ? new Date(row.read_at).toISOString() : undefined,
+    createdAt: new Date(row.created_at).toISOString()
+  };
+}
+
 function boardFilesFromCards(cards: Card[]): BoardFile[] {
   return cards.flatMap((card) =>
     card.files.map((file) => ({
@@ -240,6 +260,7 @@ function boardFilesFromCards(cards: Card[]): BoardFile[] {
 
 export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRepository {
   const memoryBoard: Board = structuredClone(sourceBoard);
+  const notifications: Notification[] = structuredClone(demoNotifications);
   const deletedCards: Card[] = [];
 
   return {
@@ -317,6 +338,28 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
     async listWorkspaceMembers(workspaceId) {
       if (workspaceId !== memoryBoard.workspaceId) return null;
       return demoWorkspaceMembers;
+    },
+
+    async listNotifications(userId) {
+      return notifications
+        .filter((notification) => notification.userId === userId)
+        .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+    },
+
+    async markNotificationRead(notificationId, userId) {
+      const index = notifications.findIndex(
+        (notification) => notification.id === notificationId && notification.userId === userId
+      );
+      const notification = notifications[index];
+      if (index === -1 || !notification) return null;
+
+      const readAt = notification.readAt ?? new Date().toISOString();
+      notifications[index] = {
+        ...notification,
+        readAt
+      };
+
+      return notifications[index];
     },
 
     async listFiles(boardId) {
@@ -674,6 +717,37 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       }
 
       return workspaceId === demoIds.workspace ? demoWorkspaceMembers : [];
+    },
+
+    async listNotifications(userId) {
+      const result = await pool.query(
+        `
+          select *
+          from notifications
+          where user_id = $1
+          order by created_at desc
+          limit 30
+        `,
+        [userId]
+      );
+
+      return result.rows.map(notificationFromRow);
+    },
+
+    async markNotificationRead(notificationId, userId) {
+      const result = await pool.query(
+        `
+          update notifications
+          set read_at = coalesce(read_at, now())
+          where id = $1
+            and user_id = $2
+          returning *
+        `,
+        [notificationId, userId]
+      );
+
+      const row = result.rows[0];
+      return row ? notificationFromRow(row) : null;
     },
 
     async listFiles(boardId) {

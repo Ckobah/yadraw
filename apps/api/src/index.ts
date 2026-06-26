@@ -5,6 +5,7 @@ import { z } from "zod";
 import {
   buildCardInputFromTemplate,
   createCardInputSchema,
+  demoUserIds,
   updateCardInputSchema
 } from "@yadraw/shared";
 import { createMemoryRepository, createPostgresRepository } from "./repository.js";
@@ -31,6 +32,13 @@ const attachFileInputSchema = z.object({
   sizeBytes: z.number().int().nonnegative().max(25_000_000).optional(),
   role: z.string().trim().min(1).max(60).default("attachment")
 });
+
+const markNotificationReadSchema = z.object({}).strict();
+
+function requestUserId(request: { headers: Record<string, unknown> }): string {
+  const headerValue = request.headers["x-yadraw-user-id"];
+  return typeof headerValue === "string" ? headerValue : demoUserIds.owner;
+}
 
 const repository = process.env.DATABASE_URL
   ? await createPostgresRepository(process.env.DATABASE_URL).catch((error: unknown) => {
@@ -161,6 +169,38 @@ server.get("/workspaces/:workspaceId/members", async (request, reply) => {
   }
 
   return { members };
+});
+
+server.get("/notifications", async (request) => {
+  const userId = requestUserId(request);
+  const notifications = await repository.listNotifications(userId);
+  return {
+    notifications,
+    unreadCount: notifications.filter((notification) => !notification.readAt).length
+  };
+});
+
+server.patch("/notifications/:notificationId/read", async (request, reply) => {
+  const { notificationId } = request.params as { notificationId: string };
+  const parsedBody = markNotificationReadSchema.safeParse(request.body ?? {});
+
+  if (!parsedBody.success) {
+    return reply.code(400).send({
+      error: "Invalid notification payload",
+      fields: parsedBody.error.flatten().fieldErrors
+    });
+  }
+
+  const notification = await repository.markNotificationRead(
+    notificationId,
+    requestUserId(request)
+  );
+
+  if (!notification) {
+    return reply.code(404).send({ error: "Notification not found" });
+  }
+
+  return notification;
 });
 
 server.get("/boards/:boardId/files", async (request) => {

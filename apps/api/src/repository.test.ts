@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCardInputFromTemplate, demoBoard, demoIds, demoWorkspaceMembers } from "@yadraw/shared";
+import { buildCardInputFromTemplate, demoBoard, demoIds, demoNotifications, demoUserIds, demoWorkspaceMembers } from "@yadraw/shared";
 import { createMemoryRepository } from "./repository.js";
 
 describe("memory board repository", () => {
@@ -155,6 +155,33 @@ describe("memory board repository", () => {
     await expect(repository.listWorkspaceMembers(demoIds.project)).resolves.toBeNull();
   });
 
+  it("lists and marks notifications for the current user only", async () => {
+    const repository = createMemoryRepository();
+    const alexUserId = demoUserIds.owner;
+    const mayaUserId = demoUserIds.editor;
+    const alexUnreadId = "10d919f0-a73f-4317-a5bc-4579e276ca12";
+    const mayaUnreadId = "8a6bf90c-8bf6-4f0c-86db-32145530d59d";
+
+    const alexNotifications = await repository.listNotifications(alexUserId);
+    expect(alexNotifications).toHaveLength(2);
+    expect(alexNotifications.every((notification) => notification.userId === alexUserId)).toBe(true);
+    expect(alexNotifications.filter((notification) => !notification.readAt)).toHaveLength(1);
+    expect(alexNotifications.map((notification) => notification.id)).not.toContain(mayaUnreadId);
+
+    await expect(repository.markNotificationRead(alexUnreadId, mayaUserId)).resolves.toBeNull();
+
+    const readNotification = await repository.markNotificationRead(alexUnreadId, alexUserId);
+    expect(readNotification).toMatchObject({
+      id: alexUnreadId,
+      userId: alexUserId
+    });
+    expect(readNotification?.readAt).toEqual(expect.any(String));
+
+    const afterRead = await repository.listNotifications(alexUserId);
+    expect(afterRead.filter((notification) => !notification.readAt)).toHaveLength(0);
+    expect(demoNotifications.find((notification) => notification.id === alexUnreadId)?.readAt).toBeUndefined();
+  });
+
   it("excludes files from cards moved to trash", async () => {
     const repository = createMemoryRepository();
 
@@ -212,6 +239,13 @@ describe("memory board repository", () => {
     await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(repository.listCardTemplates("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(repository.listWorkspaceMembers("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
+    await expect(repository.listNotifications("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
+    await expect(
+      repository.markNotificationRead(
+        "a57baac3-0d79-4b95-bfdd-6366d7681c81",
+        "a57baac3-0d79-4b95-bfdd-6366d7681c81"
+      )
+    ).resolves.toBeNull();
     await expect(repository.listFiles("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(
       repository.attachFile("a57baac3-0d79-4b95-bfdd-6366d7681c81", {
