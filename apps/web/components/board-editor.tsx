@@ -12,8 +12,9 @@ import {
   CheckCircle2,
   Bell,
   Bot,
-  Boxes,
+  Box,
   ChevronDown,
+  Database,
   FileText,
   Grid2X2,
   History,
@@ -21,6 +22,7 @@ import {
   MousePointer2,
   Play,
   Plus,
+  RadioTower,
   Search,
   Settings2,
   Share2,
@@ -31,12 +33,23 @@ import {
   ZoomIn
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { boardSchema, type Board, type Card, type CardStatus, type FileRef, type UpdateCardInput } from "@yadraw/shared";
+import {
+  boardSchema,
+  cardTemplates as fallbackCardTemplates,
+  type Board,
+  type Card,
+  type CardStatus,
+  type CardTemplate,
+  type FileRef,
+  type UpdateCardInput
+} from "@yadraw/shared";
 import { WorkflowCardNode, type WorkflowNode } from "./workflow-node";
 
 const nodeTypes: NodeTypes = {
   workflowCard: WorkflowCardNode
 };
+
+const defaultCardTemplate = fallbackCardTemplates[0] as CardTemplate;
 
 type ActiveView = "board" | "files" | "trash";
 
@@ -218,6 +231,136 @@ function CanvasToolbar({ onAddCard }: { onAddCard: () => void }) {
           <ZoomIn size={17} />
         </button>
       </span>
+    </div>
+  );
+}
+
+function TemplateIcon({ icon }: { icon: string }) {
+  if (icon === "radio-tower") return <RadioTower size={18} />;
+  if (icon === "database") return <Database size={18} />;
+  if (icon === "box") return <Box size={18} />;
+  if (icon === "sparkles") return <Sparkles size={18} />;
+  if (icon === "bot") return <Bot size={18} />;
+  return <FileText size={18} />;
+}
+
+function TemplatePickerDialog({
+  templates,
+  isOpen,
+  isLoading,
+  error,
+  isCreating,
+  onClose,
+  onCreate
+}: {
+  templates: CardTemplate[];
+  isOpen: boolean;
+  isLoading: boolean;
+  error: string;
+  isCreating: boolean;
+  onClose: () => void;
+  onCreate: (template: CardTemplate) => Promise<void>;
+}) {
+  const [selectedKey, setSelectedKey] = useState(fallbackCardTemplates[1]?.key ?? defaultCardTemplate.key);
+  const selectedTemplate = templates.find((template) => template.key === selectedKey) ?? templates[0] ?? defaultCardTemplate;
+  const dataPreview = JSON.stringify(selectedTemplate.defaults.data ?? {}, null, 2);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!templates.some((template) => template.key === selectedKey)) {
+      setSelectedKey(templates[0]?.key ?? defaultCardTemplate.key);
+    }
+  }, [isOpen, selectedKey, templates]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="dialogBackdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="templateDialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose card template"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="templateDialogHeader">
+          <div>
+            <span className="eyebrow">Templates</span>
+            <h2>Create card</h2>
+            <p>Choose a typed starting point with predefined fields, handles, tags and visual style.</p>
+          </div>
+          <button className="miniIconButton" type="button" aria-label="Close templates" onClick={onClose}>
+            <X size={15} />
+          </button>
+        </header>
+
+        <div className="templateDialogBody">
+          <div className="templateList" role="listbox" aria-label="Card templates">
+            {(templates.length > 0 ? templates : fallbackCardTemplates).map((template) => (
+              <button
+                className={`templateOption templateOption${template.color[0]?.toUpperCase()}${template.color.slice(1)} ${selectedTemplate.key === template.key ? "templateOptionActive" : ""}`}
+                type="button"
+                role="option"
+                aria-selected={selectedTemplate.key === template.key}
+                key={template.key}
+                onClick={() => setSelectedKey(template.key)}
+              >
+                <span className="templateOptionIcon">
+                  <TemplateIcon icon={template.icon} />
+                </span>
+                <span>
+                  <strong>{template.name}</strong>
+                  <small>{template.description}</small>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <aside className="templatePreview" aria-label="Template preview">
+            <div className={`templatePreviewIcon templatePreviewIcon${selectedTemplate.color[0]?.toUpperCase()}${selectedTemplate.color.slice(1)}`}>
+              <TemplateIcon icon={selectedTemplate.icon} />
+            </div>
+            <h3>{selectedTemplate.name}</h3>
+            <p>{selectedTemplate.description}</p>
+
+            <dl className="templatePreviewMeta">
+              <div>
+                <dt>Type key</dt>
+                <dd>{selectedTemplate.key}</dd>
+              </div>
+              <div>
+                <dt>Inputs</dt>
+                <dd>{selectedTemplate.defaults.inputs?.join(", ") || "None"}</dd>
+              </div>
+              <div>
+                <dt>Outputs</dt>
+                <dd>{selectedTemplate.defaults.outputs?.join(", ") || "None"}</dd>
+              </div>
+              <div>
+                <dt>Tags</dt>
+                <dd>{selectedTemplate.defaults.tags?.join(", ") || "None"}</dd>
+              </div>
+            </dl>
+
+            <div className="templateDataPreview">
+              <span>Default data</span>
+              <pre>{dataPreview}</pre>
+            </div>
+
+            {error ? <div className="templateError" role="alert">{error}</div> : null}
+
+            <button
+              className="primaryButton templateCreateButton"
+              type="button"
+              disabled={isCreating || isLoading || !selectedTemplate}
+              onClick={() => void onCreate(selectedTemplate)}
+            >
+              <Plus size={16} />
+              {isCreating ? "Creating" : `Create ${selectedTemplate.name}`}
+            </button>
+          </aside>
+        </div>
+      </section>
     </div>
   );
 }
@@ -945,6 +1088,11 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [board, setBoard] = useState(initialBoard);
   const [activeView, setActiveView] = useState<ActiveView>("board");
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
+  const [cardTemplates, setCardTemplates] = useState<CardTemplate[]>(fallbackCardTemplates);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState("");
+  const [isCreatingCard, setIsCreatingCard] = useState(false);
   const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
   const [attachNotice, setAttachNotice] = useState<{ cardId: string; kind: "success" | "error"; message: string } | null>(null);
   const [isFilesLoading, setIsFilesLoading] = useState(false);
@@ -988,9 +1136,41 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     };
   }, [initialBoard.id]);
 
-  async function addCard() {
-    const nextNumber = board.cards.length + 1;
+  async function loadCardTemplates() {
+    setIsTemplatesLoading(true);
+    setTemplatesError("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/boards/${board.id}/card-types`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Card templates request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { templates?: CardTemplate[] };
+      const nextTemplates = payload.templates?.length ? payload.templates : fallbackCardTemplates;
+      setCardTemplates(nextTemplates);
+    } catch {
+      setCardTemplates(fallbackCardTemplates);
+      setTemplatesError("Using local templates while the API is unavailable.");
+    } finally {
+      setIsTemplatesLoading(false);
+    }
+  }
+
+  function openTemplatePicker() {
+    setActiveView("board");
+    setTemplatesError("");
+    setIsTemplatePickerOpen(true);
+    void loadCardTemplates();
+  }
+
+  async function addCard(template: CardTemplate) {
     setSyncStatus("Saving");
+    setIsCreatingCard(true);
+    setTemplatesError("");
 
     try {
       const response = await fetch(`${apiBaseUrl}/boards/${board.id}/cards`, {
@@ -999,28 +1179,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          typeKey: "note",
-          title: `${nextNumber}. New JSON Card`,
-          description: "Draft card created from the board editor.",
-          status: "draft",
-          data: {
-            kind: "note",
-            source: "web"
-          },
-          position: {
-            x: 180 + (nextNumber % 4) * 120,
-            y: 180 + Math.floor(nextNumber / 4) * 110
-          },
-          size: {
-            width: 300,
-            height: 175
-          },
-          style: {
-            accent: "blue"
-          },
-          inputs: ["input"],
-          outputs: ["output"],
-          tags: ["draft"]
+          templateKey: template.key
         })
       });
 
@@ -1034,9 +1193,13 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         cards: [...current.cards, card]
       }));
       setSelectedCardId(card.id);
+      setIsTemplatePickerOpen(false);
       setSyncStatus("Synced");
     } catch {
       setSyncStatus("Save failed");
+      setTemplatesError("Could not create this card. Check the API and try again.");
+    } finally {
+      setIsCreatingCard(false);
     }
   }
 
@@ -1298,7 +1461,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
           {activeView === "board" ? (
             <>
               {!selectedCard ? <BoardBrief board={board} /> : null}
-              <CanvasToolbar onAddCard={addCard} />
+              <CanvasToolbar onAddCard={openTemplatePicker} />
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1358,6 +1521,19 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
       isOpen={isSearchOpen}
       onClose={() => setIsSearchOpen(false)}
       onSelectCard={setSelectedCardId}
+    />
+    <TemplatePickerDialog
+      templates={cardTemplates}
+      isOpen={isTemplatePickerOpen}
+      isLoading={isTemplatesLoading}
+      error={templatesError}
+      isCreating={isCreatingCard}
+      onClose={() => {
+        if (!isCreatingCard) {
+          setIsTemplatePickerOpen(false);
+        }
+      }}
+      onCreate={addCard}
     />
     </>
   );

@@ -103,9 +103,14 @@ export const boardSchema = z.object({
 
 export const createCardInputSchema = cardSchema
   .omit({ id: true, boardId: true })
-  .partial();
+  .partial()
+  .extend({
+    templateKey: z.string().min(1).optional()
+  });
 
-export const updateCardInputSchema = createCardInputSchema.partial();
+export const updateCardInputSchema = createCardInputSchema
+  .omit({ templateKey: true })
+  .partial();
 
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 export type CardStatus = z.infer<typeof cardStatusSchema>;
@@ -117,6 +122,153 @@ export type Connection = z.infer<typeof connectionSchema>;
 export type Board = z.infer<typeof boardSchema>;
 export type CreateCardInput = z.infer<typeof createCardInputSchema>;
 export type UpdateCardInput = z.infer<typeof updateCardInputSchema>;
+
+export type CardTemplate = {
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  color: string;
+  defaults: CreateCardInput;
+};
+
+export const cardTemplates: CardTemplate[] = [
+  {
+    key: "trigger",
+    name: "Trigger",
+    description: "Receives an external event and starts the workflow.",
+    icon: "radio-tower",
+    color: "green",
+    defaults: {
+      typeKey: "trigger",
+      title: "New Trigger",
+      description: "Receives an external event and starts the workflow.",
+      status: "draft",
+      data: { endpoint: "/webhook", method: "POST" },
+      size: { width: 280, height: 170 },
+      style: { accent: "green" },
+      inputs: [],
+      outputs: ["payload"],
+      tags: ["trigger"]
+    }
+  },
+  {
+    key: "ai_action",
+    name: "AI Action",
+    description: "Runs a controlled AI step with explicit inputs and outputs.",
+    icon: "sparkles",
+    color: "blue",
+    defaults: {
+      typeKey: "ai_action",
+      title: "New AI Action",
+      description: "Runs a controlled AI step with explicit inputs and outputs.",
+      status: "draft",
+      data: { model: "gpt", mode: "draft" },
+      size: { width: 300, height: 190 },
+      style: { accent: "blue" },
+      inputs: ["input"],
+      outputs: ["result"],
+      tags: ["ai"]
+    }
+  },
+  {
+    key: "database",
+    name: "Database",
+    description: "Reads or writes structured records.",
+    icon: "database",
+    color: "purple",
+    defaults: {
+      typeKey: "database",
+      title: "New Database Step",
+      description: "Reads or writes structured records.",
+      status: "draft",
+      data: { table: "records", operation: "insert" },
+      size: { width: 300, height: 175 },
+      style: { accent: "purple" },
+      inputs: ["record"],
+      outputs: ["record_id"],
+      tags: ["database"]
+    }
+  },
+  {
+    key: "vector_store",
+    name: "Vector Store",
+    description: "Stores embeddings for retrieval and semantic search.",
+    icon: "box",
+    color: "teal",
+    defaults: {
+      typeKey: "vector_store",
+      title: "New Vector Store",
+      description: "Stores embeddings for retrieval and semantic search.",
+      status: "draft",
+      data: { index: "workspace-index" },
+      size: { width: 300, height: 185 },
+      style: { accent: "teal" },
+      inputs: ["embedding", "metadata"],
+      outputs: ["indexed"],
+      tags: ["vector_store"]
+    }
+  },
+  {
+    key: "storage",
+    name: "Storage",
+    description: "Keeps files and references attached to workflow data.",
+    icon: "file-text",
+    color: "pink",
+    defaults: {
+      typeKey: "storage",
+      title: "New File Storage",
+      description: "Keeps files and references attached to workflow data.",
+      status: "draft",
+      data: { bucket: "workspace-files" },
+      size: { width: 300, height: 175 },
+      style: { accent: "pink" },
+      inputs: ["files"],
+      outputs: [],
+      tags: ["storage"]
+    }
+  },
+  {
+    key: "note",
+    name: "Note",
+    description: "Captures free-form JSON notes and planning context.",
+    icon: "file-text",
+    color: "blue",
+    defaults: {
+      typeKey: "note",
+      title: "New JSON Card",
+      description: "Draft card created from a reusable template.",
+      status: "draft",
+      data: { kind: "note", source: "web" },
+      size: { width: 300, height: 175 },
+      style: { accent: "blue" },
+      inputs: ["input"],
+      outputs: ["output"],
+      tags: ["draft"]
+    }
+  }
+];
+
+export function getCardTemplate(templateKey: string): CardTemplate | undefined {
+  return cardTemplates.find((template) => template.key === templateKey);
+}
+
+export function buildCardInputFromTemplate(
+  templateKey: string,
+  options: { sequence: number; position?: Card["position"] }
+): CreateCardInput | null {
+  const template = getCardTemplate(templateKey);
+  if (!template) return null;
+
+  return {
+    ...structuredClone(template.defaults),
+    title: `${options.sequence}. ${template.defaults.title ?? template.name}`,
+    position: options.position ?? {
+      x: 180 + (options.sequence % 4) * 120,
+      y: 180 + Math.floor(options.sequence / 4) * 110
+    }
+  };
+}
 
 export const demoIds = {
   workspace: "3cce8c2f-3d0f-49aa-89da-9f2f1f655b33",

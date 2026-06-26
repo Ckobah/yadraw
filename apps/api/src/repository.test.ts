@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoBoard, demoIds } from "@yadraw/shared";
+import { buildCardInputFromTemplate, demoBoard, demoIds } from "@yadraw/shared";
 import { createMemoryRepository } from "./repository.js";
 
 describe("memory board repository", () => {
@@ -125,6 +125,29 @@ describe("memory board repository", () => {
     );
   });
 
+  it("lists card templates and creates a typed card from template defaults", async () => {
+    const repository = createMemoryRepository();
+
+    const templates = await repository.listCardTemplates(demoIds.board);
+    expect(templates.map((template) => template.key)).toContain("database");
+
+    const input = buildCardInputFromTemplate("database", {
+      sequence: demoBoard.cards.length + 1
+    });
+    expect(input).not.toBeNull();
+
+    const card = await repository.createCard(demoIds.board, input ?? {});
+    expect(card).toMatchObject({
+      typeKey: "database",
+      title: "7. New Database Step",
+      data: { table: "records", operation: "insert" },
+      inputs: ["record"],
+      outputs: ["record_id"],
+      tags: ["database"],
+      style: { accent: "purple" }
+    });
+  });
+
   it("excludes files from cards moved to trash", async () => {
     const repository = createMemoryRepository();
 
@@ -180,6 +203,7 @@ describe("memory board repository", () => {
     await expect(repository.deleteCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.restoreCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
+    await expect(repository.listCardTemplates("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(repository.listFiles("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(
       repository.attachFile("a57baac3-0d79-4b95-bfdd-6366d7681c81", {

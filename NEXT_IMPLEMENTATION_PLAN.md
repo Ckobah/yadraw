@@ -378,6 +378,8 @@ MVP:
 
 ### 4.3. Templates
 
+Статус: выполнено как Add-card template picker MVP.
+
 Назначение: создание карточек из типизированных шаблонов.
 
 MVP:
@@ -398,6 +400,22 @@ MVP:
    - schema default application.
 
 Зависимости: card type registry.
+
+Итог реализации:
+
+- добавлен shared-каталог `cardTemplates` и builder `buildCardInputFromTemplate`;
+- `POST /boards/:boardId/cards` принимает `templateKey`, валидирует неизвестный шаблон и применяет defaults;
+- добавлен API `GET /boards/:boardId/card-types`;
+- memory repository возвращает shared-шаблоны, PostgreSQL repository читает `card_types` и объединяет их с продуктовым fallback-каталогом;
+- кнопка `Add` открывает template picker вместо создания безымянной note-карточки;
+- picker показывает список типов, preview входов/выходов/tags/default data и создает выбранный тип;
+- созданная карточка сразу выбирается на canvas и открывается в inspector;
+- добавлены shared/API repository tests;
+- проведены `typecheck`, `test`, `build`, live API checks и общий browser-level compatibility test с Search, Attach file, Files, Trash и Restore.
+
+Ограничение текущего этапа:
+
+- JSON Schema validation, UI Schema rendering and schema migrations остаются следующим schema-driven этапом.
 
 ### 4.4. Trash
 
@@ -601,8 +619,8 @@ MVP:
 2. Trash soft-delete/restore for cards. Done.
 3. Files list read-only. Done.
 4. Attach file metadata to card. Done.
-5. Templates picker for Add card. Current next.
-6. Share modal with copy link, then membership.
+5. Templates picker for Add card. Done.
+6. Share modal with copy link, then membership. Current next.
 7. Notifications popover.
 8. Run workflow dry-run.
 9. AI Assistant deterministic board Q&A, then RAG.

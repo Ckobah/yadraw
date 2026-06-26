@@ -3,6 +3,7 @@ import { config } from "dotenv";
 import Fastify from "fastify";
 import { z } from "zod";
 import {
+  buildCardInputFromTemplate,
   createCardInputSchema,
   updateCardInputSchema
 } from "@yadraw/shared";
@@ -57,7 +58,38 @@ server.get("/boards/:boardId", async (request, reply) => {
 
 server.post("/boards/:boardId/cards", async (request, reply) => {
   const { boardId } = request.params as { boardId: string };
-  const input = createCardInputSchema.parse(request.body);
+  const parsedInput = createCardInputSchema.safeParse(request.body);
+
+  if (!parsedInput.success) {
+    return reply.code(400).send({
+      error: "Invalid card payload",
+      fields: parsedInput.error.flatten().fieldErrors
+    });
+  }
+
+  const { templateKey, ...cardOverrides } = parsedInput.data;
+  let input = cardOverrides;
+
+  if (templateKey) {
+    const board = await repository.getBoard(boardId);
+    if (!board) {
+      return reply.code(404).send({ error: "Board not found" });
+    }
+
+    const templateInput = buildCardInputFromTemplate(templateKey, {
+      sequence: board.cards.length + 1
+    });
+
+    if (!templateInput) {
+      return reply.code(400).send({ error: "Unknown card template" });
+    }
+
+    input = {
+      ...templateInput,
+      ...cardOverrides
+    };
+  }
+
   const card = await repository.createCard(boardId, input);
 
   if (!card) {
@@ -104,6 +136,20 @@ server.post("/cards/:cardId/restore", async (request, reply) => {
 server.get("/boards/:boardId/trash", async (request) => {
   const { boardId } = request.params as { boardId: string };
   return { cards: await repository.listDeletedCards(boardId) };
+});
+
+server.get("/boards/:boardId/card-types", async (request, reply) => {
+  const { boardId } = request.params as { boardId: string };
+  const templates = await repository.listCardTemplates(boardId);
+
+  if (templates.length === 0) {
+    const board = await repository.getBoard(boardId);
+    if (!board) {
+      return reply.code(404).send({ error: "Board not found" });
+    }
+  }
+
+  return { templates };
 });
 
 server.get("/boards/:boardId/files", async (request) => {

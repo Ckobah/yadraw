@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   boardSchema,
+  buildCardInputFromTemplate,
   cardSchema,
+  cardTemplates,
   createCardInputSchema,
   demoBoard,
   updateCardInputSchema
@@ -31,8 +33,9 @@ describe("shared data schemas", () => {
   });
 
   it("accepts partial create and update payloads", () => {
-    expect(createCardInputSchema.parse({ title: "Draft idea" })).toEqual({
-      title: "Draft idea"
+    expect(createCardInputSchema.parse({ title: "Draft idea", templateKey: "note" })).toEqual({
+      title: "Draft idea",
+      templateKey: "note"
     });
 
     expect(
@@ -55,5 +58,29 @@ describe("shared data schemas", () => {
         size: { width: 0, height: 180 }
       })
     ).toThrow();
+  });
+
+  it("builds create payloads from card templates", () => {
+    expect(cardTemplates.map((template) => template.key)).toEqual([
+      "trigger",
+      "ai_action",
+      "database",
+      "vector_store",
+      "storage",
+      "note"
+    ]);
+
+    expect(buildCardInputFromTemplate("database", { sequence: 7 })).toMatchObject({
+      typeKey: "database",
+      title: "7. New Database Step",
+      status: "draft",
+      data: { table: "records", operation: "insert" },
+      position: { x: 540, y: 290 },
+      inputs: ["record"],
+      outputs: ["record_id"],
+      tags: ["database"]
+    });
+
+    expect(buildCardInputFromTemplate("missing", { sequence: 1 })).toBeNull();
   });
 });

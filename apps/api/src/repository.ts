@@ -2,12 +2,15 @@ import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
 import {
   boardSchema,
+  cardTemplates,
   demoBoard,
   type Board,
   type Card,
+  type CardTemplate,
   type Connection,
   type CreateCardInput,
   type FileRef,
+  getCardTemplate,
   type UpdateCardInput
 } from "@yadraw/shared";
 
@@ -33,6 +36,7 @@ export type BoardRepository = {
   deleteCard(cardId: string): Promise<Card | null>;
   restoreCard(cardId: string): Promise<Card | null>;
   listDeletedCards(boardId: string): Promise<Card[]>;
+  listCardTemplates(boardId: string): Promise<CardTemplate[]>;
   listFiles(boardId: string): Promise<BoardFile[]>;
   attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
   searchCards(query: string): Promise<Card[]>;
@@ -168,6 +172,41 @@ function buildFileRef(input: AttachFileInput): FileRef {
   };
 }
 
+function templateFromCardTypeRow(row: QueryResultRow): CardTemplate {
+  const key = String(row.key);
+  const fallback = getCardTemplate(key);
+  const defaultData = asObject(row.default_data);
+  const color = row.color ? String(row.color) : fallback?.color ?? "blue";
+
+  return {
+    key,
+    name: String(row.name ?? fallback?.name ?? key),
+    description: row.description ? String(row.description) : fallback?.description ?? "",
+    icon: row.icon ? String(row.icon) : fallback?.icon ?? "file-text",
+    color,
+    defaults: {
+      ...(fallback?.defaults ?? {
+        typeKey: key,
+        title: `New ${String(row.name ?? key)}`,
+        description: row.description ? String(row.description) : undefined,
+        status: "draft",
+        data: {},
+        size: { width: 300, height: 175 },
+        style: { accent: color },
+        inputs: ["input"],
+        outputs: ["output"],
+        tags: [key]
+      }),
+      typeKey: key,
+      data: Object.keys(defaultData).length > 0 ? defaultData : fallback?.defaults.data ?? {},
+      style: {
+        ...(fallback?.defaults.style ?? {}),
+        accent: color
+      }
+    }
+  };
+}
+
 function boardFilesFromCards(cards: Card[]): BoardFile[] {
   return cards.flatMap((card) =>
     card.files.map((file) => ({
@@ -249,6 +288,11 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
     async listDeletedCards(boardId) {
       if (boardId !== memoryBoard.id) return [];
       return deletedCards;
+    },
+
+    async listCardTemplates(boardId) {
+      if (boardId !== memoryBoard.id) return [];
+      return cardTemplates;
     },
 
     async listFiles(boardId) {
@@ -552,6 +596,22 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
 
       return result.rows.map(cardFromRow);
+    },
+
+    async listCardTemplates(boardId) {
+      const result = await pool.query(
+        `
+          select ct.*
+          from boards b
+          join card_types ct on ct.workspace_id = b.workspace_id
+          where b.id = $1
+            and b.deleted_at is null
+          order by ct.is_system desc, ct.name asc
+        `,
+        [boardId]
+      );
+
+      return result.rows.map(templateFromCardTypeRow);
     },
 
     async listFiles(boardId) {
