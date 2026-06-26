@@ -1419,6 +1419,180 @@ button:disabled {
   text-align: center;
 }
 
+.shareDialog {
+  width: min(620px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.24);
+}
+
+.shareDialogHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shareDialogHeader h2 {
+  margin: 3px 0 6px;
+  font-size: 24px;
+}
+
+.shareDialogHeader p,
+.shareLinkSection p {
+  margin: 0;
+  color: var(--muted-strong);
+  line-height: 1.45;
+}
+
+.shareLinkSection,
+.shareMembersSection {
+  display: grid;
+  gap: 12px;
+  padding: 18px 22px;
+}
+
+.shareLinkSection {
+  border-bottom: 1px solid var(--line);
+}
+
+.shareLinkSection label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.shareLinkRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.shareLinkRow input {
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f9fc;
+  padding: 0 11px;
+  color: var(--muted-strong);
+  font: inherit;
+}
+
+.shareMembersHeader,
+.shareMemberRow {
+  display: flex;
+  align-items: center;
+}
+
+.shareMembersHeader {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.shareMembersHeader h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.shareMembersHeader span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.shareMemberList {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.shareMemberRow {
+  gap: 12px;
+  min-height: 62px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.shareMemberRow:last-child {
+  border-bottom: 0;
+}
+
+.shareMemberAvatar {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef3ff;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shareMemberIdentity {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+}
+
+.shareMemberIdentity strong,
+.shareMemberIdentity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shareMemberIdentity small {
+  color: var(--muted);
+}
+
+.shareRole {
+  min-width: 68px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #fff;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: center;
+  text-transform: capitalize;
+}
+
+.shareRoleOwner,
+.shareRoleAdmin {
+  border-color: #d9ccff;
+  background: #f4f0ff;
+  color: var(--purple);
+}
+
+.shareRoleEditor {
+  border-color: #cbe1ff;
+  background: #eef6ff;
+  color: var(--blue);
+}
+
+.shareState {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: #f7f9fc;
+  padding: 14px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.shareStateError {
+  border-color: #ffd0d0;
+  background: #fffafa;
+  color: #c93434;
+}
+
 .templateDialog {
   width: min(920px, calc(100vw - 32px));
   max-height: calc(100vh - 124px);

@@ -14,6 +14,7 @@ import {
   Bot,
   Box,
   ChevronDown,
+  Clipboard,
   Database,
   FileText,
   Grid2X2,
@@ -41,7 +42,8 @@ import {
   type CardStatus,
   type CardTemplate,
   type FileRef,
-  type UpdateCardInput
+  type UpdateCardInput,
+  type WorkspaceMember
 } from "@yadraw/shared";
 import { WorkflowCardNode, type WorkflowNode } from "./workflow-node";
 
@@ -176,7 +178,15 @@ function LeftSidebar({
   );
 }
 
-function TopBar({ syncStatus, onOpenSearch }: { syncStatus: string; onOpenSearch: () => void }) {
+function TopBar({
+  syncStatus,
+  onOpenSearch,
+  onOpenShare
+}: {
+  syncStatus: string;
+  onOpenSearch: () => void;
+  onOpenShare: () => void;
+}) {
   return (
     <header className="topBar">
       <div className="breadcrumbs">
@@ -192,7 +202,7 @@ function TopBar({ syncStatus, onOpenSearch }: { syncStatus: string; onOpenSearch
 
       <div className="topActions">
         <AvatarStack />
-        <button className="shareButton shareButtonDisabled" type="button" disabled>
+        <button className="shareButton" type="button" onClick={onOpenShare}>
           <Share2 size={17} />
           Share
         </button>
@@ -1019,6 +1029,129 @@ function SearchDialog({
   );
 }
 
+function initialsFor(name: string): string {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function ShareDialog({
+  board,
+  members,
+  isOpen,
+  isLoading,
+  error,
+  onClose
+}: {
+  board: Board;
+  members: WorkspaceMember[];
+  isOpen: boolean;
+  isLoading: boolean;
+  error: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const shareLink = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const url = new URL(window.location.href);
+    url.searchParams.set("board", board.id);
+    return url.toString();
+  }, [board.id, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setCopied(false);
+    }
+  }, [isOpen]);
+
+  async function copyShareLink() {
+    if (!shareLink) return;
+
+    try {
+      await navigator.clipboard.writeText(shareLink);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = shareLink;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="dialogBackdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="shareDialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Share board"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="shareDialogHeader">
+          <div>
+            <span className="eyebrow">Share</span>
+            <h2>{board.name}</h2>
+            <p>Copy a board link and review who currently has access to this workspace.</p>
+          </div>
+          <button className="miniIconButton" type="button" aria-label="Close share" onClick={onClose}>
+            <X size={15} />
+          </button>
+        </header>
+
+        <section className="shareLinkSection" aria-label="Board link">
+          <label htmlFor="board-share-link">Board link</label>
+          <div className="shareLinkRow">
+            <input id="board-share-link" readOnly value={shareLink} aria-label="Board share link" />
+            <button className="secondaryButton" type="button" onClick={() => void copyShareLink()}>
+              {copied ? <CheckCircle2 size={16} /> : <Clipboard size={16} />}
+              {copied ? "Copied" : "Copy link"}
+            </button>
+          </div>
+          <p>Anyone still needs workspace access. Public links and invites are intentionally not enabled in this phase.</p>
+        </section>
+
+        <section className="shareMembersSection" aria-label="Workspace members">
+          <div className="shareMembersHeader">
+            <h3>Workspace access</h3>
+            <span>{members.length} members</span>
+          </div>
+
+          {isLoading ? <div className="shareState">Loading members</div> : null}
+          {error ? <div className="shareState shareStateError" role="alert">{error}</div> : null}
+
+          {!isLoading && !error ? (
+            <div className="shareMemberList">
+              {members.map((member) => (
+                <div className="shareMemberRow" key={member.id}>
+                  <span className="shareMemberAvatar">{initialsFor(member.name)}</span>
+                  <span className="shareMemberIdentity">
+                    <strong>{member.name}</strong>
+                    <small>{member.email}</small>
+                  </span>
+                  <span className={`shareRole shareRole${member.role[0]?.toUpperCase()}${member.role.slice(1)}`}>{member.role}</span>
+                </div>
+              ))}
+              {members.length === 0 ? <div className="shareState">No members found</div> : null}
+            </div>
+          ) : null}
+        </section>
+      </section>
+    </div>
+  );
+}
+
 function DetailPanel({ card, board }: { card: Card; board: Board }) {
   const incoming = board.connections
     .filter((connection) => connection.targetCardId === card.id)
@@ -1093,6 +1226,10 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
   const [isCreatingCard, setIsCreatingCard] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
+  const [isMembersLoading, setIsMembersLoading] = useState(false);
+  const [membersError, setMembersError] = useState("");
   const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
   const [attachNotice, setAttachNotice] = useState<{ cardId: string; kind: "success" | "error"; message: string } | null>(null);
   const [isFilesLoading, setIsFilesLoading] = useState(false);
@@ -1165,6 +1302,34 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
     setTemplatesError("");
     setIsTemplatePickerOpen(true);
     void loadCardTemplates();
+  }
+
+  async function loadWorkspaceMembers() {
+    setIsMembersLoading(true);
+    setMembersError("");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/workspaces/${board.workspaceId}/members`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Workspace members request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as { members?: WorkspaceMember[] };
+      setWorkspaceMembers(payload.members ?? []);
+    } catch {
+      setWorkspaceMembers([]);
+      setMembersError("Could not load workspace members.");
+    } finally {
+      setIsMembersLoading(false);
+    }
+  }
+
+  function openShareDialog() {
+    setIsShareOpen(true);
+    void loadWorkspaceMembers();
   }
 
   async function addCard(template: CardTemplate) {
@@ -1456,7 +1621,11 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         }}
       />
       <section className="mainArea">
-        <TopBar syncStatus={syncStatus} onOpenSearch={() => setIsSearchOpen(true)} />
+        <TopBar
+          syncStatus={syncStatus}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenShare={openShareDialog}
+        />
         <div className="boardSurface">
           {activeView === "board" ? (
             <>
@@ -1521,6 +1690,14 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
       isOpen={isSearchOpen}
       onClose={() => setIsSearchOpen(false)}
       onSelectCard={setSelectedCardId}
+    />
+    <ShareDialog
+      board={board}
+      members={workspaceMembers}
+      isOpen={isShareOpen}
+      isLoading={isMembersLoading}
+      error={membersError}
+      onClose={() => setIsShareOpen(false)}
     />
     <TemplatePickerDialog
       templates={cardTemplates}

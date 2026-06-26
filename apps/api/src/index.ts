@@ -152,6 +152,17 @@ server.get("/boards/:boardId/card-types", async (request, reply) => {
   return { templates };
 });
 
+server.get("/workspaces/:workspaceId/members", async (request, reply) => {
+  const { workspaceId } = request.params as { workspaceId: string };
+  const members = await repository.listWorkspaceMembers(workspaceId);
+
+  if (!members) {
+    return reply.code(404).send({ error: "Workspace not found" });
+  }
+
+  return { members };
+});
+
 server.get("/boards/:boardId/files", async (request) => {
   const { boardId } = request.params as { boardId: string };
   return { files: await repository.listFiles(boardId) };

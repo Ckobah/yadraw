@@ -4,6 +4,8 @@ import {
   boardSchema,
   cardTemplates,
   demoBoard,
+  demoIds,
+  demoWorkspaceMembers,
   type Board,
   type Card,
   type CardTemplate,
@@ -11,7 +13,8 @@ import {
   type CreateCardInput,
   type FileRef,
   getCardTemplate,
-  type UpdateCardInput
+  type UpdateCardInput,
+  type WorkspaceMember
 } from "@yadraw/shared";
 
 export type BoardFile = FileRef & {
@@ -37,6 +40,7 @@ export type BoardRepository = {
   restoreCard(cardId: string): Promise<Card | null>;
   listDeletedCards(boardId: string): Promise<Card[]>;
   listCardTemplates(boardId: string): Promise<CardTemplate[]>;
+  listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[] | null>;
   listFiles(boardId: string): Promise<BoardFile[]>;
   attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
   searchCards(query: string): Promise<Card[]>;
@@ -207,6 +211,21 @@ function templateFromCardTypeRow(row: QueryResultRow): CardTemplate {
   };
 }
 
+function memberFromRow(row: QueryResultRow): WorkspaceMember {
+  const userId = String(row.user_id);
+  const fallback = demoWorkspaceMembers.find((member) => member.userId === userId);
+
+  return {
+    id: String(row.id),
+    userId,
+    workspaceId: String(row.workspace_id),
+    name: fallback?.name ?? `Workspace member ${userId.slice(0, 8)}`,
+    email: fallback?.email ?? `${userId.slice(0, 8)}@workspace.local`,
+    role: row.role,
+    status: "active"
+  };
+}
+
 function boardFilesFromCards(cards: Card[]): BoardFile[] {
   return cards.flatMap((card) =>
     card.files.map((file) => ({
@@ -293,6 +312,11 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
     async listCardTemplates(boardId) {
       if (boardId !== memoryBoard.id) return [];
       return cardTemplates;
+    },
+
+    async listWorkspaceMembers(workspaceId) {
+      if (workspaceId !== memoryBoard.workspaceId) return null;
+      return demoWorkspaceMembers;
     },
 
     async listFiles(boardId) {
@@ -612,6 +636,44 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
 
       return result.rows.map(templateFromCardTypeRow);
+    },
+
+    async listWorkspaceMembers(workspaceId) {
+      const workspaceResult = await pool.query(
+        `
+          select id
+          from workspaces
+          where id = $1
+            and deleted_at is null
+          limit 1
+        `,
+        [workspaceId]
+      );
+      if (!workspaceResult.rows[0]) return null;
+
+      const result = await pool.query(
+        `
+          select *
+          from workspace_members
+          where workspace_id = $1
+          order by
+            case role
+              when 'owner' then 1
+              when 'admin' then 2
+              when 'editor' then 3
+              when 'viewer' then 4
+              else 5
+            end,
+            created_at asc
+        `,
+        [workspaceId]
+      );
+
+      if (result.rows.length > 0) {
+        return result.rows.map(memberFromRow);
+      }
+
+      return workspaceId === demoIds.workspace ? demoWorkspaceMembers : [];
     },
 
     async listFiles(boardId) {

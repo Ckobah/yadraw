@@ -6,6 +6,7 @@ import {
   cardTemplates,
   createCardInputSchema,
   demoBoard,
+  demoWorkspaceMembers,
   updateCardInputSchema
 } from "./index.js";
 
@@ -82,5 +83,15 @@ describe("shared data schemas", () => {
     });
 
     expect(buildCardInputFromTemplate("missing", { sequence: 1 })).toBeNull();
+  });
+
+  it("defines valid demo workspace members", () => {
+    expect(demoWorkspaceMembers).toHaveLength(3);
+    expect(demoWorkspaceMembers.map((member) => member.role)).toEqual(["owner", "editor", "viewer"]);
+    expect(demoWorkspaceMembers[0]).toMatchObject({
+      name: "Alex Smith",
+      email: "admin@acme.com",
+      status: "active"
+    });
   });
 });

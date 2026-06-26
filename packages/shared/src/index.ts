@@ -23,6 +23,16 @@ export const workspaceRoleSchema = z.enum([
   "service"
 ]);
 
+export const workspaceMemberSchema = z.object({
+  id: uuidSchema,
+  userId: uuidSchema,
+  workspaceId: uuidSchema,
+  name: z.string().min(1),
+  email: z.string().email(),
+  role: workspaceRoleSchema,
+  status: z.enum(["active", "pending"]).default("active")
+});
+
 export const cardStatusSchema = z.enum([
   "draft",
   "active",
@@ -113,6 +123,7 @@ export const updateCardInputSchema = createCardInputSchema
   .partial();
 
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
+export type WorkspaceMember = z.infer<typeof workspaceMemberSchema>;
 export type CardStatus = z.infer<typeof cardStatusSchema>;
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 export type CardType = z.infer<typeof cardTypeSchema>;
@@ -275,6 +286,36 @@ export const demoIds = {
   project: "8bdcdb31-40d7-4f66-b2b3-7f972e7f07d3",
   board: "b4f94635-6fd5-4a6b-8608-61a69c81fbe2"
 } as const;
+
+export const demoWorkspaceMembers: WorkspaceMember[] = [
+  {
+    id: "fbb53c10-b74d-4e50-9088-608d60878a7d",
+    userId: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
+    workspaceId: demoIds.workspace,
+    name: "Alex Smith",
+    email: "admin@acme.com",
+    role: "owner",
+    status: "active"
+  },
+  {
+    id: "d8b569ac-3ced-43dc-85f4-193fd982fb1c",
+    userId: "bb7ef8c4-2d05-4699-b2de-d9c02d1c1ec4",
+    workspaceId: demoIds.workspace,
+    name: "Maya Chen",
+    email: "maya@acme.com",
+    role: "editor",
+    status: "active"
+  },
+  {
+    id: "27a26b32-b76d-41bc-9e38-07f7bbd8e059",
+    userId: "9f18a762-bf5b-4aa8-b934-f286cc51dc5b",
+    workspaceId: demoIds.workspace,
+    name: "Nikolai Petrov",
+    email: "nikolai@acme.com",
+    role: "viewer",
+    status: "active"
+  }
+];
 
 export const demoBoard: Board = {
   id: demoIds.board,

@@ -456,6 +456,8 @@ MVP:
 
 ### 4.5. Share
 
+Статус: выполнено как Phase 1 Share modal MVP.
+
 Назначение: управление доступом к workspace/board.
 
 MVP:
@@ -478,6 +480,23 @@ MVP:
    - editor can access board but cannot manage members.
 
 Зависимости: auth/membership.
+
+Итог реализации:
+
+- включена кнопка `Share` в top bar;
+- добавлена модалка `Share board`;
+- board link формируется на клиенте с `board=<boardId>`;
+- добавлено копирование ссылки с success-state `Copied`;
+- добавлен shared-контракт `WorkspaceMember` и demo members;
+- добавлен API `GET /workspaces/:workspaceId/members`;
+- memory repository возвращает demo members, PostgreSQL repository читает `workspace_members` и использует demo fallback для текущего workspace;
+- модалка показывает loading/error/list состояния и роли участников;
+- добавлены shared/API repository tests;
+- проведены `typecheck`, `test`, `build` и browser-level сценарий открытия Share, загрузки участников и копирования ссылки.
+
+Ограничение текущего этапа:
+
+- invite by email, role editing, public links and permission enforcement остаются следующими фазами после auth/membership foundation.
 
 ### 4.6. Run
 
@@ -620,8 +639,8 @@ MVP:
 3. Files list read-only. Done.
 4. Attach file metadata to card. Done.
 5. Templates picker for Add card. Done.
-6. Share modal with copy link, then membership. Current next.
-7. Notifications popover.
+6. Share modal with copy link. Done.
+7. Notifications popover. Current next.
 8. Run workflow dry-run.
 9. AI Assistant deterministic board Q&A, then RAG.
 

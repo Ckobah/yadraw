@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCardInputFromTemplate, demoBoard, demoIds } from "@yadraw/shared";
+import { buildCardInputFromTemplate, demoBoard, demoIds, demoWorkspaceMembers } from "@yadraw/shared";
 import { createMemoryRepository } from "./repository.js";
 
 describe("memory board repository", () => {
@@ -148,6 +148,13 @@ describe("memory board repository", () => {
     });
   });
 
+  it("lists workspace members for the share modal", async () => {
+    const repository = createMemoryRepository();
+
+    await expect(repository.listWorkspaceMembers(demoIds.workspace)).resolves.toEqual(demoWorkspaceMembers);
+    await expect(repository.listWorkspaceMembers(demoIds.project)).resolves.toBeNull();
+  });
+
   it("excludes files from cards moved to trash", async () => {
     const repository = createMemoryRepository();
 
@@ -204,6 +211,7 @@ describe("memory board repository", () => {
     await expect(repository.restoreCard("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.listDeletedCards("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(repository.listCardTemplates("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
+    await expect(repository.listWorkspaceMembers("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toBeNull();
     await expect(repository.listFiles("a57baac3-0d79-4b95-bfdd-6366d7681c81")).resolves.toEqual([]);
     await expect(
       repository.attachFile("a57baac3-0d79-4b95-bfdd-6366d7681c81", {
