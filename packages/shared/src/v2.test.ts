@@ -1,0 +1,115 @@
+import { describe, expect, it } from "vitest";
+import {
+  v2ApiContracts,
+  v2BoardDetailSchema,
+  v2CreateCardBodySchema,
+  v2CreateConnectionBodySchema,
+  v2UpdateCardBodySchema
+} from "./v2.js";
+
+const timestamp = "2026-01-01T00:00:00.000Z";
+const workspaceId = "11111111-1111-4111-8111-111111111111";
+const projectId = "22222222-2222-4222-8222-222222222222";
+const boardId = "33333333-3333-4333-8333-333333333333";
+const cardTypeId = "44444444-4444-4444-8444-444444444444";
+const portId = "55555555-5555-4555-8555-555555555555";
+
+describe("v2 API contracts", () => {
+  it("parses the minimal board detail DTO", () => {
+    expect(
+      v2BoardDetailSchema.parse({
+        workspace: {
+          id: workspaceId,
+          name: "Local Workspace",
+          slug: "local-workspace",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        },
+        project: {
+          id: projectId,
+          workspaceId,
+          name: "Core Project",
+          createdAt: timestamp,
+          updatedAt: timestamp
+        },
+        board: {
+          id: boardId,
+          workspaceId,
+          projectId,
+          name: "Main Board",
+          viewport: { x: 0, y: 0, zoom: 1 },
+          createdAt: timestamp,
+          updatedAt: timestamp
+        },
+        cardTypes: [
+          {
+            id: cardTypeId,
+            workspaceId,
+            key: "source",
+            name: "Source",
+            description: "Provides input data.",
+            defaultData: { kind: "source" },
+            defaultSize: { width: 280, height: 160 },
+            ports: [
+              {
+                id: portId,
+                workspaceId,
+                cardTypeId,
+                key: "payload",
+                label: "Payload",
+                direction: "output",
+                dataType: "json",
+                required: true,
+                sortOrder: 0,
+                createdAt: timestamp,
+                updatedAt: timestamp
+              }
+            ],
+            createdAt: timestamp,
+            updatedAt: timestamp
+          }
+        ],
+        cards: [],
+        connections: []
+      })
+    ).toMatchObject({
+      workspace: { id: workspaceId },
+      board: { id: boardId },
+      cardTypes: [{ key: "source" }]
+    });
+  });
+
+  it("rejects internal metadata in card data", () => {
+    expect(() =>
+      v2CreateCardBodySchema.parse({
+        cardTypeId,
+        title: "Bad card",
+        data: { _yadraw: { ports: [] } }
+      })
+    ).toThrow();
+  });
+
+  it("applies defaults for connection creation requests", () => {
+    expect(
+      v2CreateConnectionBodySchema.parse({
+        sourceCardId: "66666666-6666-4666-8666-666666666666",
+        targetCardId: "77777777-7777-4777-8777-777777777777",
+        sourcePortKey: "payload",
+        targetPortKey: "input"
+      })
+    ).toMatchObject({
+      type: "data",
+      label: ""
+    });
+  });
+
+  it("keeps route contracts in an OpenAPI-style registry", () => {
+    expect(v2ApiContracts.getBoard).toMatchObject({
+      method: "GET",
+      path: "/v2/boards/{boardId}"
+    });
+    expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
+    expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
+  });
+});
+

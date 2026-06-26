@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./v2.js";
+
 export const uuidSchema = z.string().uuid();
 
 export const jsonObjectSchema = z.record(z.string(), z.unknown());
