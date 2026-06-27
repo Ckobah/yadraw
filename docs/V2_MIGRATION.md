@@ -136,12 +136,17 @@ You should receive a valid board response with `cardTypes[].ports` and clean `ca
 
 If something goes wrong after switching to v2-postgres:
 
+> **⚠️ IMPORTANT:** `legacy-postgres` adapter reads the **v1 schema**. Therefore `V2_DATABASE_URL` must point to the v1 database when using `legacy-postgres`, and to the v2 database when using `v2-postgres`. A mismatch will cause schema errors.
+
 ### Option A: Switch back to legacy-postgres
+
+**Do not use `legacy-postgres` in production after successful v2 migration. It is a migration-only fallback for emergencies.**
 
 ```bash
 # 1. Restore .env:
 YADRAW_V2_STORAGE=legacy-postgres
-V2_DATABASE_URL=<v1_database_url>
+V2_DATABASE_URL=<v1_database_url>    # ← MUST point to v1 database, NOT v2!
+#                                    #   legacy-postgres reads v1 schema
 
 # 2. Restart:
 pm2 restart yadraw-api

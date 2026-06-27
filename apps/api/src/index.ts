@@ -11,6 +11,7 @@ import { V2ServiceError, createV2BoardService } from "./v2/service.js";
 import { createV2PostgresRepository } from "./v2/repository.js";
 import { createV2LegacyPostgresRepository } from "./v2/repository.legacy-postgres.js";
 import { registerV2Routes } from "./v2/routes.js";
+import { validateV2RuntimeConfig } from "./v2/config.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 config();
@@ -73,6 +74,8 @@ function readV2StorageMode(): "v2-postgres" | "legacy-postgres" | "memory" {
       "YADRAW_V2_STORAGE must be 'v2-postgres', 'legacy-postgres', or 'memory'"
     );
   }
+
+  validateV2RuntimeConfig(process.env.NODE_ENV, mode);
 
   return mode;
 }
@@ -140,6 +143,32 @@ server.addHook("preHandler", async (request, reply) => {
   }
 
   request.requestContext = requestContext;
+});
+
+// Deprecation headers for legacy API routes
+const LEGACY_ROUTE_PATTERNS = [
+  "/boards/:boardId",
+  "/boards/:boardId/cards",
+  "/cards/:cardId",
+  "/cards/:cardId/restore",
+  "/boards/:boardId/trash",
+  "/boards/:boardId/card-types",
+  "/boards/:boardId/files",
+  "/cards/:cardId/files",
+  "/boards/:boardId/search",
+  "/search",
+  "/notifications",
+  "/notifications/:notificationId/read",
+  "/workspaces/:workspaceId/members",
+];
+
+server.addHook("onSend", async (request, reply, payload) => {
+  if (LEGACY_ROUTE_PATTERNS.includes(request.routeOptions.url ?? "")) {
+    reply.header("Deprecation", "true");
+    reply.header("Sunset", "Sat, 31 Jan 2027 00:00:00 GMT");
+    reply.header("X-Yadraw-Deprecated", "legacy-api");
+  }
+  return payload;
 });
 
 server.get("/health", async () => core.getHealth());

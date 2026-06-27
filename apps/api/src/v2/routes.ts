@@ -3,6 +3,15 @@ import { V2ServiceError, type V2BoardService } from "./service.js";
 import { sendApiError } from "../http.js";
 
 export function registerV2Routes(server: FastifyInstance, service: V2BoardService): void {
+  server.get("/v2/status", async (_request, _reply) => {
+    return {
+      ok: true,
+      v2Storage: process.env.YADRAW_V2_STORAGE ?? "v2-postgres",
+      legacyRuntimeAllowed: process.env.NODE_ENV !== "production",
+      nodeEnv: process.env.NODE_ENV ?? "development",
+      timestamp: new Date().toISOString(),
+    };
+  });
   server.get("/v2/boards/:boardId", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };
