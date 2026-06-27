@@ -15,7 +15,9 @@
  *   connections.type_id (fk)          → type (text, resolved via connection_types.key)
  *   card_types.allowed_handles (jsonb)→ card_type_ports table (path: "direction" → array of ports)
  *   card_types (no default_width)     → default_width=300, default_height=180 fallback
+ *   card_types (no deleted_at column) → queries omit deleted_at filter on card_types
  */
+
 import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
 import {
@@ -51,16 +53,12 @@ function cloneJson<T>(value: T): T {
 }
 
 /** v1 cards use position/size as jsonb — parse safely. */
-function extractPosition(
-  row: QueryResultRow
-): { x: number; y: number } {
+function extractPosition(row: QueryResultRow): { x: number; y: number } {
   const pos = asObject(row.position);
   return { x: Number(pos.x ?? row.position_x ?? 0), y: Number(pos.y ?? row.position_y ?? 0) };
 }
 
-function extractSize(
-  row: QueryResultRow
-): { width: number; height: number } {
+function extractSize(row: QueryResultRow): { width: number; height: number } {
   const sz = asObject(row.size);
   return {
     width: Number(sz.width ?? row.width ?? 300),
@@ -69,9 +67,7 @@ function extractSize(
 }
 
 /** v1 boards use viewport as jsonb — parse safely. */
-function extractViewport(
-  row: QueryResultRow
-): { x: number; y: number; zoom: number } {
+function extractViewport(row: QueryResultRow): { x: number; y: number; zoom: number } {
   const vp = asObject(row.viewport);
   return {
     x: Number(vp.x ?? row.viewport_x ?? 0),
@@ -197,10 +193,7 @@ function legacyConnectionFromRow(row: QueryResultRow) {
   });
 }
 
-function legacyCardTypeFromRow(
-  row: QueryResultRow,
-  ports: V2CardTypePort[] = []
-) {
+function legacyCardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []) {
   const defaultWidth = row.default_width ? Number(row.default_width) : 300;
   const defaultHeight = row.default_height ? Number(row.default_height) : 180;
   return v2CardTypeSchema.parse({
@@ -265,11 +258,11 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
       return grouped;
     }
 
-    // v1-style: parse allowed_handles jsonb from card_types
+    // v1-style: card_types has NO deleted_at column — omit the filter
     const ts = nowIso();
     const result = await pool.query(
       `select id, workspace_id, allowed_handles from card_types
-       where id = any($1::uuid[]) and deleted_at is null`,
+       where id = any($1::uuid[])`,
       [cardTypeIds]
     );
     const grouped = new Map<string, V2CardTypePort[]>();
@@ -285,7 +278,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
     return grouped;
   }
 
-  async function cardTypesFromRows(rows: QueryResultRow[]): Promise<ReturnType<typeof legacyCardTypeFromRow>[]> {
+  async function cardTypesFromRows(rows: QueryResultRow[]) {
     const ids = rows.map((r) => String(r.id));
     const groupedPorts = await loadCardTypePorts(ids);
     return rows.map((row) => legacyCardTypeFromRow(row, groupedPorts.get(String(row.id)) ?? []));
@@ -327,8 +320,9 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
       const cards = cardsResult.rows.map(legacyCardFromRow);
 
       const workspaceId = String(boardRow.workspace_id);
+      // v1 card_types has NO deleted_at column
       const cardTypesResult = await pool.query(
-        `select * from card_types where workspace_id = $1 and deleted_at is null
+        `select * from card_types where workspace_id = $1
          order by name asc, id asc`,
         [workspaceId]
       );
@@ -361,8 +355,9 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
     },
 
     async listCardTypes(workspaceId) {
+      // v1 card_types has NO deleted_at column
       const result = await pool.query(
-        `select * from card_types where workspace_id = $1 and deleted_at is null
+        `select * from card_types where workspace_id = $1
          order by name asc, id asc`,
         [workspaceId]
       );
@@ -370,8 +365,9 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
     },
 
     async getCardType(cardTypeId) {
+      // v1 card_types has NO deleted_at column
       const result = await pool.query(
-        `select * from card_types where id = $1 and deleted_at is null limit 1`,
+        `select * from card_types where id = $1 limit 1`,
         [cardTypeId]
       );
       const row = result.rows[0];
