@@ -7,6 +7,10 @@ import { createBoardCore } from "./core/board-service.js";
 import { CoreError } from "./core/errors.js";
 import { sendApiError } from "./http.js";
 import { createMemoryRepository, createPostgresRepository } from "./repository.js";
+import { V2ServiceError, createV2BoardService } from "./v2/service.js";
+import { createV2PostgresRepository } from "./v2/repository.js";
+import { createV2LegacyPostgresRepository } from "./v2/repository.legacy-postgres.js";
+import { registerV2Routes } from "./v2/routes.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 config();
@@ -61,12 +65,64 @@ async function createRepository() {
   return createPostgresRepository(process.env.DATABASE_URL);
 }
 
+function readV2StorageMode(): "v2-postgres" | "legacy-postgres" | "memory" {
+  const mode = process.env.YADRAW_V2_STORAGE ?? "v2-postgres";
+
+  if (mode !== "v2-postgres" && mode !== "legacy-postgres" && mode !== "memory") {
+    throw new Error(
+      "YADRAW_V2_STORAGE must be 'v2-postgres', 'legacy-postgres', or 'memory'"
+    );
+  }
+
+  return mode;
+}
+
+async function createV2Repository() {
+  const v2StorageMode = readV2StorageMode();
+
+  if (v2StorageMode === "memory") {
+    server.log.warn("Using v2 in-memory storage.");
+    const { createV2MemoryRepository } = await import("./v2/repository.js");
+    return createV2MemoryRepository();
+  }
+
+  if (v2StorageMode === "legacy-postgres") {
+    if (!process.env.V2_DATABASE_URL) {
+      throw new Error("V2_DATABASE_URL is required when YADRAW_V2_STORAGE=legacy-postgres");
+    }
+    server.log.warn("Using v2 legacy adapter (v1 schema → v2 DTO). This is a temporary bridge.");
+    return createV2LegacyPostgresRepository(process.env.V2_DATABASE_URL);
+  }
+
+  // v2-postgres (default) — strict v2 schema
+  if (!process.env.V2_DATABASE_URL) {
+    throw new Error("V2_DATABASE_URL is required when YADRAW_V2_STORAGE=v2-postgres");
+  }
+  return createV2PostgresRepository(process.env.V2_DATABASE_URL);
+}
+
 const repository = await createRepository();
 const core = createBoardCore(repository);
+
+// Create v2 service and register v2 routes
+const v2Repository = await createV2Repository();
+const v2Service = createV2BoardService(v2Repository);
+registerV2Routes(server, v2Service);
 
 server.setErrorHandler((error, request, reply) => {
   if (error instanceof CoreError) {
     return sendApiError(reply, error.statusCode, error.code, error.message, error.fields);
+  }
+
+  if (error instanceof V2ServiceError) {
+    switch (error.code) {
+      case "not_found":
+        return sendApiError(reply, 404, "not_found", error.message);
+      case "validation_failed":
+        return sendApiError(reply, 400, "invalid_payload", error.message);
+      case "conflict":
+        return sendApiError(reply, 409, "conflict", error.message);
+    }
   }
 
   request.log.error({ error }, "Unhandled API error");

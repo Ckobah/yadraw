@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 
 export type ApiErrorCode =
   | "bad_request"
+  | "conflict"
   | "forbidden"
   | "internal_error"
   | "invalid_payload"

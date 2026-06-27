@@ -1,0 +1,503 @@
+/**
+ * Temporary legacy adapter: reads v1 database schema and maps to v2 DTOs.
+ *
+ * ⚠️ This is a **temporary bridge** for migration, not the v2 source of truth.
+ * The canonical v2 repository lives in ./repository.ts and targets the v2 schema
+ * described in packages/db/migrations/v2/001_core_foundation.sql.
+ *
+ * Key differences between v1 and v2 schemas handled here:
+ *   boards.viewport (jsonb)           → viewport_x/y/zoom (numeric)
+ *   cards.type_id                     → card_type_id
+ *   cards.position (jsonb)            → position_x/y (numeric)
+ *   cards.size (jsonb)                → width/height (numeric)
+ *   connections.source_handle (text)  → source_port_key (text)
+ *   connections.target_handle (text)  → target_port_key (text)
+ *   connections.type_id (fk)          → type (text, resolved via connection_types.key)
+ *   card_types.allowed_handles (jsonb)→ card_type_ports table (path: "direction" → array of ports)
+ *   card_types (no default_width)     → default_width=300, default_height=180 fallback
+ */
+import { randomUUID } from "node:crypto";
+import { Pool, type QueryResultRow } from "pg";
+import {
+  v2BoardDetailSchema,
+  v2CardSchema,
+  v2CardTypeSchema,
+  v2ConnectionSchema,
+  type V2CardTypePort,
+  type V2ConnectionStatus,
+  type V2JsonObject,
+} from "@yadraw/shared";
+import type { V2Repository } from "./repository.js";
+import type { V2CreateCardRecordInput, V2CreateConnectionRecordInput } from "./repository.js";
+
+function asObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function toIso(value: unknown): string {
+  if (value instanceof Date) return value.toISOString();
+  return new Date(String(value)).toISOString();
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** v1 cards use position/size as jsonb — parse safely. */
+function extractPosition(
+  row: QueryResultRow
+): { x: number; y: number } {
+  const pos = asObject(row.position);
+  return { x: Number(pos.x ?? row.position_x ?? 0), y: Number(pos.y ?? row.position_y ?? 0) };
+}
+
+function extractSize(
+  row: QueryResultRow
+): { width: number; height: number } {
+  const sz = asObject(row.size);
+  return {
+    width: Number(sz.width ?? row.width ?? 300),
+    height: Number(sz.height ?? row.height ?? 180),
+  };
+}
+
+/** v1 boards use viewport as jsonb — parse safely. */
+function extractViewport(
+  row: QueryResultRow
+): { x: number; y: number; zoom: number } {
+  const vp = asObject(row.viewport);
+  return {
+    x: Number(vp.x ?? row.viewport_x ?? 0),
+    y: Number(vp.y ?? row.viewport_y ?? 0),
+    zoom: Number(vp.zoom ?? row.viewport_zoom ?? 1),
+  };
+}
+
+/** v1 connections store source/target handles. Map them to port keys. */
+function extractSourcePortKey(row: QueryResultRow): string {
+  return String(row.source_port_key ?? row.source_handle ?? "");
+}
+
+function extractTargetPortKey(row: QueryResultRow): string {
+  return String(row.target_port_key ?? row.target_handle ?? "");
+}
+
+/** v1 card_types store port info in `allowed_handles` jsonb — convert to Port[] */
+function portsFromAllowedHandles(
+  cardTypeId: string,
+  workspaceId: string,
+  allowedHandles: unknown,
+  timestamp: string
+): V2CardTypePort[] {
+  const handles = asObject(allowedHandles);
+  const ports: V2CardTypePort[] = [];
+
+  for (const [direction, entries] of Object.entries(handles)) {
+    if (direction !== "input" && direction !== "output") continue;
+    const list = Array.isArray(entries) ? entries : [];
+    for (let i = 0; i < list.length; i++) {
+      const entry = asObject(list[i]);
+      ports.push({
+        id: String(entry.id ?? randomUUID()),
+        workspaceId,
+        cardTypeId,
+        key: String(entry.key ?? `port_${i}`),
+        label: String(entry.label ?? entry.key ?? `Port ${i}`),
+        direction: direction as "input" | "output",
+        dataType: String(entry.dataType ?? "json"),
+        required: Boolean(entry.required ?? true),
+        sortOrder: Number(entry.sortOrder ?? i),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+    }
+  }
+
+  return ports;
+}
+
+function legacyWorkspaceFromRow(row: QueryResultRow) {
+  return {
+    id: String(row.workspace_id ?? row.id),
+    name: String(row.workspace_name ?? row.name ?? ""),
+    slug: String(row.workspace_slug ?? row.slug ?? ""),
+    createdAt: toIso(row.workspace_created_at ?? row.created_at),
+    updatedAt: toIso(row.workspace_updated_at ?? row.updated_at),
+  };
+}
+
+function legacyProjectFromRow(row: QueryResultRow) {
+  return {
+    id: String(row.project_id ?? row.id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.project_name ?? row.name ?? ""),
+    createdAt: toIso(row.project_created_at ?? row.created_at),
+    updatedAt: toIso(row.project_updated_at ?? row.updated_at),
+  };
+}
+
+function legacyBoardFromRow(row: QueryResultRow) {
+  const viewport = extractViewport(row);
+  return {
+    id: String(row.board_id ?? row.id),
+    workspaceId: String(row.workspace_id),
+    projectId: String(row.project_id),
+    name: String(row.board_name ?? row.name ?? ""),
+    viewport,
+    createdAt: toIso(row.board_created_at ?? row.created_at),
+    updatedAt: toIso(row.board_updated_at ?? row.updated_at),
+  };
+}
+
+function legacyCardFromRow(row: QueryResultRow) {
+  const position = extractPosition(row);
+  const size = extractSize(row);
+  return v2CardSchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    boardId: String(row.board_id),
+    cardTypeId: String(row.card_type_id ?? row.type_id ?? ""),
+    title: String(row.title ?? ""),
+    description: String(row.description ?? ""),
+    data: asObject(row.data) as V2JsonObject,
+    position,
+    size,
+    status: row.status ?? "draft",
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  });
+}
+
+function legacyConnectionFromRow(row: QueryResultRow) {
+  const status: V2ConnectionStatus =
+    row.status === "active" ? "active" : row.status === "disabled" ? "disabled" : "active";
+  return v2ConnectionSchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    boardId: String(row.board_id),
+    sourceCardId: String(row.source_card_id),
+    targetCardId: String(row.target_card_id),
+    sourcePortKey: extractSourcePortKey(row),
+    targetPortKey: extractTargetPortKey(row),
+    type: String(row.type ?? "data"),
+    label: String(row.label ?? ""),
+    status,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  });
+}
+
+function legacyCardTypeFromRow(
+  row: QueryResultRow,
+  ports: V2CardTypePort[] = []
+) {
+  const defaultWidth = row.default_width ? Number(row.default_width) : 300;
+  const defaultHeight = row.default_height ? Number(row.default_height) : 180;
+  return v2CardTypeSchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    key: String(row.key),
+    name: String(row.name),
+    description: String(row.description ?? ""),
+    defaultData: asObject(row.default_data) as V2JsonObject,
+    defaultSize: { width: defaultWidth, height: defaultHeight },
+    ports,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  });
+}
+
+async function checkTableExists(pool: Pool, tableName: string): Promise<boolean> {
+  const result = await pool.query(
+    `select exists (
+      select from information_schema.tables
+      where table_schema = 'public' and table_name = $1
+    )`,
+    [tableName]
+  );
+  return result.rows[0]?.exists ?? false;
+}
+
+export function createV2LegacyPostgresRepository(databaseUrl: string): V2Repository {
+  const pool = new Pool({ connectionString: databaseUrl });
+
+  async function loadCardTypePorts(cardTypeIds: string[]): Promise<Map<string, V2CardTypePort[]>> {
+    if (cardTypeIds.length === 0) return new Map();
+
+    const hasPortsTable = await checkTableExists(pool, "card_type_ports");
+
+    if (hasPortsTable) {
+      // v2-style card_type_ports table exists
+      const result = await pool.query(
+        `select * from card_type_ports
+         where card_type_id = any($1::uuid[])
+           and deleted_at is null
+         order by card_type_id asc, direction asc, sort_order asc, key asc`,
+        [cardTypeIds]
+      );
+      const grouped = new Map<string, V2CardTypePort[]>();
+      for (const row of result.rows) {
+        const port: V2CardTypePort = {
+          id: String(row.id),
+          workspaceId: String(row.workspace_id),
+          cardTypeId: String(row.card_type_id),
+          key: String(row.key),
+          label: String(row.label),
+          direction: row.direction,
+          dataType: String(row.data_type),
+          required: Boolean(row.required),
+          sortOrder: Number(row.sort_order),
+          createdAt: toIso(row.created_at),
+          updatedAt: toIso(row.updated_at),
+        };
+        grouped.set(port.cardTypeId, [...(grouped.get(port.cardTypeId) ?? []), port]);
+      }
+      return grouped;
+    }
+
+    // v1-style: parse allowed_handles jsonb from card_types
+    const ts = nowIso();
+    const result = await pool.query(
+      `select id, workspace_id, allowed_handles from card_types
+       where id = any($1::uuid[]) and deleted_at is null`,
+      [cardTypeIds]
+    );
+    const grouped = new Map<string, V2CardTypePort[]>();
+    for (const row of result.rows) {
+      const ports = portsFromAllowedHandles(
+        String(row.id),
+        String(row.workspace_id),
+        row.allowed_handles,
+        ts
+      );
+      grouped.set(String(row.id), ports);
+    }
+    return grouped;
+  }
+
+  async function cardTypesFromRows(rows: QueryResultRow[]): Promise<ReturnType<typeof legacyCardTypeFromRow>[]> {
+    const ids = rows.map((r) => String(r.id));
+    const groupedPorts = await loadCardTypePorts(ids);
+    return rows.map((row) => legacyCardTypeFromRow(row, groupedPorts.get(String(row.id)) ?? []));
+  }
+
+  return {
+    async getBoardDetail(boardId) {
+      const boardResult = await pool.query(
+        `select
+           w.id as workspace_id,
+           w.name as workspace_name,
+           w.slug as workspace_slug,
+           w.created_at as workspace_created_at,
+           w.updated_at as workspace_updated_at,
+           p.id as project_id,
+           p.name as project_name,
+           p.created_at as project_created_at,
+           p.updated_at as project_updated_at,
+           b.id as board_id,
+           b.name as board_name,
+           b.viewport,
+           b.viewport_x,
+           b.viewport_y,
+           b.viewport_zoom,
+           b.created_at as board_created_at,
+           b.updated_at as board_updated_at
+         from boards b
+         join projects p on p.id = b.project_id and p.deleted_at is null
+         join workspaces w on w.id = b.workspace_id and w.deleted_at is null
+         where b.id = $1 and b.deleted_at is null
+         limit 1`,
+        [boardId]
+      );
+      const boardRow = boardResult.rows[0];
+      if (!boardRow) return null;
+
+      const cardsResult = await pool.query(
+        `select * from cards where board_id = $1 and deleted_at is null
+         order by created_at asc, id asc`,
+        [boardId]
+      );
+      const cards = cardsResult.rows.map(legacyCardFromRow);
+
+      const workspaceId = String(boardRow.workspace_id);
+      const cardTypesResult = await pool.query(
+        `select * from card_types where workspace_id = $1 and deleted_at is null
+         order by name asc, id asc`,
+        [workspaceId]
+      );
+      const cardTypes = await cardTypesFromRows(cardTypesResult.rows);
+
+      const connectionsResult = await pool.query(
+        `select * from connections where board_id = $1 and deleted_at is null
+         order by created_at asc, id asc`,
+        [boardId]
+      );
+      const connections = connectionsResult.rows.map(legacyConnectionFromRow);
+
+      return v2BoardDetailSchema.parse({
+        workspace: legacyWorkspaceFromRow(boardRow),
+        project: legacyProjectFromRow(boardRow),
+        board: legacyBoardFromRow(boardRow),
+        cardTypes,
+        cards,
+        connections,
+      });
+    },
+
+    async getBoard(boardId) {
+      const result = await pool.query(
+        `select * from boards where id = $1 and deleted_at is null limit 1`,
+        [boardId]
+      );
+      const row = result.rows[0];
+      return row ? legacyBoardFromRow(row) : null;
+    },
+
+    async listCardTypes(workspaceId) {
+      const result = await pool.query(
+        `select * from card_types where workspace_id = $1 and deleted_at is null
+         order by name asc, id asc`,
+        [workspaceId]
+      );
+      return cardTypesFromRows(result.rows);
+    },
+
+    async getCardType(cardTypeId) {
+      const result = await pool.query(
+        `select * from card_types where id = $1 and deleted_at is null limit 1`,
+        [cardTypeId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const ports = await loadCardTypePorts([cardTypeId]);
+      return legacyCardTypeFromRow(row, ports.get(cardTypeId) ?? []);
+    },
+
+    async getCard(cardId) {
+      const result = await pool.query(
+        `select * from cards where id = $1 and deleted_at is null limit 1`,
+        [cardId]
+      );
+      const row = result.rows[0];
+      return row ? legacyCardFromRow(row) : null;
+    },
+
+    async createCard(input: V2CreateCardRecordInput) {
+      const result = await pool.query(
+        `insert into cards (
+           workspace_id, board_id, type_id, title, description,
+           data, position, size, status
+         ) values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9)
+         returning *`,
+        [
+          input.workspaceId,
+          input.boardId,
+          input.cardTypeId,
+          input.title,
+          input.description,
+          JSON.stringify(input.data),
+          JSON.stringify(input.position),
+          JSON.stringify(input.size),
+          input.status,
+        ]
+      );
+      return legacyCardFromRow(result.rows[0] as QueryResultRow);
+    },
+
+    async updateCard(cardId, input) {
+      const existing = await this.getCard(cardId);
+      if (!existing) return null;
+
+      const next = {
+        title: input.title ?? existing.title,
+        description: input.description ?? existing.description,
+        data: input.data ?? existing.data,
+        position: input.position ?? existing.position,
+        size: input.size ?? existing.size,
+        status: input.status ?? existing.status,
+      };
+
+      const result = await pool.query(
+        `update cards
+         set title = $2,
+             description = $3,
+             data = $4::jsonb,
+             position = $5::jsonb,
+             size = $6::jsonb,
+             status = $7
+         where id = $1 and deleted_at is null
+         returning *`,
+        [
+          cardId,
+          next.title,
+          next.description,
+          JSON.stringify(next.data),
+          JSON.stringify(next.position),
+          JSON.stringify(next.size),
+          next.status,
+        ]
+      );
+      const row = result.rows[0];
+      return row ? legacyCardFromRow(row) : null;
+    },
+
+    async deleteCard(cardId) {
+      const result = await pool.query(
+        `update cards set deleted_at = now() where id = $1 and deleted_at is null`,
+        [cardId]
+      );
+      await pool.query(
+        `update connections set deleted_at = now()
+         where deleted_at is null and (source_card_id = $1 or target_card_id = $1)`,
+        [cardId]
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async getConnection(connectionId) {
+      const result = await pool.query(
+        `select * from connections where id = $1 and deleted_at is null limit 1`,
+        [connectionId]
+      );
+      const row = result.rows[0];
+      return row ? legacyConnectionFromRow(row) : null;
+    },
+
+    async createConnection(input: V2CreateConnectionRecordInput) {
+      const result = await pool.query(
+        `insert into connections (
+           workspace_id, board_id, source_card_id, target_card_id,
+           source_handle, target_handle, label, status
+         ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+         returning *`,
+        [
+          input.workspaceId,
+          input.boardId,
+          input.sourceCardId,
+          input.targetCardId,
+          input.sourcePortKey,
+          input.targetPortKey,
+          input.label,
+          input.status,
+        ]
+      );
+      return legacyConnectionFromRow(result.rows[0] as QueryResultRow);
+    },
+
+    async deleteConnection(connectionId) {
+      const result = await pool.query(
+        `update connections set deleted_at = now()
+         where id = $1 and deleted_at is null`,
+        [connectionId]
+      );
+      return (result.rowCount ?? 0) > 0;
+    },
+  };
+}

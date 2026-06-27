@@ -2105,3 +2105,194 @@ button:disabled {
     text-align: center;
   }
 }
+
+/* ═══════════════════════════════════════════
+   V2 Board — compact read-only canvas
+   ═══════════════════════════════════════════ */
+
+.eyebrow {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.v2BoardShell {
+  display: grid;
+  grid-template-rows: 48px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.v2BoardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 0 20px;
+}
+
+.v2BoardHeaderLeft {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v2BoardTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v2BoardMeta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.v2BoardHomeLink {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted-strong);
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.v2BoardHomeLink:hover {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.v2BoardCanvasArea {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ── V2 card node ───────────────────────── */
+
+.v2CardNode {
+  position: relative;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: default;
+  user-select: none;
+}
+
+.v2CardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.v2CardTypeBadge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.v2CardTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.v2CardPortRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.v2CardPortLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.v2CardPortLabelInput::before {
+  content: "◀ ";
+  font-size: 8px;
+}
+
+.v2CardPortLabelOutput::before {
+  content: "▶ ";
+  font-size: 8px;
+}
+
+.v2CardExpandButton {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.v2CardExpandButton:hover {
+  opacity: 1;
+  background: var(--panel-soft);
+}
+
+/* ── V2 card handles ────────────────────── */
+
+.v2CardHandle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 2px solid var(--line-strong) !important;
+  border-radius: 999px !important;
+  background: #fff !important;
+}
+
+.v2CardHandleInput {
+  left: -5px !important;
+}
+
+.v2CardHandleOutput {
+  right: -5px !important;
+}
