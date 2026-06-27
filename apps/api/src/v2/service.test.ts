@@ -134,6 +134,83 @@ describe("v2 board service", () => {
     });
   });
 
+  it("filters orphan connections whose source/target cards do not exist in the board detail", async () => {
+    const seed = createDefaultV2MemorySeed();
+    const { sourceType } = getSeedParts();
+
+    const cardA = {
+      id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      cardTypeId: sourceType.id,
+      title: "Card A",
+      description: "",
+      data: {},
+      position: { x: 0, y: 0 },
+      size: { width: 280, height: 160 },
+      status: "active" as const,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+
+    const orphanConnection = {
+      id: "cccccccc-cccc-4ccc-cccc-cccccccccccc",
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      sourceCardId: cardA.id,
+      targetCardId: "missing-card-id",
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      type: "data" as const,
+      label: "orphan",
+      status: "active" as const,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+
+    seed.cards = [cardA];
+    seed.connections = [orphanConnection];
+
+    const repository = createV2MemoryRepository(seed);
+    const detail = await repository.getBoardDetail(seed.board.id);
+
+    expect(detail).not.toBeNull();
+    const boardDetail = detail!;
+    expect(boardDetail.cards).toHaveLength(1);
+    expect(boardDetail.cards[0]!.id).toBe(cardA.id);
+    // orphan connection should be filtered out — target card doesn't exist
+    expect(boardDetail.connections).toHaveLength(0);
+  });
+
+  it("filters orphan connections where both source and target are missing", async () => {
+    const seed = createDefaultV2MemorySeed();
+
+    const orphanConnection = {
+      id: "dddddddd-dddd-4ddd-dddd-dddddddddddd",
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      sourceCardId: "missing-source",
+      targetCardId: "missing-target",
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      type: "data" as const,
+      label: "double-orphan",
+      status: "active" as const,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+
+    seed.connections = [orphanConnection];
+
+    const repository = createV2MemoryRepository(seed);
+    const detail = await repository.getBoardDetail(seed.board.id);
+
+    expect(detail).not.toBeNull();
+    expect(detail!.cards).toHaveLength(0);
+    // both cards missing — connection filtered out
+    expect(detail!.connections).toHaveLength(0);
+  });
+
   it("soft-deletes cards and removes their active connections from the board detail", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));

@@ -135,7 +135,7 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     warn(`${missingPortsCount} card type(s) with cards lack ports (acceptable if types have no defined ports)`);
   }
 
-  // ── Check 7: Connections reference valid source/target cards ──
+  // ── Check 7: Connection references are valid ──
   console.log("7. Connection references are valid");
   const badSrcCards = await v2.query(
     `select c.id from connections c
@@ -154,6 +154,29 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
       fail(`${badSrcCards.rows.length} connections reference invalid source cards`);
     if (badTgtCards.rows.length > 0)
       fail(`${badTgtCards.rows.length} connections reference invalid target cards`);
+  }
+
+  // ── Check 7b: No orphan connections to soft-deleted cards ──
+  console.log("7b. No orphan connections to soft-deleted cards");
+  const orphanConns = await v2.query(
+    `select c.id, c.source_card_id, c.target_card_id
+     from connections c
+     left join cards source_card
+       on source_card.id = c.source_card_id
+       and source_card.deleted_at is null
+     left join cards target_card
+       on target_card.id = c.target_card_id
+       and target_card.deleted_at is null
+     where c.deleted_at is null
+       and (source_card.id is null or target_card.id is null)`,
+  );
+  if (Number(orphanConns.rows.length) === 0) {
+    pass("No connections have orphan (soft-deleted) source or target cards");
+  } else {
+    warn(`${orphanConns.rows.length} connections have orphan soft-deleted source/target cards (will be filtered at runtime)`);
+    for (const row of orphanConns.rows) {
+      warn(`  connection ${row.id}: source=${row.source_card_id}, target=${row.target_card_id}`);
+    }
   }
 
   // ── Check 8: Connection source_port_key exists among output ports

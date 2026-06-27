@@ -314,7 +314,13 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
   }
 
   function activeConnections(): V2Connection[] {
-    return state.connections.filter((connection) => !deletedConnectionIds.has(connection.id));
+    const cardIds = new Set(activeCards().map((card) => card.id));
+    return state.connections.filter(
+      (connection) =>
+        !deletedConnectionIds.has(connection.id) &&
+        cardIds.has(connection.sourceCardId) &&
+        cardIds.has(connection.targetCardId)
+    );
   }
 
   return {
@@ -519,11 +525,19 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
 
       const connectionsResult = await pool.query(
         `
-          select *
-          from connections
-          where board_id = $1
-            and deleted_at is null
-          order by created_at asc, id asc
+          select c.*
+          from connections c
+          join cards source_card
+            on source_card.id = c.source_card_id
+            and source_card.board_id = c.board_id
+            and source_card.deleted_at is null
+          join cards target_card
+            on target_card.id = c.target_card_id
+            and target_card.board_id = c.board_id
+            and target_card.deleted_at is null
+          where c.board_id = $1
+            and c.deleted_at is null
+          order by c.created_at asc, c.id asc
         `,
         [boardId]
       );

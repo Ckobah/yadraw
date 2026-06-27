@@ -76,5 +76,50 @@ describeIfPostgres("v2 Postgres repository", () => {
 
     await service.deleteCard(task.id);
   });
+
+  it("filters orphan connections when a card is soft-deleted outside the normal delete path", async () => {
+    const repository = createV2PostgresRepository(v2DatabaseUrl as string);
+    const service = createV2BoardService(repository);
+
+    const source = await service.createCard(seedIds.board, {
+      cardTypeId: seedIds.sourceType,
+      title: `orphan-test-source ${Date.now()}`,
+      data: {},
+      position: { x: 0, y: 0 }
+    });
+    const task = await service.createCard(seedIds.board, {
+      cardTypeId: seedIds.taskType,
+      title: `orphan-test-task ${Date.now()}`,
+      data: {},
+      position: { x: 300, y: 0 }
+    });
+
+    const connection = await service.createConnection(seedIds.board, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      label: "orphan-edge"
+    });
+
+    // Direct SQL — soft-delete the target card without touching the connection
+    // This simulates a migration artifact or external cleanup that left orphan connections
+    const pool = new (require("pg").Pool)({ connectionString: v2DatabaseUrl });
+    await pool.query(
+      `update cards set deleted_at = now() where id = $1 and deleted_at is null`,
+      [task.id]
+    );
+    await pool.end();
+
+    // After soft-deleting the card, getBoardDetail should filter out the connection
+    const detail = await repository.getBoardDetail(seedIds.board);
+    expect(detail).not.toBeNull();
+    expect(detail!.cards.map((c: any) => c.id)).toContain(source.id);
+    expect(detail!.cards.map((c: any) => c.id)).not.toContain(task.id);
+    expect(detail!.connections.map((conn: any) => conn.id)).not.toContain(connection.id);
+
+    // Cleanup
+    await service.deleteCard(source.id);
+  });
 });
 
