@@ -1,4 +1,18 @@
 /**
+ * ═══════════════════════════════════════════════════════════════════════
+ * ⚠️  DEPRECATION NOTICE
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * This adapter is a **temporary bridge** for migrating from v1 to v2 schema.
+ *
+ * AFTER MIGRATION (YADRAW_V2_STORAGE=v2-postgres):
+ *   - This file is NOT used by production runtime.
+ *   - Keep it for reference only.
+ *   - Remove from index.ts after migration burn-in period.
+ *
+ * DO NOT use this adapter as production runtime after v2 migration.
+ * ═══════════════════════════════════════════════════════════════════════
+ *
  * Temporary legacy adapter: reads v1 database schema and maps to v2 DTOs.
  *
  * ⚠️ This is a **temporary bridge** for migration, not the v2 source of truth.
