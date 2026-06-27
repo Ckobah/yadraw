@@ -111,7 +111,6 @@ S3_ACCESS_KEY_ID=yadraw
 S3_SECRET_ACCESS_KEY=change-this
 S3_BUCKET=workspace-files
 API_URL=http://127.0.0.1:4000
-NEXT_PUBLIC_API_URL=https://your-domain.example/api
 ```
 
 Важно:
@@ -122,8 +121,26 @@ NEXT_PUBLIC_API_URL=https://your-domain.example/api
 - `PORT` управляет API.
 - `WEB_PORT` используется в systemd-команде для Next.js.
 - `API_URL` нужен server-side Next rendering.
-- `NEXT_PUBLIC_API_URL` инлайнится в клиентский bundle во время `npm run build`; web app загружает root `.env` из монорепы через `apps/web/next.config.mjs`.
-- Если меняете `NEXT_PUBLIC_API_URL`, нужно пересобрать web: `npm run build --workspace @yadraw/web`.
+- `NEXT_PUBLIC_API_URL` должен быть в `apps/web/.env`, потому что это build-time переменная клиентского bundle Next.js.
+- Если меняете `apps/web/.env`, нужно пересобрать web: `npm run build --workspace @yadraw/web`.
+
+Создать web env:
+
+```bash
+cp apps/web/.env.example apps/web/.env
+```
+
+Для домена:
+
+```text
+NEXT_PUBLIC_API_URL=https://your-domain.example/api
+```
+
+Для нестандартного локального API-порта, например `4004`:
+
+```text
+NEXT_PUBLIC_API_URL=http://127.0.0.1:4004
+```
 
 ## 6. Инфраструктура
 
