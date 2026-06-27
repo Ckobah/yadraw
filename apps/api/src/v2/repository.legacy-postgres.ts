@@ -159,6 +159,9 @@ function legacyBoardFromRow(row: QueryResultRow) {
 function legacyCardFromRow(row: QueryResultRow) {
   const position = extractPosition(row);
   const size = extractSize(row);
+  const rawData = asObject(row.data);
+  // v1 stores internal yadraw metadata in data._yadraw — strip it for v2 validation
+  const { _yadraw, ...cleanData } = rawData;
   return v2CardSchema.parse({
     id: String(row.id),
     workspaceId: String(row.workspace_id),
@@ -166,7 +169,7 @@ function legacyCardFromRow(row: QueryResultRow) {
     cardTypeId: String(row.card_type_id ?? row.type_id ?? ""),
     title: String(row.title ?? ""),
     description: String(row.description ?? ""),
-    data: asObject(row.data) as V2JsonObject,
+    data: cleanData as V2JsonObject,
     position,
     size,
     status: row.status ?? "draft",
