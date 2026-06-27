@@ -25,7 +25,7 @@ import pg from "pg";
 import { config } from "dotenv";
 import { resolve, dirname } from "node:path";
 
-config({ path: new URL("../../../../.env", import.meta.url) });
+config({ path: new URL("../../../../../.env", import.meta.url) });
 config();
 
 const { Pool } = pg;
@@ -217,7 +217,7 @@ async function runMigration(): Promise<MigrationReport> {
     const __dirname = dirname(__filename);
     const schemaPath = resolve(
       __dirname,
-      "../../../packages/db/migrations/v2/001_core_foundation.sql",
+      "../../../../../packages/db/migrations/v2/001_core_foundation.sql",
     );
     const schemaSql = readFileSync(schemaPath, "utf-8");
     await v2.query(schemaSql);
