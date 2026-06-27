@@ -152,26 +152,35 @@ function legacyBoardFromRow(row: QueryResultRow) {
   };
 }
 
-function legacyCardFromRow(row: QueryResultRow) {
+/**
+ * Parse a v1 card row into a v2 card DTO, preserving _yadraw metadata
+ * separately for port recovery.
+ *
+ * Exported for testing.
+ */
+export function legacyCardFromRow(row: QueryResultRow) {
   const position = extractPosition(row);
   const size = extractSize(row);
   const rawData = asObject(row.data);
   // v1 stores internal yadraw metadata in data._yadraw — strip it for v2 validation
   const { _yadraw, ...cleanData } = rawData;
-  return v2CardSchema.parse({
-    id: String(row.id),
-    workspaceId: String(row.workspace_id),
-    boardId: String(row.board_id),
-    cardTypeId: String(row.card_type_id ?? row.type_id ?? ""),
-    title: String(row.title ?? ""),
-    description: String(row.description ?? ""),
-    data: cleanData as V2JsonObject,
-    position,
-    size,
-    status: row.status ?? "draft",
-    createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at),
-  });
+  return {
+    card: v2CardSchema.parse({
+      id: String(row.id),
+      workspaceId: String(row.workspace_id),
+      boardId: String(row.board_id),
+      cardTypeId: String(row.card_type_id ?? row.type_id ?? ""),
+      title: String(row.title ?? ""),
+      description: String(row.description ?? ""),
+      data: cleanData as V2JsonObject,
+      position,
+      size,
+      status: row.status ?? "draft",
+      createdAt: toIso(row.created_at),
+      updatedAt: toIso(row.updated_at),
+    }),
+    _yadraw,
+  };
 }
 
 function legacyConnectionFromRow(row: QueryResultRow) {
@@ -219,6 +228,201 @@ async function checkTableExists(pool: Pool, tableName: string): Promise<boolean>
     [tableName]
   );
   return result.rows[0]?.exists ?? false;
+}
+
+/**
+ * Parse a single v1 port entry (string or object) into a V2CardTypePort.
+ * Handles array-of-strings, array-of-objects, and object-map formats.
+ *
+ * Exported for testing.
+ */
+export function parsePortEntry(
+  entry: unknown,
+  direction: "input" | "output",
+  cardTypeId: string,
+  workspaceId: string,
+  sortOrder: number,
+  timestamp: string
+): V2CardTypePort | null {
+  if (typeof entry === "string") {
+    const trimmed = entry.trim();
+    if (!trimmed || !/^[a-z][a-z0-9_]*$/.test(trimmed)) return null;
+    return {
+      id: randomUUID(),
+      workspaceId,
+      cardTypeId,
+      key: trimmed,
+      label: trimmed,
+      direction,
+      dataType: "json",
+      required: direction === "input",
+      sortOrder,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  }
+
+  const obj = asObject(entry);
+  const key = String(obj.key ?? obj.id ?? obj.name ?? "").trim();
+  if (!key || !/^[a-z][a-z0-9_]*$/.test(key)) return null;
+
+  return {
+    id: randomUUID(),
+    workspaceId,
+    cardTypeId,
+    key,
+    label: String(obj.label ?? obj.name ?? obj.title ?? key),
+    direction,
+    dataType: String(obj.dataType ?? obj.type ?? obj.schemaType ?? "json"),
+    required: typeof obj.required === "boolean" ? obj.required : direction === "input",
+    sortOrder,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+/**
+ * Parse cards.data._yadraw.inputs / .outputs into port entries.
+ * Supports:
+ *   - Array of strings: ["payload"] → port with key="payload"
+ *   - Array of objects: [{key:"payload", label:"Payload"}] → full port
+ *   - Object map: { "payload": {label:"Payload"} } → key from property name
+ *   - Empty / missing / invalid → empty array
+ *
+ * Exported for testing.
+ */
+export function parseYadrawPorts(
+  yadraw: unknown,
+  cardTypeId: string,
+  workspaceId: string,
+  timestamp: string
+): V2CardTypePort[] {
+  const meta = asObject(yadraw);
+  const inputs = meta.inputs;
+  const outputs = meta.outputs;
+  const ports: V2CardTypePort[] = [];
+  let order = 0;
+
+  for (const item of parsePortDirection(inputs, "input", cardTypeId, workspaceId, timestamp, order)) {
+    ports.push(item);
+    order++;
+  }
+
+  for (const item of parsePortDirection(outputs, "output", cardTypeId, workspaceId, timestamp, order)) {
+    ports.push(item);
+    order++;
+  }
+
+  return ports;
+}
+
+function parsePortDirection(
+  value: unknown,
+  direction: "input" | "output",
+  cardTypeId: string,
+  workspaceId: string,
+  timestamp: string,
+  startOrder: number
+): V2CardTypePort[] {
+  // Array of strings or objects
+  if (Array.isArray(value)) {
+    const result: V2CardTypePort[] = [];
+    for (let i = 0; i < value.length; i++) {
+      const port = parsePortEntry(value[i], direction, cardTypeId, workspaceId, startOrder + i, timestamp);
+      if (port) result.push(port);
+    }
+    return result;
+  }
+
+  // Object map: { keyName: {label: ...}, keyName: "labelString" }
+  const obj = asObject(value);
+  if (Object.keys(obj).length === 0) return [];
+
+  return Object.entries(obj)
+    .map(([key, val], i) => {
+      if (typeof val === "string") {
+        return parsePortEntry({ key, label: val }, direction, cardTypeId, workspaceId, startOrder + i, timestamp);
+      }
+      return parsePortEntry({ key, ...asObject(val) }, direction, cardTypeId, workspaceId, startOrder + i, timestamp);
+    })
+    .filter((p): p is V2CardTypePort => p !== null);
+}
+
+/**
+ * Aggregate ports from card-level _yadraw metadata, grouped by card_type_id.
+ * Ports are deduplicated by direction+key within each card type.
+ * Only cards with a valid type_id contribute.
+ */
+function aggregatePortsFromCardYadraw(
+  cardRows: QueryResultRow[],
+  workspaceId: string
+): Map<string, V2CardTypePort[]> {
+  const ts = nowIso();
+  const result = new Map<string, V2CardTypePort[]>();
+
+  for (const row of cardRows) {
+    const cardTypeId = String(row.card_type_id ?? row.type_id ?? "").trim();
+    if (!cardTypeId || cardTypeId === "null" || cardTypeId.length < 10) continue;
+
+    const rawData = asObject(row.data);
+    const yadraw = rawData._yadraw;
+    const ports = parseYadrawPorts(yadraw, cardTypeId, workspaceId, ts);
+    if (ports.length === 0) continue;
+
+    // Merge with existing ports for this card type, dedup by direction+key
+    const existing = result.get(cardTypeId) ?? [];
+    const seen = new Set(existing.map((p) => `${p.direction}:${p.key}`));
+    let lastOrder = existing.length > 0 ? Math.max(...existing.map((p) => p.sortOrder)) + 1 : 0;
+
+    for (const port of ports) {
+      const key = `${port.direction}:${port.key}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        existing.push({ ...port, sortOrder: lastOrder++ });
+      }
+    }
+
+    result.set(cardTypeId, existing);
+  }
+
+  return result;
+}
+
+/**
+ * Merge card-level yadraw ports into card type ports.
+ * Card-level ports only supplement existing ports when the card type
+ * has no ports from allowed_handles (or v2 card_type_ports table).
+ */
+function mergeYadrawPortsIntoCardTypes(
+  cardTypes: ReturnType<typeof legacyCardTypeFromRow>[],
+  yadrawPorts: Map<string, V2CardTypePort[]>
+): ReturnType<typeof legacyCardTypeFromRow>[] {
+  if (yadrawPorts.size === 0) return cardTypes;
+
+  return cardTypes.map((ct) => {
+    const cardYadrawPorts = yadrawPorts.get(ct.id);
+    if (!cardYadrawPorts || cardYadrawPorts.length === 0) return ct;
+
+    // Only supplement if existing ports are empty
+    if (ct.ports.length > 0) return ct;
+
+    // Re-validate through schema so the output is always valid v2
+    return legacyCardTypeFromRow(
+      {
+        id: ct.id,
+        workspace_id: ct.workspaceId,
+        key: ct.key,
+        name: ct.name,
+        description: ct.description,
+        default_data: ct.defaultData,
+        default_width: ct.defaultSize.width,
+        default_height: ct.defaultSize.height,
+        created_at: ct.createdAt,
+        updated_at: ct.updatedAt,
+      } as unknown as QueryResultRow,
+      cardYadrawPorts
+    );
+  });
 }
 
 export function createV2LegacyPostgresRepository(databaseUrl: string): V2Repository {
@@ -317,9 +521,18 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
          order by created_at asc, id asc`,
         [boardId]
       );
-      const cards = cardsResult.rows.map(legacyCardFromRow);
+      const rawCardRows = cardsResult.rows;
+      const parsedCards = rawCardRows.map(legacyCardFromRow);
+      const cards = parsedCards.map((pc) => pc.card);
 
       const workspaceId = String(boardRow.workspace_id);
+
+      // Aggregate ports from card-level _yadraw metadata
+      const cardYadrawPorts = aggregatePortsFromCardYadraw(
+        rawCardRows,
+        workspaceId
+      );
+
       // v1 card_types has NO deleted_at column
       const cardTypesResult = await pool.query(
         `select * from card_types where workspace_id = $1
@@ -327,6 +540,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
         [workspaceId]
       );
       const cardTypes = await cardTypesFromRows(cardTypesResult.rows);
+      const cardTypesWithPorts = mergeYadrawPortsIntoCardTypes(cardTypes, cardYadrawPorts);
 
       const connectionsResult = await pool.query(
         `select * from connections where board_id = $1 and deleted_at is null
@@ -339,7 +553,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
         workspace: legacyWorkspaceFromRow(boardRow),
         project: legacyProjectFromRow(boardRow),
         board: legacyBoardFromRow(boardRow),
-        cardTypes,
+        cardTypes: cardTypesWithPorts,
         cards,
         connections,
       });
@@ -382,7 +596,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
         [cardId]
       );
       const row = result.rows[0];
-      return row ? legacyCardFromRow(row) : null;
+      return row ? legacyCardFromRow(row).card : null;
     },
 
     async createCard(input: V2CreateCardRecordInput) {
@@ -404,7 +618,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
           input.status,
         ]
       );
-      return legacyCardFromRow(result.rows[0] as QueryResultRow);
+      return legacyCardFromRow(result.rows[0] as QueryResultRow).card;
     },
 
     async updateCard(cardId, input) {
@@ -441,7 +655,7 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
         ]
       );
       const row = result.rows[0];
-      return row ? legacyCardFromRow(row) : null;
+      return row ? legacyCardFromRow(row).card : null;
     },
 
     async deleteCard(cardId) {
