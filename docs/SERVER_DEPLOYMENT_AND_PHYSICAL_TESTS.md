@@ -13,6 +13,7 @@
 - `YADRAW_STORAGE=postgres|memory` выбирает storage явно.
 - Product endpoints требуют user context.
 - Workspace roles уже ограничивают чтение и запись.
+- Demo seed создает owner/editor/viewer membership в `workspace_members`.
 - API errors приведены к единому формату.
 - Пользовательский `data._yadraw` не может перезаписать системные metadata.
 - SearchDialog использует backend search contract.
@@ -34,7 +35,14 @@
 - Nginx или Caddy для reverse proxy.
 - Открытые порты:
   - `80/443` наружу;
-  - `3000/4000` только локально, если используется reverse proxy.
+  - web/API порты только локально, если используется reverse proxy.
+
+По умолчанию документация использует:
+
+- Web: `3000`.
+- API: `4000`.
+
+На сервере эти порты часто уже заняты, например Supabase Studio может занимать `3000`, Analytics - `4000`. В таком случае используйте свободные порты, например `3004/4004`, и синхронно обновите `.env`, systemd и reverse proxy.
 
 ## 3. Подготовка Сервера
 
@@ -91,6 +99,7 @@ cp .env.example .env
 ```text
 PORT=4000
 HOST=127.0.0.1
+WEB_PORT=3000
 CORS_ORIGIN=https://your-domain.example
 YADRAW_STORAGE=postgres
 DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
@@ -110,6 +119,11 @@ NEXT_PUBLIC_API_URL=https://your-domain.example/api
 - Для staging можно оставить `DEV_USER_ID`.
 - Для production вместо `DEV_USER_ID` нужен настоящий auth layer.
 - `YADRAW_STORAGE=memory` на сервере использовать только для одноразовой проверки без сохранения данных.
+- `PORT` управляет API.
+- `WEB_PORT` используется в systemd-команде для Next.js.
+- `API_URL` нужен server-side Next rendering.
+- `NEXT_PUBLIC_API_URL` инлайнится в клиентский bundle во время `npm run build`; web app загружает root `.env` из монорепы через `apps/web/next.config.mjs`.
+- Если меняете `NEXT_PUBLIC_API_URL`, нужно пересобрать web: `npm run build --workspace @yadraw/web`.
 
 ## 6. Инфраструктура
 
@@ -125,6 +139,19 @@ docker ps
 ```bash
 docker exec yadraw-postgres pg_isready -U yadraw -d yadraw
 ```
+
+На чистой базе Docker применит `packages/db/migrations/*.sql`, включая demo seed. Demo users уже должны быть в `workspace_members`; ручной `insert` не нужен.
+
+Проверить:
+
+```bash
+docker exec yadraw-postgres psql -U yadraw -d yadraw -c \
+  "select user_id, role from workspace_members where workspace_id = '3cce8c2f-3d0f-49aa-89da-9f2f1f655b33' order by role"
+```
+
+Ожидаемо: owner/editor/viewer demo users.
+
+Если база уже существовала до этого исправления, Docker entrypoint не перезапустит миграции автоматически. Для staging проще пересоздать volume или вручную применить новый блок `workspace_members` из `packages/db/migrations/002_demo_seed.sql`.
 
 ## 7. Проверки Перед Запуском
 
@@ -182,13 +209,19 @@ After=network.target yadraw-api.service
 Type=simple
 WorkingDirectory=/opt/yadraw
 EnvironmentFile=/opt/yadraw/.env
-ExecStart=/usr/bin/npm run start --workspace @yadraw/web
+ExecStart=/usr/bin/npm run start --workspace @yadraw/web -- -p ${WEB_PORT}
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
+```
+
+Если systemd ругается на `${WEB_PORT}`, замените строку на конкретный порт:
+
+```ini
+ExecStart=/usr/bin/npm run start --workspace @yadraw/web -- -p 3004
 ```
 
 Запустить:
@@ -234,12 +267,31 @@ server {
 }
 ```
 
+Если используете нестандартные порты:
+
+```nginx
+location /api/ {
+  proxy_pass http://127.0.0.1:4004/;
+}
+
+location / {
+  proxy_pass http://127.0.0.1:3004;
+}
+```
+
 Активировать:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/yadraw /etc/nginx/sites-enabled/yadraw
 sudo nginx -t
 sudo systemctl reload nginx
+```
+
+Если используется Nginx Proxy Manager, после смены портов проверьте не только UI/SQLite-значения, но и сгенерированный `.conf`. NPM не всегда немедленно регенерирует конфиги из БД. Надежная проверка:
+
+```bash
+docker exec <npm-container> nginx -T | grep -E "proxy_pass|server_name" -n
+docker restart <npm-container>
 ```
 
 Для HTTPS подключить certbot или использовать Caddy.

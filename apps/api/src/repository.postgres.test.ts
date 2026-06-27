@@ -49,28 +49,6 @@ async function runMigrations(connectionString: string) {
   }
 }
 
-async function seedWorkspaceMembers(connectionString: string) {
-  const client = new Client({ connectionString });
-  await client.connect();
-
-  try {
-    await client.query(
-      `
-        insert into workspace_members (workspace_id, user_id, role)
-        values
-          ($1, $2, 'owner'),
-          ($1, $3, 'editor'),
-          ($1, $4, 'viewer')
-        on conflict (workspace_id, user_id) do update
-        set role = excluded.role
-      `,
-      [demoIds.workspace, demoUserIds.owner, demoUserIds.editor, demoUserIds.viewer]
-    );
-  } finally {
-    await client.end();
-  }
-}
-
 describePostgres("postgres repository smoke", () => {
   const schemaName = `yadraw_smoke_${randomUUID().replaceAll("-", "_")}`;
   const quotedSchemaName = quoteIdentifier(schemaName);
@@ -91,7 +69,6 @@ describePostgres("postgres repository smoke", () => {
 
     isolatedDatabaseUrl = withSearchPath(databaseUrl, schemaName);
     await runMigrations(isolatedDatabaseUrl);
-    await seedWorkspaceMembers(isolatedDatabaseUrl);
     repository = await createPostgresRepository(isolatedDatabaseUrl);
   }, 30_000);
 

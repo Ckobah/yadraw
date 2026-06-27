@@ -1,3 +1,11 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import nextEnv from "@next/env";
+
+const configDir = dirname(fileURLToPath(import.meta.url));
+const { loadEnvConfig } = nextEnv;
+loadEnvConfig(resolve(configDir, "../.."));
+
 /** @type {import('next').NextConfig} */
 const securityHeaders = [
   {

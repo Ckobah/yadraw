@@ -11,6 +11,27 @@ set name = excluded.name,
     slug = excluded.slug,
     updated_at = now();
 
+insert into workspace_members (workspace_id, user_id, role)
+values
+  (
+    '3cce8c2f-3d0f-49aa-89da-9f2f1f655b33',
+    '02f38bb1-0cde-4473-95ef-1d50db3467e4',
+    'owner'
+  ),
+  (
+    '3cce8c2f-3d0f-49aa-89da-9f2f1f655b33',
+    'bb7ef8c4-2d05-4699-b2de-d9c02d1c1ec4',
+    'editor'
+  ),
+  (
+    '3cce8c2f-3d0f-49aa-89da-9f2f1f655b33',
+    '9f18a762-bf5b-4aa8-b934-f286cc51dc5b',
+    'viewer'
+  )
+on conflict (workspace_id, user_id) do update
+set role = excluded.role,
+    updated_at = now();
+
 insert into projects (id, workspace_id, name, description, settings, metadata)
 values (
   '8bdcdb31-40d7-4f66-b2b3-7f972e7f07d3',
