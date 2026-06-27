@@ -304,9 +304,6 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
            b.id as board_id,
            b.name as board_name,
            b.viewport,
-           b.viewport_x,
-           b.viewport_y,
-           b.viewport_zoom,
            b.created_at as board_created_at,
            b.updated_at as board_updated_at
          from boards b
