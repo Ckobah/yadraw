@@ -6,10 +6,9 @@ import type { V2BoardDetail } from "@yadraw/shared";
 
 type Props = {
   boardDetail: V2BoardDetail;
-  userId?: string;
 };
 
-export function V2BoardPage({ boardDetail, userId }: Props) {
+export function V2BoardPage({ boardDetail }: Props) {
   const { board, cards, connections } = boardDetail;
   const cardCount = cards.length;
   const connCount = connections.length;
@@ -33,7 +32,7 @@ export function V2BoardPage({ boardDetail, userId }: Props) {
       {/* Canvas area */}
       <div className="v2BoardCanvasArea">
         <ReactFlowProvider>
-          <V2BoardCanvas boardDetail={boardDetail} userId={userId} />
+          <V2BoardCanvas boardDetail={boardDetail} />
         </ReactFlowProvider>
       </div>
     </div>

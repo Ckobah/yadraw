@@ -31,5 +31,5 @@ export default async function V2BoardRoute({ params }: PageProps) {
     return <V2BoardEmptyState />;
   }
 
-  return <V2BoardPage boardDetail={boardDetail} userId={process.env.V2_USER_ID} />;
+  return <V2BoardPage boardDetail={boardDetail} />;
 }

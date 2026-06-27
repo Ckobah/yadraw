@@ -27,7 +27,6 @@ import {
 
 type Props = {
   boardDetail: V2BoardDetail;
-  userId?: string;
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -54,7 +53,7 @@ function isValidHandle(
   );
 }
 
-export function V2BoardCanvas({ boardDetail, userId }: Props) {
+export function V2BoardCanvas({ boardDetail }: Props) {
   const { board, cards, connections, cardTypes } = boardDetail;
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -124,14 +123,14 @@ export function V2BoardCanvas({ boardDetail, userId }: Props) {
   const handleNodeDragStop = useCallback(
     (_event: unknown, node: V2CardNode) => {
       setSaveStatus("saving");
-      updateV2CardPosition(node.id, node.position, userId)
+      updateV2CardPosition(node.id, node.position)
         .then(() => setSaveStatus("saved"))
         .catch((err) => {
           console.error("Failed to save card position:", err);
           setSaveStatus("error");
         });
     },
-    [userId]
+    []
   );
 
   // ── Create connection ────────────────────────────────────────────
@@ -168,8 +167,7 @@ export function V2BoardCanvas({ boardDetail, userId }: Props) {
             targetPortKey: targetHandle,
             type: "data",
             label: sourceHandle,
-          },
-          userId
+          }
         );
 
         // Add the new edge from the API response
@@ -204,19 +202,19 @@ export function V2BoardCanvas({ boardDetail, userId }: Props) {
         setSaveStatus("error");
       }
     },
-    [board.id, cardTypeMap, cards, userId, setEdges]
+    [board.id, cardTypeMap, cards, setEdges]
   );
 
   // ── Delete connection ────────────────────────────────────────────
   const handleEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
       for (const edge of deletedEdges) {
-        deleteV2Connection(edge.id, userId).catch((err) =>
+        deleteV2Connection(edge.id).catch((err) =>
           console.error("Failed to delete connection:", err)
         );
       }
     },
-    [userId]
+    []
   );
 
   return (

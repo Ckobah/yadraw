@@ -90,29 +90,17 @@ export async function fetchV2CardTypes(
 }
 
 // ── Client-side API helpers ───────────────────────────────────────
-// These functions accept an explicit userId parameter for browser use
-// (V2_USER_ID is only available server-side via process.env).
-
-function clientHeaders(userId?: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Accept": "application/json",
-    "Content-Type": "application/json",
-  };
-  if (userId) {
-    headers["x-yadraw-user-id"] = userId;
-  }
-  return headers;
-}
+// These call Next.js route handlers (/v2/actions/...) which proxy to
+// the backend API with x-yadraw-user-id added server-side.
+// V2_USER_ID never reaches the browser.
 
 export async function updateV2CardPosition(
   cardId: string,
-  position: { x: number; y: number },
-  userId?: string
+  position: { x: number; y: number }
 ): Promise<void> {
-  const url = `${apiBaseUrl}/v2/cards/${encodeURIComponent(cardId)}`;
-  const response = await fetch(url, {
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
     method: "PATCH",
-    headers: { ...clientHeaders(userId) },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ position }),
   });
   if (!response.ok) {
@@ -135,22 +123,23 @@ export async function createV2Connection(
     targetPortKey: string;
     type?: string;
     label?: string;
-  },
-  userId?: string
+  }
 ): Promise<V2Connection> {
-  const url = `${apiBaseUrl}/v2/boards/${encodeURIComponent(boardId)}/connections`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { ...clientHeaders(userId) },
-    body: JSON.stringify({
-      sourceCardId: input.sourceCardId,
-      targetCardId: input.targetCardId,
-      sourcePortKey: input.sourcePortKey,
-      targetPortKey: input.targetPortKey,
-      type: input.type ?? "data",
-      label: input.label ?? "",
-    }),
-  });
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/connections`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        sourceCardId: input.sourceCardId,
+        targetCardId: input.targetCardId,
+        sourcePortKey: input.sourcePortKey,
+        targetPortKey: input.targetPortKey,
+        type: input.type ?? "data",
+        label: input.label ?? "",
+      }),
+    }
+  );
   if (!response.ok) {
     let body: unknown;
     try { body = await response.json(); } catch { /* ignore */ }
@@ -164,14 +153,12 @@ export async function createV2Connection(
 }
 
 export async function deleteV2Connection(
-  connectionId: string,
-  userId?: string
+  connectionId: string
 ): Promise<void> {
-  const url = `${apiBaseUrl}/v2/connections/${encodeURIComponent(connectionId)}`;
-  const response = await fetch(url, {
-    method: "DELETE",
-    headers: { ...clientHeaders(userId) },
-  });
+  const response = await fetch(
+    `/v2/actions/connections/${encodeURIComponent(connectionId)}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
   if (!response.ok) {
     let body: unknown;
     try { body = await response.json(); } catch { /* ignore */ }
