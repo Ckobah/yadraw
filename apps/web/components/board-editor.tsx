@@ -10,28 +10,12 @@ import {
 } from "@xyflow/react";
 import {
   CheckCircle2,
-  Bell,
-  Bot,
-  Box,
-  ChevronDown,
-  Clipboard,
-  Database,
   FileText,
   Grid2X2,
-  History,
-  Layers3,
-  MousePointer2,
-  Play,
   Plus,
-  RadioTower,
   Search,
-  Settings2,
-  Share2,
-  Sparkles,
   Trash2,
-  Upload,
-  X,
-  ZoomIn
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -42,9 +26,7 @@ import {
   type CardStatus,
   type CardTemplate,
   type FileRef,
-  type Notification,
-  type UpdateCardInput,
-  type WorkspaceMember
+  type UpdateCardInput
 } from "@yadraw/shared";
 import { WorkflowCardNode, type WorkflowNode } from "./workflow-node";
 
@@ -63,28 +45,6 @@ type BoardFile = FileRef & {
   cardStatus: CardStatus;
 };
 
-const projectItems = [
-  ["P", "Product Pipeline", "projectPurple"],
-  ["M", "Marketing Plan", "projectGreen"],
-  ["C", "Customer Support", "projectOrange"],
-  ["D", "Data Sync Flow", "projectBlue"]
-] as const;
-
-function AvatarStack() {
-  return (
-    <div className="avatarStack" aria-label="Collaborators">
-      <span className="avatar avatarOne" />
-      <span className="avatar avatarTwo" />
-      <span className="avatar avatarThree" />
-      <span className="avatarMore">+2</span>
-    </div>
-  );
-}
-
-function ComingSoonBadge() {
-  return <span className="comingSoonBadge">Soon</span>;
-}
-
 function LeftSidebar({
   activeView,
   onOpenBoard,
@@ -102,10 +62,6 @@ function LeftSidebar({
     <aside className="leftSidebar">
       <div className="brandRow">
         <div className="brandMark">Y</div>
-        <button className="workspaceButton" type="button">
-          Acme Workspace
-          <ChevronDown size={15} />
-        </button>
       </div>
 
       <nav className="primaryNav" aria-label="Primary">
@@ -121,172 +77,34 @@ function LeftSidebar({
           <Search size={18} />
           Search
         </button>
-        <button className="navItem navItemMuted" type="button" disabled>
-          <Sparkles size={18} />
-          AI Assistant
-          <ComingSoonBadge />
-        </button>
-      </nav>
-
-      <div className="sidebarSection">
-        <div className="sectionHeader">
-          <span>Projects</span>
-          <button className="miniIconButton" type="button" aria-label="Add project">
-            <Plus size={15} />
-          </button>
-        </div>
-        {projectItems.map(([letter, label, className]) => (
-          <button className="projectItem navItemMuted" type="button" disabled key={label}>
-            <span className={`projectBadge ${className}`}>{letter}</span>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="sidebarFooterNav">
-        <button className="navItem navItemMuted" type="button" disabled>
-          <Layers3 size={18} />
-          Templates
-          <ComingSoonBadge />
-        </button>
         <button className={`navItem ${activeView === "trash" ? "navItemActive" : ""}`} type="button" onClick={onOpenTrash}>
           <Trash2 size={18} />
           Trash
         </button>
-      </div>
-
-      <div className="assistantPrompt">
-        <button className="miniIconButton closePrompt" type="button" aria-label="Close assistant">
-          <X size={14} />
-        </button>
-        <strong>
-          <Sparkles size={15} />
-          AI Assistant
-        </strong>
-        <p>Ask anything about your board</p>
-        <button className="primaryButton primaryButtonDisabled" type="button" disabled>Ask AI</button>
-      </div>
-
-      <div className="accountRow">
-        <span className="accountAvatar" />
-        <div>
-          <strong>Alex Smith</strong>
-          <small>admin@acme.com</small>
-        </div>
-        <ChevronDown size={15} />
-      </div>
+      </nav>
     </aside>
   );
 }
 
-function formatNotificationTime(value: string): string {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
-}
-
 function TopBar({
+  boardName,
   syncStatus,
-  onOpenSearch,
-  onOpenShare,
-  notifications,
-  unreadCount,
-  isNotificationsOpen,
-  isNotificationsLoading,
-  notificationsError,
-  onToggleNotifications,
-  onMarkNotificationRead
+  onOpenSearch
 }: {
+  boardName: string;
   syncStatus: string;
   onOpenSearch: () => void;
-  onOpenShare: () => void;
-  notifications: Notification[];
-  unreadCount: number;
-  isNotificationsOpen: boolean;
-  isNotificationsLoading: boolean;
-  notificationsError: string;
-  onToggleNotifications: () => void;
-  onMarkNotificationRead: (notificationId: string) => Promise<void>;
 }) {
   return (
     <header className="topBar">
-      <div className="breadcrumbs">
-        <span>Projects</span>
-        <span>/</span>
-        <span>Product Pipeline</span>
-        <span>/</span>
-        <button type="button">
-          Main Board
-          <ChevronDown size={15} />
-        </button>
-      </div>
+      <h1 className="boardTitle">{boardName}</h1>
 
       <div className="topActions">
-        <AvatarStack />
-        <button className="shareButton" type="button" onClick={onOpenShare}>
-          <Share2 size={17} />
-          Share
-        </button>
-        <button className="squareButton" type="button" aria-label="Run workflow" disabled>
-          <Play size={18} />
-        </button>
         <button className="searchBox" type="button" onClick={onOpenSearch}>
           <Search size={17} />
           Search
           <kbd>⌘K</kbd>
         </button>
-        <div className="notificationShell">
-          <button
-            className={`squareButton notificationButton ${isNotificationsOpen ? "notificationButtonActive" : ""}`}
-            type="button"
-            aria-label="Notifications"
-            aria-expanded={isNotificationsOpen}
-            onClick={onToggleNotifications}
-          >
-            <Bell size={18} />
-            {unreadCount > 0 ? <span className="notificationBadge">{unreadCount}</span> : null}
-          </button>
-          {isNotificationsOpen ? (
-            <section className="notificationPopover" aria-label="Notifications panel">
-              <header className="notificationHeader">
-                <div>
-                  <span className="eyebrow">Notifications</span>
-                  <h2>Updates</h2>
-                </div>
-                <span>{unreadCount} unread</span>
-              </header>
-
-              {isNotificationsLoading ? <div className="notificationState">Loading notifications</div> : null}
-              {notificationsError ? <div className="notificationState notificationStateError" role="alert">{notificationsError}</div> : null}
-
-              {!isNotificationsLoading && !notificationsError ? (
-                <div className="notificationList">
-                  {notifications.map((notification) => (
-                    <article className={`notificationItem ${notification.readAt ? "" : "notificationItemUnread"}`} key={notification.id}>
-                      <span className="notificationDot" />
-                      <div>
-                        <header>
-                          <strong>{notification.title}</strong>
-                          <time dateTime={notification.createdAt}>{formatNotificationTime(notification.createdAt)}</time>
-                        </header>
-                        {notification.body ? <p>{notification.body}</p> : null}
-                        {!notification.readAt ? (
-                          <button type="button" onClick={() => void onMarkNotificationRead(notification.id)}>
-                            Mark read
-                          </button>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))}
-                  {notifications.length === 0 ? <div className="notificationState">No notifications yet</div> : null}
-                </div>
-              ) : null}
-            </section>
-          ) : null}
-        </div>
         <span className="syncStatus">{syncStatus}</span>
       </div>
     </header>
@@ -300,28 +118,8 @@ function CanvasToolbar({ onAddCard }: { onAddCard: () => void }) {
         <Plus size={18} />
         Add
       </button>
-      <span className="toolGroup">
-        <button className="toolIconActive" type="button" aria-label="Select">
-          <MousePointer2 size={17} />
-        </button>
-        <button type="button" aria-label="Pan" disabled>
-          <Upload size={17} />
-        </button>
-        <button type="button" aria-label="Zoom" disabled>
-          <ZoomIn size={17} />
-        </button>
-      </span>
     </div>
   );
-}
-
-function TemplateIcon({ icon }: { icon: string }) {
-  if (icon === "radio-tower") return <RadioTower size={18} />;
-  if (icon === "database") return <Database size={18} />;
-  if (icon === "box") return <Box size={18} />;
-  if (icon === "sparkles") return <Sparkles size={18} />;
-  if (icon === "bot") return <Bot size={18} />;
-  return <FileText size={18} />;
 }
 
 function TemplatePickerDialog({
@@ -360,12 +158,12 @@ function TemplatePickerDialog({
         className="templateDialog"
         role="dialog"
         aria-modal="true"
-        aria-label="Choose card template"
+        aria-label="Choose card type"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="templateDialogHeader">
           <div>
-            <span className="eyebrow">Templates</span>
+            <span className="eyebrow">Card types</span>
             <h2>Create card</h2>
             <p>Choose a typed starting point with predefined fields, handles, tags and visual style.</p>
           </div>
@@ -386,7 +184,7 @@ function TemplatePickerDialog({
                 onClick={() => setSelectedKey(template.key)}
               >
                 <span className="templateOptionIcon">
-                  <TemplateIcon icon={template.icon} />
+                  {template.name[0]}
                 </span>
                 <span>
                   <strong>{template.name}</strong>
@@ -398,7 +196,7 @@ function TemplatePickerDialog({
 
           <aside className="templatePreview" aria-label="Template preview">
             <div className={`templatePreviewIcon templatePreviewIcon${selectedTemplate.color[0]?.toUpperCase()}${selectedTemplate.color.slice(1)}`}>
-              <TemplateIcon icon={selectedTemplate.icon} />
+              {selectedTemplate.name[0]}
             </div>
             <h3>{selectedTemplate.name}</h3>
             <p>{selectedTemplate.description}</p>
@@ -445,49 +243,8 @@ function TemplatePickerDialog({
   );
 }
 
-function BoardMiniPreview({ board }: { board: Board }) {
-  if (board.cards.length === 0) {
-    return null;
-  }
-
-  const minX = Math.min(...board.cards.map((card) => card.position.x));
-  const minY = Math.min(...board.cards.map((card) => card.position.y));
-  const maxX = Math.max(...board.cards.map((card) => card.position.x + card.size.width));
-  const maxY = Math.max(...board.cards.map((card) => card.position.y + card.size.height));
-  const width = Math.max(maxX - minX, 1);
-  const height = Math.max(maxY - minY, 1);
-
-  return (
-    <div className="boardMiniPreview" aria-label="Board mini map">
-      <div className="miniPreviewInner">
-        {board.cards.map((card) => {
-          const accent = String(card.style.accent ?? "blue");
-          return (
-            <span
-              className={`miniNode miniNode${accent[0]?.toUpperCase()}${accent.slice(1)}`}
-              key={card.id}
-              style={{
-                left: `${((card.position.x - minX) / width) * 82 + 6}%`,
-                top: `${((card.position.y - minY) / height) * 66 + 10}%`,
-                width: `${Math.max((card.size.width / width) * 70, 14)}%`,
-                height: `${Math.max((card.size.height / height) * 48, 12)}%`
-              }}
-            />
-          );
-        })}
-      </div>
-      <div className="miniPreviewControls">
-        <button type="button" aria-label="Zoom out">−</button>
-        <button type="button" aria-label="Zoom in">+</button>
-        <button type="button" aria-label="Fit board">⌘</button>
-      </div>
-    </div>
-  );
-}
-
 function Inspector({
   card,
-  board,
   onClose,
   onDeleteCard,
   attachNotice,
@@ -495,15 +252,12 @@ function Inspector({
   onSaveCard
 }: {
   card: Card;
-  board: Board;
   onClose: () => void;
   onDeleteCard: (card: Card) => Promise<void>;
   attachNotice: { cardId: string; kind: "success" | "error"; message: string } | null;
   onAttachFile: (cardId: string, file: File) => Promise<Card | null>;
   onSaveCard: (cardId: string, input: UpdateCardInput) => Promise<Card | null>;
 }) {
-  const incoming = board.connections.filter((connection) => connection.targetCardId === card.id);
-  const outgoing = board.connections.filter((connection) => connection.sourceCardId === card.id);
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description ?? "");
   const [status, setStatus] = useState<CardStatus>(card.status);
@@ -635,12 +389,6 @@ function Inspector({
           <X size={16} />
         </button>
       </header>
-
-      <div className="tabs">
-        <button className="tabActive" type="button">Details</button>
-        <button type="button">Connections ({incoming.length + outgoing.length})</button>
-        <button type="button">History</button>
-      </div>
 
       <section className="propertySection">
         <h3>Properties</h3>
@@ -829,10 +577,6 @@ function Inspector({
             </div>
           </div>
         ) : null}
-        <span>Created</span>
-        <strong>Jun 24, 2026, 10:23</strong>
-        <span>Updated</span>
-        <strong>Today, 09:41</strong>
       </footer>
     </aside>
   );
@@ -1007,7 +751,6 @@ function BoardBrief({ board }: { board: Board }) {
 
   return (
     <section className="boardBrief" aria-label="Board summary">
-      <span className="eyebrow">Product Pipeline</span>
       <h1>{board.name}</h1>
       <p>{board.description}</p>
       <div className="briefStats">
@@ -1155,192 +898,6 @@ function SearchDialog({
   );
 }
 
-function initialsFor(name: string): string {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-function ShareDialog({
-  board,
-  members,
-  isOpen,
-  isLoading,
-  error,
-  onClose
-}: {
-  board: Board;
-  members: WorkspaceMember[];
-  isOpen: boolean;
-  isLoading: boolean;
-  error: string;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const shareLink = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const url = new URL(window.location.href);
-    url.searchParams.set("board", board.id);
-    return url.toString();
-  }, [board.id, isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setCopied(false);
-    }
-  }, [isOpen]);
-
-  async function copyShareLink() {
-    if (!shareLink) return;
-
-    try {
-      await navigator.clipboard.writeText(shareLink);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = shareLink;
-      textarea.setAttribute("readonly", "true");
-      textarea.style.position = "fixed";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="dialogBackdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        className="shareDialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Share board"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="shareDialogHeader">
-          <div>
-            <span className="eyebrow">Share</span>
-            <h2>{board.name}</h2>
-            <p>Copy a board link and review who currently has access to this workspace.</p>
-          </div>
-          <button className="miniIconButton" type="button" aria-label="Close share" onClick={onClose}>
-            <X size={15} />
-          </button>
-        </header>
-
-        <section className="shareLinkSection" aria-label="Board link">
-          <label htmlFor="board-share-link">Board link</label>
-          <div className="shareLinkRow">
-            <input id="board-share-link" readOnly value={shareLink} aria-label="Board share link" />
-            <button className="secondaryButton" type="button" onClick={() => void copyShareLink()}>
-              {copied ? <CheckCircle2 size={16} /> : <Clipboard size={16} />}
-              {copied ? "Copied" : "Copy link"}
-            </button>
-          </div>
-          <p>Anyone still needs workspace access. Public links and invites are intentionally not enabled in this phase.</p>
-        </section>
-
-        <section className="shareMembersSection" aria-label="Workspace members">
-          <div className="shareMembersHeader">
-            <h3>Workspace access</h3>
-            <span>{members.length} members</span>
-          </div>
-
-          {isLoading ? <div className="shareState">Loading members</div> : null}
-          {error ? <div className="shareState shareStateError" role="alert">{error}</div> : null}
-
-          {!isLoading && !error ? (
-            <div className="shareMemberList">
-              {members.map((member) => (
-                <div className="shareMemberRow" key={member.id}>
-                  <span className="shareMemberAvatar">{initialsFor(member.name)}</span>
-                  <span className="shareMemberIdentity">
-                    <strong>{member.name}</strong>
-                    <small>{member.email}</small>
-                  </span>
-                  <span className={`shareRole shareRole${member.role[0]?.toUpperCase()}${member.role.slice(1)}`}>{member.role}</span>
-                </div>
-              ))}
-              {members.length === 0 ? <div className="shareState">No members found</div> : null}
-            </div>
-          ) : null}
-        </section>
-      </section>
-    </div>
-  );
-}
-
-function DetailPanel({ card, board }: { card: Card; board: Board }) {
-  const incoming = board.connections
-    .filter((connection) => connection.targetCardId === card.id)
-    .map((connection) => board.cards.find((item) => item.id === connection.sourceCardId)?.title)
-    .filter(Boolean);
-  const outgoing = board.connections
-    .filter((connection) => connection.sourceCardId === card.id)
-    .map((connection) => board.cards.find((item) => item.id === connection.targetCardId)?.title)
-    .filter(Boolean);
-
-  return (
-    <section className="detailPanel">
-      <header className="detailHeader">
-        <div className="detailTitle">
-          <Sparkles size={18} />
-          <strong>{card.title}</strong>
-          <span className="pill">{card.typeKey}</span>
-          <span className="statusDot" />
-          <span>{card.status}</span>
-        </div>
-        <div>
-          <button className="miniIconButton" type="button" aria-label="Settings">
-            <Settings2 size={15} />
-          </button>
-          <button className="miniIconButton" type="button" aria-label="History">
-            <History size={15} />
-          </button>
-        </div>
-      </header>
-
-      <div className="detailTabs">
-        <button className="tabActive" type="button">Overview</button>
-        <button type="button">Input / Output</button>
-        <button type="button">Files ({card.files.length})</button>
-        <button type="button">Settings</button>
-        <button type="button">History</button>
-      </div>
-
-      <div className="detailGrid">
-        <div>
-          <h3>Description</h3>
-          <p>{card.description}</p>
-          <h3>Status</h3>
-          <span className="successBadge">{card.status}</span>
-        </div>
-        <div>
-          <h3>Input</h3>
-          {card.inputs.map((input) => <div className="compactRow" key={input}>{input}<span>object</span></div>)}
-          <h3>Output</h3>
-          {card.outputs.map((output) => <div className="compactRow" key={output}>{output}<span>object</span></div>)}
-        </div>
-        <div>
-          <h3>Connections</h3>
-          <span className="mutedLabel">Incoming</span>
-          {incoming.map((title) => <div className="connectionRow" key={title}>{title}</div>)}
-          <span className="mutedLabel">Outgoing</span>
-          {outgoing.map((title) => <div className="connectionRow" key={title}>{title}</div>)}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
 
 export function BoardEditor({
@@ -1358,15 +915,6 @@ export function BoardEditor({
   const [isTemplatesLoading, setIsTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
   const [isCreatingCard, setIsCreatingCard] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false);
-  const [workspaceMembers, setWorkspaceMembers] = useState<WorkspaceMember[]>([]);
-  const [isMembersLoading, setIsMembersLoading] = useState(false);
-  const [membersError, setMembersError] = useState("");
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
-  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
-  const [notificationsError, setNotificationsError] = useState("");
   const [boardFiles, setBoardFiles] = useState<BoardFile[]>([]);
   const [attachNotice, setAttachNotice] = useState<{ cardId: string; kind: "success" | "error"; message: string } | null>(null);
   const [isFilesLoading, setIsFilesLoading] = useState(false);
@@ -1410,10 +958,6 @@ export function BoardEditor({
     };
   }, [initialBoard.id]);
 
-  useEffect(() => {
-    void loadNotifications();
-  }, [board.workspaceId]);
-
   async function loadCardTemplates() {
     setIsTemplatesLoading(true);
     setTemplatesError("");
@@ -1443,92 +987,6 @@ export function BoardEditor({
     setTemplatesError("");
     setIsTemplatePickerOpen(true);
     void loadCardTemplates();
-  }
-
-  async function loadWorkspaceMembers() {
-    setIsMembersLoading(true);
-    setMembersError("");
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/workspaces/${board.workspaceId}/members`, {
-        cache: "no-store"
-      });
-
-      if (!response.ok) {
-        throw new Error(`Workspace members request failed with ${response.status}`);
-      }
-
-      const payload = (await response.json()) as { members?: WorkspaceMember[] };
-      setWorkspaceMembers(payload.members ?? []);
-    } catch {
-      setWorkspaceMembers([]);
-      setMembersError("Could not load workspace members.");
-    } finally {
-      setIsMembersLoading(false);
-    }
-  }
-
-  function openShareDialog() {
-    setIsShareOpen(true);
-    void loadWorkspaceMembers();
-  }
-
-  async function loadNotifications() {
-    setIsNotificationsLoading(true);
-    setNotificationsError("");
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/notifications`, {
-        cache: "no-store"
-      });
-
-      if (!response.ok) {
-        throw new Error(`Notifications request failed with ${response.status}`);
-      }
-
-      const payload = (await response.json()) as { notifications?: Notification[]; unreadCount?: number };
-      const nextNotifications = payload.notifications ?? [];
-      setNotifications(nextNotifications);
-      setUnreadNotifications(payload.unreadCount ?? nextNotifications.filter((notification) => !notification.readAt).length);
-    } catch {
-      setNotifications([]);
-      setUnreadNotifications(0);
-      setNotificationsError("Could not load notifications.");
-    } finally {
-      setIsNotificationsLoading(false);
-    }
-  }
-
-  function toggleNotifications() {
-    setIsNotificationsOpen((current) => {
-      const next = !current;
-      if (next) {
-        void loadNotifications();
-      }
-      return next;
-    });
-  }
-
-  async function markNotificationRead(notificationId: string) {
-    try {
-      const response = await fetch(`${apiBaseUrl}/notifications/${notificationId}/read`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({})
-      });
-
-      if (!response.ok) {
-        throw new Error(`Mark notification read failed with ${response.status}`);
-      }
-
-      const notification = (await response.json()) as Notification;
-      setNotifications((current) => current.map((item) => (item.id === notification.id ? notification : item)));
-      setUnreadNotifications((current) => Math.max(0, current - 1));
-    } catch {
-      setNotificationsError("Could not mark notification as read.");
-    }
   }
 
   async function addCard(template: CardTemplate) {
@@ -1821,16 +1279,9 @@ export function BoardEditor({
       />
       <section className="mainArea">
         <TopBar
+          boardName={board.name}
           syncStatus={syncStatus}
           onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenShare={openShareDialog}
-          notifications={notifications}
-          unreadCount={unreadNotifications}
-          isNotificationsOpen={isNotificationsOpen}
-          isNotificationsLoading={isNotificationsLoading}
-          notificationsError={notificationsError}
-          onToggleNotifications={toggleNotifications}
-          onMarkNotificationRead={markNotificationRead}
         />
         <div className="boardSurface">
           {activeView === "board" ? (
@@ -1855,8 +1306,6 @@ export function BoardEditor({
               >
                 <Background color="#d8dde8" gap={24} size={1} />
               </ReactFlow>
-              <BoardMiniPreview board={board} />
-              {selectedCard ? <DetailPanel card={selectedCard} board={board} /> : null}
             </>
           ) : activeView === "files" ? (
             <FilesPanel
@@ -1882,7 +1331,6 @@ export function BoardEditor({
       {activeView === "board" && selectedCard ? (
         <Inspector
           card={selectedCard}
-          board={board}
           onClose={() => setSelectedCardId(undefined)}
           onDeleteCard={deleteCard}
           attachNotice={attachNotice}
@@ -1896,14 +1344,6 @@ export function BoardEditor({
       isOpen={isSearchOpen}
       onClose={() => setIsSearchOpen(false)}
       onSelectCard={setSelectedCardId}
-    />
-    <ShareDialog
-      board={board}
-      members={workspaceMembers}
-      isOpen={isShareOpen}
-      isLoading={isMembersLoading}
-      error={membersError}
-      onClose={() => setIsShareOpen(false)}
     />
     <TemplatePickerDialog
       templates={cardTemplates}
