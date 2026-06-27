@@ -35,13 +35,31 @@ export type AttachFileInput = {
   role: string;
 };
 
+export type AuditEvent = {
+  workspaceId: string;
+  actorId: string;
+  action: string;
+  objectType: string;
+  objectId?: string;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type ActivityLogEntry = AuditEvent & {
+  id: string;
+  createdAt: string;
+};
+
 export type BoardRepository = {
   mode: "postgres" | "memory";
   close?(): Promise<void>;
+  transaction<T>(operation: (repository: BoardRepository) => Promise<T>): Promise<T>;
   getBoardRole(userId: string, boardId: string): Promise<WorkspaceRole | null>;
   getCardRole(userId: string, cardId: string): Promise<WorkspaceRole | null>;
   getWorkspaceRole(userId: string, workspaceId: string): Promise<WorkspaceRole | null>;
   getBoard(boardId: string): Promise<Board | null>;
+  getCard(cardId: string): Promise<Card | null>;
   createCard(boardId: string, input: CreateCardInput): Promise<Card | null>;
   updateCard(cardId: string, input: UpdateCardInput): Promise<Card | null>;
   deleteCard(cardId: string): Promise<Card | null>;
@@ -54,6 +72,8 @@ export type BoardRepository = {
   listFiles(boardId: string): Promise<BoardFile[]>;
   attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
   searchCards(query: string, boardId?: string): Promise<Card[]>;
+  recordActivity(event: AuditEvent): Promise<void>;
+  listActivityLog(objectType: string, objectId: string): Promise<ActivityLogEntry[]>;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -272,6 +292,7 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
   const memoryBoard: Board = structuredClone(sourceBoard);
   const notifications: Notification[] = structuredClone(demoNotifications);
   const deletedCards: Card[] = [];
+  const activityLog: ActivityLogEntry[] = [];
 
   function getMemoryWorkspaceRole(userId: string, workspaceId: string): WorkspaceRole | null {
     if (workspaceId !== memoryBoard.workspaceId) return null;
@@ -280,6 +301,10 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
 
   return {
     mode: "memory",
+
+    async transaction(operation) {
+      return operation(this);
+    },
 
     async getBoardRole(userId, boardId) {
       if (boardId !== memoryBoard.id) return null;
@@ -299,6 +324,10 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
     async getBoard(boardId) {
       if (boardId !== memoryBoard.id) return null;
       return boardSchema.parse(memoryBoard);
+    },
+
+    async getCard(cardId) {
+      return structuredClone(memoryBoard.cards.find((card) => card.id === cardId) ?? null);
     },
 
     async createCard(boardId, input) {
@@ -430,6 +459,20 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
 
         return haystack.includes(needle);
       });
+    },
+
+    async recordActivity(event) {
+      activityLog.unshift({
+        ...structuredClone(event),
+        id: randomUUID(),
+        createdAt: new Date().toISOString()
+      });
+    },
+
+    async listActivityLog(objectType, objectId) {
+      return structuredClone(
+        activityLog.filter((event) => event.objectType === objectType && event.objectId === objectId)
+      );
     }
   };
 }
@@ -441,8 +484,42 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
 
   await pool.query("select 1");
 
+  return createPostgresRepositoryForDatabase(pool, {
+    close: async () => {
+      await pool.end();
+    },
+    transaction: async (operation) => {
+      const client = await pool.connect();
+
+      try {
+        await client.query("begin");
+        const transactionRepository = createPostgresRepositoryForDatabase(client);
+        const result = await operation(transactionRepository);
+        await client.query("commit");
+        return result;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+  });
+}
+
+type Queryable = Pick<Pool, "query">;
+
+type PostgresRepositoryOptions = {
+  close?(): Promise<void>;
+  transaction?<T>(operation: (repository: BoardRepository) => Promise<T>): Promise<T>;
+};
+
+function createPostgresRepositoryForDatabase(
+  database: Queryable,
+  options: PostgresRepositoryOptions = {}
+): BoardRepository {
   async function getCardTypeId(workspaceId: string, typeKey: string): Promise<string | null> {
-    const result = await pool.query<{ id: string }>(
+    const result = await database.query<{ id: string }>(
       `
         select id
         from card_types
@@ -458,7 +535,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
   }
 
   async function getCard(cardId: string): Promise<Card | null> {
-    const result = await pool.query(
+    const result = await database.query(
       `
         select c.*, ct.key as type_key
         from cards c
@@ -475,7 +552,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
   }
 
   async function getDeletedCard(cardId: string): Promise<Card | null> {
-    const result = await pool.query(
+    const result = await database.query(
       `
         select c.*, ct.key as type_key
         from cards c
@@ -496,7 +573,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     if (!existingCard) return null;
 
     const nextCard = applyCardInput(existingCard, input);
-    const boardResult = await pool.query<{ workspace_id: string }>(
+    const boardResult = await database.query<{ workspace_id: string }>(
       "select workspace_id from boards where id = $1 and deleted_at is null limit 1",
       [nextCard.boardId]
     );
@@ -504,7 +581,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     if (!workspaceId) return null;
 
     const typeId = await getCardTypeId(workspaceId, nextCard.typeKey);
-    const result = await pool.query(
+    const result = await database.query(
       `
         update cards
         set type_id = $2,
@@ -540,7 +617,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     userId: string,
     workspaceId: string
   ): Promise<WorkspaceRole | null> {
-    const result = await pool.query<{ role: WorkspaceRole }>(
+    const result = await database.query<{ role: WorkspaceRole }>(
       `
         select wm.role
         from workspace_members wm
@@ -556,15 +633,19 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     return result.rows[0]?.role ?? null;
   }
 
-  return {
+  const repository: BoardRepository = {
     mode: "postgres",
 
     async close() {
-      await pool.end();
+      await options.close?.();
+    },
+
+    async transaction(operation) {
+      return options.transaction ? options.transaction(operation) : operation(repository);
     },
 
     async getBoardRole(userId, boardId) {
-      const result = await pool.query<{ role: WorkspaceRole }>(
+      const result = await database.query<{ role: WorkspaceRole }>(
         `
           select wm.role
           from boards b
@@ -581,7 +662,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async getCardRole(userId, cardId) {
-      const result = await pool.query<{ role: WorkspaceRole }>(
+      const result = await database.query<{ role: WorkspaceRole }>(
         `
           select wm.role
           from cards c
@@ -601,7 +682,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async getBoard(boardId) {
-      const boardResult = await pool.query(
+      const boardResult = await database.query(
         `
           select *
           from boards
@@ -614,7 +695,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       const boardRow = boardResult.rows[0];
       if (!boardRow) return null;
 
-      const cardsResult = await pool.query(
+      const cardsResult = await database.query(
         `
           select c.*, ct.key as type_key
           from cards c
@@ -626,7 +707,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
         [boardId]
       );
 
-      const connectionsResult = await pool.query(
+      const connectionsResult = await database.query(
         `
           select *
           from connections
@@ -650,8 +731,12 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       });
     },
 
+    async getCard(cardId) {
+      return getCard(cardId);
+    },
+
     async createCard(boardId, input) {
-      const boardResult = await pool.query<{ workspace_id: string }>(
+      const boardResult = await database.query<{ workspace_id: string }>(
         "select workspace_id from boards where id = $1 and deleted_at is null limit 1",
         [boardId]
       );
@@ -676,7 +761,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       };
       const typeId = await getCardTypeId(workspaceId, card.typeKey);
 
-      const result = await pool.query(
+      const result = await database.query(
         `
           insert into cards (
             id, workspace_id, board_id, type_id, title, description,
@@ -711,7 +796,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       const existingCard = await getCard(cardId);
       if (!existingCard) return null;
 
-      await pool.query(
+      await database.query(
         `
           update cards
           set deleted_at = now()
@@ -728,7 +813,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       const deletedCard = await getDeletedCard(cardId);
       if (!deletedCard) return null;
 
-      const result = await pool.query(
+      const result = await database.query(
         `
           update cards
           set deleted_at = null
@@ -743,7 +828,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async listDeletedCards(boardId) {
-      const result = await pool.query(
+      const result = await database.query(
         `
           select c.*, ct.key as type_key
           from cards c
@@ -759,7 +844,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async listCardTemplates(boardId) {
-      const result = await pool.query(
+      const result = await database.query(
         `
           select ct.*
           from boards b
@@ -775,7 +860,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async listWorkspaceMembers(workspaceId) {
-      const workspaceResult = await pool.query(
+      const workspaceResult = await database.query(
         `
           select id
           from workspaces
@@ -787,7 +872,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
       if (!workspaceResult.rows[0]) return null;
 
-      const result = await pool.query(
+      const result = await database.query(
         `
           select *
           from workspace_members
@@ -813,7 +898,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async listNotifications(userId) {
-      const result = await pool.query(
+      const result = await database.query(
         `
           select *
           from notifications
@@ -828,7 +913,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async markNotificationRead(notificationId, userId) {
-      const result = await pool.query(
+      const result = await database.query(
         `
           update notifications
           set read_at = coalesce(read_at, now())
@@ -844,7 +929,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     },
 
     async listFiles(boardId) {
-      const result = await pool.query(
+      const result = await database.query(
         `
           select c.*, ct.key as type_key
           from cards c
@@ -871,7 +956,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
 
     async searchCards(query, boardId) {
       const needle = query.trim();
-      const result = await pool.query(
+      const result = await database.query(
         `
           select c.*, ct.key as type_key
           from cards c
@@ -891,6 +976,62 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       );
 
       return result.rows.map(cardFromRow);
+    },
+
+    async recordActivity(event) {
+      await database.query(
+        `
+          insert into activity_log (
+            workspace_id,
+            actor_id,
+            action,
+            object_type,
+            object_id,
+            before,
+            after,
+            metadata
+          )
+          values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb)
+        `,
+        [
+          event.workspaceId,
+          event.actorId,
+          event.action,
+          event.objectType,
+          event.objectId ?? null,
+          event.before ? JSON.stringify(event.before) : null,
+          event.after ? JSON.stringify(event.after) : null,
+          JSON.stringify(event.metadata ?? {})
+        ]
+      );
+    },
+
+    async listActivityLog(objectType, objectId) {
+      const result = await database.query(
+        `
+          select *
+          from activity_log
+          where object_type = $1
+            and object_id = $2
+          order by created_at desc
+        `,
+        [objectType, objectId]
+      );
+
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        workspaceId: String(row.workspace_id),
+        actorId: String(row.actor_id),
+        action: String(row.action),
+        objectType: String(row.object_type),
+        objectId: row.object_id ? String(row.object_id) : undefined,
+        before: asObject(row.before),
+        after: asObject(row.after),
+        metadata: asObject(row.metadata),
+        createdAt: new Date(row.created_at).toISOString()
+      }));
     }
   };
+
+  return repository;
 }

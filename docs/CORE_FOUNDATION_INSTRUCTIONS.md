@@ -21,8 +21,11 @@
 - Базовые тесты для shared schemas и repository.
 - Базовые security headers и CORS allowlist.
 - `npm run test`, `npm run typecheck`, `npm run build` проходят.
+- Application core для рабочего API: thin Fastify routes, `core/board-service.ts`, `core/policy.ts`, `core/errors.ts`.
+- Transaction boundary в repository contract: Postgres выполняет mutation use cases через один client с `begin/commit/rollback`.
+- Минимальный audit trail для card mutations через существующую таблицу `activity_log`.
 
-Главный вывод: V2 уже имеет правильную форму продукта, но runtime-ядро еще смешивает demo-mode и product-mode.
+Главный вывод: V2 уже имеет правильную форму продукта. Runtime-ядро больше не должно расти через логику в route handlers; новые product operations нужно добавлять через application core/use cases.
 
 ## 2. Что Считается Минимальным Ядром
 
@@ -44,7 +47,7 @@
 
 - OAuth/Auth.js/Supabase Auth.
 - RLS.
-- Полный audit log.
+- Полный audit log для всех сущностей и read-sensitive actions.
 - Board snapshots.
 - Realtime/Yjs.
 - Undo/redo.
@@ -351,6 +354,8 @@ Definition of Done:
 - User data не может сломать `_yadraw` metadata.
 - Search идет через backend contract.
 - Есть Postgres smoke tests.
+- Write use cases проходят через application core, policy layer и transaction boundary.
+- Card mutations пишут минимальный audit event.
 - `npm run test`, `npm run typecheck`, `npm run build` проходят.
 
 ## 8. Главный Принцип

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "pg";
 import { config } from "dotenv";
 import { demoIds, demoUserIds } from "@yadraw/shared";
+import { createBoardCore } from "./core/board-service.js";
 import { createPostgresRepository, type BoardRepository } from "./repository.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
@@ -161,5 +162,53 @@ describePostgres("postgres repository smoke", () => {
     await expect(repository?.restoreCard(created?.id ?? "")).resolves.toMatchObject({
       id: created?.id
     });
+  });
+
+  it("rolls back transactional writes when a use case fails", async () => {
+    await expect(
+      repository?.transaction(async (transaction) => {
+        await transaction.createCard(demoIds.board, {
+          title: "Rolled back card",
+          typeKey: "note",
+          tags: ["rollback_check"]
+        });
+
+        throw new Error("force rollback");
+      })
+    ).rejects.toThrow("force rollback");
+
+    const results = await repository?.searchCards("rollback_check", demoIds.board);
+    expect(results).toEqual([]);
+  });
+
+  it("writes core audit events to activity_log", async () => {
+    if (!repository) throw new Error("Postgres repository was not initialized");
+
+    const core = createBoardCore(repository);
+    const card = await core.createCard(
+      {
+        userId: demoUserIds.editor,
+        source: "header"
+      },
+      demoIds.board,
+      {
+        title: "Audited Postgres card",
+        typeKey: "note"
+      }
+    );
+
+    await expect(repository.listActivityLog("card", card.id)).resolves.toMatchObject([
+      {
+        workspaceId: demoIds.workspace,
+        actorId: demoUserIds.editor,
+        action: "card.create",
+        objectType: "card",
+        objectId: card.id,
+        after: expect.objectContaining({
+          id: card.id,
+          title: "Audited Postgres card"
+        })
+      }
+    ]);
   });
 });
