@@ -42,6 +42,19 @@ describe("memory board repository", () => {
     expect(card?.id).toEqual(expect.any(String));
   });
 
+  it("returns workspace roles for board, card, and workspace access checks", async () => {
+    const repository = createMemoryRepository();
+    const cardId = "6bb48e57-ed49-4fd6-bdbc-a449b2756be9";
+
+    await expect(repository.getBoardRole(demoUserIds.owner, demoIds.board)).resolves.toBe("owner");
+    await expect(repository.getBoardRole(demoUserIds.editor, demoIds.board)).resolves.toBe("editor");
+    await expect(repository.getBoardRole(demoUserIds.viewer, demoIds.board)).resolves.toBe("viewer");
+    await expect(repository.getCardRole(demoUserIds.editor, cardId)).resolves.toBe("editor");
+    await expect(repository.getWorkspaceRole(demoUserIds.viewer, demoIds.workspace)).resolves.toBe("viewer");
+    await expect(repository.getBoardRole(demoUserIds.owner, demoIds.project)).resolves.toBeNull();
+    await expect(repository.getWorkspaceRole(demoUserIds.owner, demoIds.project)).resolves.toBeNull();
+  });
+
   it("updates card content and layout fields", async () => {
     const repository = createMemoryRepository();
     const card = await repository.updateCard("6bb48e57-ed49-4fd6-bdbc-a449b2756be9", {
@@ -70,10 +83,55 @@ describe("memory board repository", () => {
       tags: ["logistics"]
     });
 
-    await expect(repository.searchCards("warehouse")).resolves.toHaveLength(1);
+    await expect(repository.searchCards("warehouse", demoIds.board)).resolves.toHaveLength(1);
     await expect(repository.searchCards("routing")).resolves.toHaveLength(1);
     await expect(repository.searchCards("north")).resolves.toHaveLength(1);
     await expect(repository.searchCards("logistics")).resolves.toHaveLength(1);
+    await expect(repository.searchCards("warehouse", demoIds.project)).resolves.toEqual([]);
+  });
+
+  it("strips internal metadata from user data on create and update", async () => {
+    const repository = createMemoryRepository();
+    const card = await repository.createCard(demoIds.board, {
+      title: "Unsafe user data",
+      data: {
+        safe: true,
+        _yadraw: {
+          typeKey: "hijack",
+          inputs: ["hidden"],
+          outputs: ["hidden"],
+          tags: ["hidden"],
+          files: []
+        }
+      },
+      inputs: ["explicit_input"],
+      outputs: ["explicit_output"],
+      tags: ["explicit_tag"]
+    });
+
+    expect(card?.data).toEqual({ safe: true });
+    expect(card?.inputs).toEqual(["explicit_input"]);
+    expect(card?.outputs).toEqual(["explicit_output"]);
+    expect(card?.tags).toEqual(["explicit_tag"]);
+
+    const updated = await repository.updateCard(card?.id ?? "", {
+      data: {
+        next: true,
+        _yadraw: {
+          typeKey: "hijack_again",
+          inputs: [],
+          outputs: [],
+          tags: ["hidden_again"],
+          files: []
+        }
+      }
+    });
+
+    expect(updated?.data).toEqual({ next: true });
+    expect(updated?.typeKey).toBe(card?.typeKey);
+    expect(updated?.inputs).toEqual(["explicit_input"]);
+    expect(updated?.outputs).toEqual(["explicit_output"]);
+    expect(updated?.tags).toEqual(["explicit_tag"]);
   });
 
   it("soft-deletes cards into trash and restores them", async () => {

@@ -83,6 +83,14 @@ export const fileRefSchema = z.object({
   role: z.string().default("attachment")
 });
 
+export const cardMetadataSchema = z.object({
+  typeKey: z.string().min(1),
+  inputs: z.array(z.string()).default([]),
+  outputs: z.array(z.string()).default([]),
+  tags: z.array(z.string()).default([]),
+  files: z.array(fileRefSchema).default([])
+});
+
 export const cardSchema = z.object({
   id: uuidSchema,
   boardId: uuidSchema,
@@ -145,6 +153,7 @@ export type CardStatus = z.infer<typeof cardStatusSchema>;
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 export type CardType = z.infer<typeof cardTypeSchema>;
 export type FileRef = z.infer<typeof fileRefSchema>;
+export type CardMetadata = z.infer<typeof cardMetadataSchema>;
 export type Card = z.infer<typeof cardSchema>;
 export type Connection = z.infer<typeof connectionSchema>;
 export type Board = z.infer<typeof boardSchema>;

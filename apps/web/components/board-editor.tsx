@@ -1031,7 +1031,10 @@ function SearchDialog({
   onSelectCard: (cardId: string) => void;
 }) {
   const [query, setQuery] = useState("");
-  const results = useMemo(() => {
+  const [results, setResults] = useState<Card[]>(board.cards);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const fallbackResults = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return board.cards;
 
@@ -1055,8 +1058,56 @@ function SearchDialog({
   useEffect(() => {
     if (!isOpen) {
       setQuery("");
+      setResults(board.cards);
+      setSearchError("");
+      setIsSearching(false);
     }
-  }, [isOpen]);
+  }, [board.cards, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const controller = new AbortController();
+
+    async function searchCards() {
+      setIsSearching(true);
+      setSearchError("");
+
+      try {
+        const params = new URLSearchParams();
+        params.set("q", query.trim());
+
+        const response = await fetch(`${apiBaseUrl}/boards/${board.id}/search?${params.toString()}`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`Search request failed with ${response.status}`);
+        }
+
+        const payload = (await response.json()) as { cards?: Card[] };
+        setResults(payload.cards ?? []);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setResults(fallbackResults);
+        setSearchError("Search is using local board data while the API is unavailable.");
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearching(false);
+        }
+      }
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void searchCards();
+    }, 160);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [board.id, fallbackResults, isOpen, query]);
 
   if (!isOpen) return null;
 
@@ -1076,6 +1127,11 @@ function SearchDialog({
             <X size={15} />
           </button>
         </header>
+        {isSearching || searchError ? (
+          <div className={`searchState ${searchError ? "searchStateError" : ""}`}>
+            {searchError || "Searching"}
+          </div>
+        ) : null}
         <div className="searchResults">
           {results.map((card) => (
             <button
@@ -1287,7 +1343,13 @@ function DetailPanel({ card, board }: { card: Card; board: Board }) {
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
 
-export function BoardEditor({ board: initialBoard }: { board: Board }) {
+export function BoardEditor({
+  board: initialBoard,
+  initialSyncStatus = "Loaded"
+}: {
+  board: Board;
+  initialSyncStatus?: string;
+}) {
   const [board, setBoard] = useState(initialBoard);
   const [activeView, setActiveView] = useState<ActiveView>("board");
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>();
@@ -1311,7 +1373,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
   const [filesError, setFilesError] = useState("");
   const [deletedCards, setDeletedCards] = useState<Card[]>([]);
   const [isTrashLoading, setIsTrashLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState("Local demo");
+  const [syncStatus, setSyncStatus] = useState(initialSyncStatus);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   useEffect(() => {
@@ -1336,7 +1398,7 @@ export function BoardEditor({ board: initialBoard }: { board: Board }) {
         setSyncStatus("Synced");
       } catch {
         if (!cancelled) {
-          setSyncStatus("Offline demo");
+          setSyncStatus("Refresh failed");
         }
       }
     }

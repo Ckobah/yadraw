@@ -69,6 +69,8 @@ See:
 
 - [V2_FOUNDATION.md](V2_FOUNDATION.md)
 - [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
+- [docs/CORE_FOUNDATION_INSTRUCTIONS.md](docs/CORE_FOUNDATION_INSTRUCTIONS.md)
+- [docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md](docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md)
 
 ### Architecture
 
@@ -135,6 +137,17 @@ Create a local environment file:
 copy .env.example .env
 ```
 
+The prototype API now uses explicit storage and user context:
+
+```text
+YADRAW_STORAGE=postgres
+DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
+DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
+DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
+```
+
+If `YADRAW_STORAGE=postgres` is selected and PostgreSQL is unavailable, the API fails at startup instead of silently switching to memory storage.
+
 Start the API:
 
 ```bash
@@ -150,8 +163,10 @@ npm run dev:web
 Open:
 
 ```text
-http://127.0.0.1:3000
+http://127.0.0.1:3000/boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
 ```
+
+The board route loads the board through the API as the source of truth.
 
 ### v2 Database
 
@@ -190,6 +205,7 @@ npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
 ```bash
 npm run typecheck
 npm run test
+npm run test:postgres
 npm run build
 ```
 
@@ -201,6 +217,8 @@ Current tests cover:
 - v2 service validation
 - v2 memory repository workflow
 - optional v2 PostgreSQL persistence workflow
+- prototype/core request context, workspace role checks, unified API errors, metadata protection, and board-scoped search
+- prototype/core PostgreSQL smoke tests through a temporary schema
 
 ### Security
 
@@ -214,6 +232,8 @@ Implemented baseline protections include:
 - `.env` excluded from Git
 
 Authentication and workspace authorization are still planned work.
+
+The prototype/core API already includes a development user context and minimal workspace role checks. A real auth provider, secure sessions, invites, and production permission policy are still planned work.
 
 ### Roadmap
 
@@ -296,6 +316,8 @@ Yadraw пока не готовый продукт. Сейчас основна�
 
 - [V2_FOUNDATION.md](V2_FOUNDATION.md)
 - [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
+- [docs/CORE_FOUNDATION_INSTRUCTIONS.md](docs/CORE_FOUNDATION_INSTRUCTIONS.md)
+- [docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md](docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md)
 
 ### Архитектура
 
@@ -362,6 +384,17 @@ npm run infra:up
 copy .env.example .env
 ```
 
+Prototype API теперь использует явный storage и user context:
+
+```text
+YADRAW_STORAGE=postgres
+DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
+DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
+DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
+```
+
+Если выбран `YADRAW_STORAGE=postgres`, а PostgreSQL недоступен, API завершает старт с ошибкой и не переключается в память молча.
+
 Запустить API:
 
 ```bash
@@ -377,8 +410,10 @@ npm run dev:web
 Открыть:
 
 ```text
-http://127.0.0.1:3000
+http://127.0.0.1:3000/boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
 ```
+
+Board route загружает доску через API как источник истины.
 
 ### v2 База Данных
 
@@ -417,6 +452,7 @@ npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
 ```bash
 npm run typecheck
 npm run test
+npm run test:postgres
 npm run build
 ```
 
@@ -428,6 +464,8 @@ npm run build
 - v2 service validation
 - v2 memory repository workflow
 - опциональный v2 PostgreSQL persistence workflow
+- prototype/core request context, workspace role checks, единый формат API errors, защита metadata и board-scoped search
+- prototype/core PostgreSQL smoke tests через временную schema
 
 ### Безопасность
 
@@ -441,6 +479,8 @@ npm run build
 - `.env` исключен из Git
 
 Авторизация и workspace permissions еще не реализованы.
+
+В prototype/core API уже есть development user context и минимальные проверки workspace roles. Настоящий auth provider, secure sessions, invites и production permission policy остаются будущей работой.
 
 ### Roadmap
 

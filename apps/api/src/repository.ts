@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
 import {
   boardSchema,
+  cardMetadataSchema,
   cardTemplates,
   demoBoard,
   demoIds,
@@ -16,6 +17,7 @@ import {
   getCardTemplate,
   type Notification,
   type UpdateCardInput,
+  type WorkspaceRole,
   type WorkspaceMember
 } from "@yadraw/shared";
 
@@ -35,6 +37,10 @@ export type AttachFileInput = {
 
 export type BoardRepository = {
   mode: "postgres" | "memory";
+  close?(): Promise<void>;
+  getBoardRole(userId: string, boardId: string): Promise<WorkspaceRole | null>;
+  getCardRole(userId: string, cardId: string): Promise<WorkspaceRole | null>;
+  getWorkspaceRole(userId: string, workspaceId: string): Promise<WorkspaceRole | null>;
   getBoard(boardId: string): Promise<Board | null>;
   createCard(boardId: string, input: CreateCardInput): Promise<Card | null>;
   updateCard(cardId: string, input: UpdateCardInput): Promise<Card | null>;
@@ -47,7 +53,7 @@ export type BoardRepository = {
   markNotificationRead(notificationId: string, userId: string): Promise<Notification | null>;
   listFiles(boardId: string): Promise<BoardFile[]>;
   attachFile(cardId: string, input: AttachFileInput): Promise<Card | null>;
-  searchCards(query: string): Promise<Card[]>;
+  searchCards(query: string, boardId?: string): Promise<Card[]>;
 };
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -83,16 +89,20 @@ function stripInternalData(data: Record<string, unknown>): Record<string, unknow
   return publicData;
 }
 
+function sanitizeUserData(data: Record<string, unknown> | undefined): Record<string, unknown> {
+  return data ? stripInternalData(data) : {};
+}
+
 function dataWithCardMeta(card: Card): Record<string, unknown> {
   return {
-    ...card.data,
-    _yadraw: {
+    ...sanitizeUserData(card.data),
+    _yadraw: cardMetadataSchema.parse({
       typeKey: card.typeKey,
       inputs: card.inputs,
       outputs: card.outputs,
       tags: card.tags,
       files: card.files
-    }
+    })
   };
 }
 
@@ -148,7 +158,7 @@ function applyCardInput(existing: Card, input: UpdateCardInput): Card {
     typeKey: input.typeKey ?? existing.typeKey,
     title: input.title ?? existing.title,
     status: input.status ?? existing.status,
-    data: input.data ?? existing.data,
+    data: input.data ? sanitizeUserData(input.data) : existing.data,
     position: input.position ?? existing.position,
     size: input.size ?? existing.size,
     style: input.style ?? existing.style,
@@ -263,8 +273,28 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
   const notifications: Notification[] = structuredClone(demoNotifications);
   const deletedCards: Card[] = [];
 
+  function getMemoryWorkspaceRole(userId: string, workspaceId: string): WorkspaceRole | null {
+    if (workspaceId !== memoryBoard.workspaceId) return null;
+    return demoWorkspaceMembers.find((member) => member.userId === userId)?.role ?? null;
+  }
+
   return {
     mode: "memory",
+
+    async getBoardRole(userId, boardId) {
+      if (boardId !== memoryBoard.id) return null;
+      return getMemoryWorkspaceRole(userId, memoryBoard.workspaceId);
+    },
+
+    async getCardRole(userId, cardId) {
+      const card = [...memoryBoard.cards, ...deletedCards].find((item) => item.id === cardId);
+      if (!card) return null;
+      return getMemoryWorkspaceRole(userId, memoryBoard.workspaceId);
+    },
+
+    async getWorkspaceRole(userId, workspaceId) {
+      return getMemoryWorkspaceRole(userId, workspaceId);
+    },
 
     async getBoard(boardId) {
       if (boardId !== memoryBoard.id) return null;
@@ -281,7 +311,7 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
         title: input.title ?? "Untitled card",
         description: input.description,
         status: input.status ?? "draft",
-        data: input.data ?? {},
+        data: sanitizeUserData(input.data),
         position: input.position ?? { x: 180, y: 160 },
         size: input.size ?? { width: 300, height: 175 },
         style: input.style ?? { accent: "blue" },
@@ -380,7 +410,9 @@ export function createMemoryRepository(sourceBoard: Board = demoBoard): BoardRep
       return memoryBoard.cards[index];
     },
 
-    async searchCards(query) {
+    async searchCards(query, boardId) {
+      if (boardId && boardId !== memoryBoard.id) return [];
+
       const needle = query.trim().toLowerCase();
       if (!needle) return memoryBoard.cards;
 
@@ -504,8 +536,69 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
     return row ? cardFromRow({ ...row, type_key: nextCard.typeKey }) : null;
   }
 
+  async function getWorkspaceRoleForUser(
+    userId: string,
+    workspaceId: string
+  ): Promise<WorkspaceRole | null> {
+    const result = await pool.query<{ role: WorkspaceRole }>(
+      `
+        select wm.role
+        from workspace_members wm
+        join workspaces w on w.id = wm.workspace_id
+        where wm.user_id = $1
+          and wm.workspace_id = $2
+          and w.deleted_at is null
+        limit 1
+      `,
+      [userId, workspaceId]
+    );
+
+    return result.rows[0]?.role ?? null;
+  }
+
   return {
     mode: "postgres",
+
+    async close() {
+      await pool.end();
+    },
+
+    async getBoardRole(userId, boardId) {
+      const result = await pool.query<{ role: WorkspaceRole }>(
+        `
+          select wm.role
+          from boards b
+          join workspace_members wm on wm.workspace_id = b.workspace_id
+          where b.id = $1
+            and b.deleted_at is null
+            and wm.user_id = $2
+          limit 1
+        `,
+        [boardId, userId]
+      );
+
+      return result.rows[0]?.role ?? null;
+    },
+
+    async getCardRole(userId, cardId) {
+      const result = await pool.query<{ role: WorkspaceRole }>(
+        `
+          select wm.role
+          from cards c
+          join workspace_members wm on wm.workspace_id = c.workspace_id
+          where c.id = $1
+            and wm.user_id = $2
+          limit 1
+        `,
+        [cardId, userId]
+      );
+
+      return result.rows[0]?.role ?? null;
+    },
+
+    async getWorkspaceRole(userId, workspaceId) {
+      return getWorkspaceRoleForUser(userId, workspaceId);
+    },
 
     async getBoard(boardId) {
       const boardResult = await pool.query(
@@ -572,7 +665,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
         title: input.title ?? "Untitled card",
         description: input.description,
         status: input.status ?? "draft",
-        data: input.data ?? {},
+        data: sanitizeUserData(input.data),
         position: input.position ?? { x: 180, y: 160 },
         size: input.size ?? { width: 300, height: 175 },
         style: input.style ?? { accent: "blue" },
@@ -776,7 +869,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
       });
     },
 
-    async searchCards(query) {
+    async searchCards(query, boardId) {
       const needle = query.trim();
       const result = await pool.query(
         `
@@ -784,6 +877,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
           from cards c
           left join card_types ct on ct.id = c.type_id
           where c.deleted_at is null
+            and ($2::uuid is null or c.board_id = $2::uuid)
             and (
               $1 = ''
               or c.title ilike '%' || $1 || '%'
@@ -793,7 +887,7 @@ export async function createPostgresRepository(databaseUrl: string): Promise<Boa
           order by c.updated_at desc
           limit 50
         `,
-        [needle]
+        [needle, boardId ?? null]
       );
 
       return result.rows.map(cardFromRow);

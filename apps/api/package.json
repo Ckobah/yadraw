@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:postgres": "node scripts/require-postgres-test-env.mjs && vitest run src/repository.postgres.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

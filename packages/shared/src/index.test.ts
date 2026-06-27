@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   boardSchema,
   buildCardInputFromTemplate,
+  cardMetadataSchema,
   cardSchema,
   cardTemplates,
   createCardInputSchema,
@@ -62,6 +63,24 @@ describe("shared data schemas", () => {
         size: { width: 0, height: 180 }
       })
     ).toThrow();
+  });
+
+  it("defines internal card metadata separately from user data", () => {
+    expect(
+      cardMetadataSchema.parse({
+        typeKey: "note",
+        inputs: ["input"],
+        outputs: ["output"],
+        tags: ["draft"],
+        files: []
+      })
+    ).toEqual({
+      typeKey: "note",
+      inputs: ["input"],
+      outputs: ["output"],
+      tags: ["draft"],
+      files: []
+    });
   });
 
   it("builds create payloads from card templates", () => {
