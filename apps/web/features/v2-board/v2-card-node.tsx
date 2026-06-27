@@ -97,7 +97,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
       {/* Expand arrow — no behavior yet */}
       <button
-        className="v2CardExpandButton"
+        className="v2CardExpandButton nodrag"
         type="button"
         aria-label="Expand card details"
         tabIndex={-1}
