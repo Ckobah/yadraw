@@ -21,8 +21,12 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 import pg from "pg";
+import { config } from "dotenv";
+import { resolve, dirname } from "node:path";
+
+config({ path: new URL("../../../../.env", import.meta.url) });
+config();
 
 const { Pool } = pg;
 

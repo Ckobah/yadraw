@@ -13,7 +13,11 @@
  */
 
 import pg from "pg";
+import { config } from "dotenv";
 const { Pool } = pg;
+
+config({ path: new URL("../../../../.env", import.meta.url) });
+config();
 
 interface VerifyResult {
   passed: number;
