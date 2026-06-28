@@ -118,7 +118,14 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       </div>
 
       {/* Port labels row — compact */}
-      <div className="v2CardPortRow">
+      <div
+        className="v2CardPortRow"
+        style={{
+          fontFamily: card.visualStyle?.fontFamily ?? undefined,
+          textAlign: card.visualStyle?.textAlign ?? undefined,
+          color: card.visualStyle?.textColor ?? undefined,
+        }}
+      >
         {inputPort && (
           <span className="v2CardPortLabel v2CardPortLabelInput">
             {inputPort.label}
@@ -150,7 +157,13 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
       {/* Expanded content */}
       {data.expanded ? (
-        <div className="v2CardExpandedContent">
+        <div
+          className="v2CardExpandedContent"
+          style={{
+            fontFamily: card.visualStyle?.fontFamily ?? undefined,
+            color: card.visualStyle?.textColor ?? undefined,
+          }}
+        >
           <p className="v2CardDescription">
             {card.description || "No description"}
           </p>

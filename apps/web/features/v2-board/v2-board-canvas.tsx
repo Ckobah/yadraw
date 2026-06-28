@@ -22,6 +22,7 @@ import { V2CardNodeComponent, type V2CardNode } from "./v2-card-node";
 import {
   updateV2CardPosition,
   updateV2CardSize,
+  updateV2CardVisualStyle,
   createV2Connection,
   deleteV2Connection,
 } from "./api";
@@ -185,6 +186,46 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const handleUpdateVisualStyle = useCallback(
+    async (
+      cardId: string,
+      patch: {
+        fontFamily?: string;
+        textAlign?: "left" | "center" | "right";
+        textColor?: string;
+      }
+    ) => {
+      // Find current visualStyle from nodes state
+      const node = nodes.find((n) => n.id === cardId);
+      const current = (node?.data as { card?: { visualStyle?: Record<string, string> } })?.card?.visualStyle ?? {};
+      const nextVisualStyle = { ...current, ...patch };
+
+      // Optimistic local update
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id !== cardId) return n;
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              card: { ...n.data.card, visualStyle: nextVisualStyle },
+            },
+          };
+        })
+      );
+
+      setSaveStatus("saving");
+      try {
+        await updateV2CardVisualStyle(cardId, nextVisualStyle);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to save visual style:", err);
+        setSaveStatus("error");
+      }
+    },
+    [nodes, setNodes]
+  );
+
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     setNodes((nds) =>
@@ -321,17 +362,75 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       panOnDrag={true}
       zoomOnScroll={true}
     >
-      {/* Visual edit mode indicator */}
+      {/* Visual edit mode indicator & controls */}
       {visualEditingCardId && (() => {
-        const editingCard = cards.find((c) => c.id === visualEditingCardId);
+        const editingNode = nodes.find((n) => n.id === visualEditingCardId);
+        const editingCard = editingNode?.data?.card ?? cards.find((c) => c.id === visualEditingCardId);
+        const vs = editingCard?.visualStyle ?? {};
         return (
           <div className="v2VisualEditPanel">
-            <strong>Visual edit mode</strong>
-            <span>
-              Editing: <em>{editingCard?.title ?? visualEditingCardId}</em>
-            </span>
+            <div className="v2VisualEditPanelHeader">
+              <strong>Visual edit mode</strong>
+              <span className="v2VisualEditCardTitle">
+                Editing: <em>{editingCard?.title ?? visualEditingCardId}</em>
+              </span>
+            </div>
+
+            {/* Font family */}
+            <label className="v2VisualEditLabel">
+              Font family
+              <select
+                className="v2VisualEditSelect nodrag"
+                value={vs.fontFamily ?? ""}
+                onChange={(e) => {
+                  handleUpdateVisualStyle(visualEditingCardId, {
+                    fontFamily: e.target.value || undefined,
+                  });
+                }}
+              >
+                <option value="">Default</option>
+                <option value="Inter">Inter</option>
+                <option value="Arial">Arial</option>
+                <option value="Georgia">Georgia</option>
+                <option value="monospace">Monospace</option>
+              </select>
+            </label>
+
+            {/* Text align */}
+            <label className="v2VisualEditLabel">
+              Text align
+              <span className="v2VisualEditAlignRow">
+                {(["left", "center", "right"] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    className={`v2VisualEditAlignBtn nodrag${(vs.textAlign ?? "left") === align ? " v2VisualEditAlignBtnActive" : ""}`}
+                    onClick={() => handleUpdateVisualStyle(visualEditingCardId, { textAlign: align })}
+                    title={align.charAt(0).toUpperCase() + align.slice(1)}
+                  >
+                    {align === "left" ? "\u2190" : align === "center" ? "\u2194" : "\u2192"}
+                  </button>
+                ))}
+              </span>
+            </label>
+
+            {/* Text color */}
+            <label className="v2VisualEditLabel">
+              Text color
+              <input
+                type="color"
+                className="v2VisualEditColor nodrag"
+                value={vs.textColor ?? "#111827"}
+                onChange={(e) => {
+                  handleUpdateVisualStyle(visualEditingCardId, {
+                    textColor: e.target.value,
+                  });
+                }}
+              />
+            </label>
+
             <span className="v2VisualEditHint">
-              Drag corner handles to resize. Only width and height are editable.
+              Drag corner handles to resize. Double-click card to exit.
             </span>
           </div>
         );
