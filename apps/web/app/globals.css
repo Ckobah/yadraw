@@ -364,7 +364,6 @@ button:disabled {
 
 .accountRow div {
   display: grid;
-  flex: 1;
 }
 
 .accountRow small {
@@ -772,7 +771,6 @@ button:disabled {
 
 .nodeTitleWrap {
   display: grid;
-  flex: 1;
   min-width: 0;
   gap: 4px;
 }
@@ -1265,7 +1263,6 @@ button:disabled {
 }
 
 .fileRow span {
-  flex: 1;
 }
 
 .fileRow small {
@@ -1590,7 +1587,6 @@ button:disabled {
 }
 
 .searchDialogHeader input {
-  flex: 1;
   min-width: 0;
   border: 0;
   color: var(--text);
@@ -1775,7 +1771,6 @@ button:disabled {
 
 .shareMemberIdentity {
   display: grid;
-  flex: 1;
   min-width: 0;
   gap: 3px;
 }
@@ -2222,7 +2217,6 @@ button:disabled {
 }
 
 .v2CardTitle {
-  flex: 1;
   min-width: 0;
   font-size: 13px;
   font-weight: 700;
