@@ -32,6 +32,7 @@ export type V2CreateCardRecordInput = {
   position: { x: number; y: number };
   size: V2Size;
   status: V2CardStatus;
+  visualStyle?: Record<string, unknown>;
 };
 
 export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {

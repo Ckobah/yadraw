@@ -149,6 +149,7 @@ describe("v2 board service", () => {
       position: { x: 0, y: 0 },
       size: { width: 280, height: 160 },
       status: "active" as const,
+      visualStyle: {} as const,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z"
     };
