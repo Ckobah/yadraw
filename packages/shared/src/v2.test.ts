@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   v2ApiContracts,
   v2BoardDetailSchema,
+  v2CardSchema,
+  v2CardVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2UpdateCardBodySchema
@@ -110,6 +112,104 @@ describe("v2 API contracts", () => {
     });
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
+  });
+});
+
+describe("v2CardVisualStyleSchema", () => {
+  it("accepts a full visual style", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({
+        fontFamily: "Inter",
+        textAlign: "center",
+        textColor: "#111827"
+      })
+    ).toEqual({
+      fontFamily: "Inter",
+      textAlign: "center",
+      textColor: "#111827"
+    });
+  });
+
+  it("accepts partial visual style", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({
+        textAlign: "right"
+      })
+    ).toEqual({ textAlign: "right" });
+  });
+
+  it("accepts empty object", () => {
+    expect(v2CardVisualStyleSchema.parse({})).toEqual({});
+  });
+
+  it("rejects invalid textAlign", () => {
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ textAlign: "justify" })
+    ).toThrow();
+  });
+
+  it("rejects fontFamily over 80 chars", () => {
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ fontFamily: "a".repeat(81) })
+    ).toThrow();
+  });
+
+  it("rejects textColor over 32 chars", () => {
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ textColor: "a".repeat(33) })
+    ).toThrow();
+  });
+});
+
+describe("v2CardSchema with visualStyle", () => {
+  const baseCard = {
+    id: "66666666-6666-4666-8666-666666666666",
+    workspaceId,
+    boardId,
+    cardTypeId,
+    title: "Test Card",
+    description: "A test card",
+    data: { key: "value" },
+    position: { x: 100, y: 200 },
+    size: { width: 280, height: 170 },
+    status: "active",
+    createdAt: timestamp,
+    updatedAt: timestamp
+  } as const;
+
+  it("defaults visualStyle to {} when omitted", () => {
+    const card = v2CardSchema.parse(baseCard);
+    expect(card.visualStyle).toEqual({});
+  });
+
+  it("accepts card with visualStyle", () => {
+    const card = v2CardSchema.parse({
+      ...baseCard,
+      visualStyle: { fontFamily: "Mono", textAlign: "left", textColor: "#333" }
+    });
+    expect(card.visualStyle).toEqual({
+      fontFamily: "Mono",
+      textAlign: "left",
+      textColor: "#333"
+    });
+  });
+});
+
+describe("v2UpdateCardBodySchema with visualStyle", () => {
+  it("allows updating visualStyle alone", () => {
+    const result = v2UpdateCardBodySchema.parse({
+      visualStyle: { textAlign: "center" }
+    });
+    expect(result).toEqual({ visualStyle: { textAlign: "center" } });
+  });
+
+  it("rejects unknown fields alongside visualStyle", () => {
+    expect(() =>
+      v2UpdateCardBodySchema.parse({
+        visualStyle: { textAlign: "center" },
+        unknownField: true
+      })
+    ).toThrow();
   });
 });
 

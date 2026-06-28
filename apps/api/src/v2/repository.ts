@@ -173,6 +173,7 @@ function cardFromRow(row: QueryResultRow): V2Card {
       width: Number(row.width),
       height: Number(row.height)
     },
+    visualStyle: asObject(row.visual_style),
     status: row.status,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at)
@@ -629,9 +630,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             position_y,
             width,
             height,
+            visual_style,
             status
           )
-          values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
+          values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11::jsonb, $12)
           returning *
         `,
         [
@@ -645,6 +647,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           input.position.y,
           input.size.width,
           input.size.height,
+          JSON.stringify(input.visualStyle ?? {}),
           input.status
         ]
       );
@@ -662,6 +665,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         data: input.data ?? existing.data,
         position: input.position ?? existing.position,
         size: input.size ?? existing.size,
+        visualStyle: input.visualStyle ?? existing.visualStyle,
         status: input.status ?? existing.status
       };
 
@@ -675,7 +679,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               position_y = $6,
               width = $7,
               height = $8,
-              status = $9
+              visual_style = $9::jsonb,
+              status = $10
           where id = $1
             and deleted_at is null
           returning *
@@ -689,6 +694,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           next.position.y,
           next.size.width,
           next.size.height,
+          JSON.stringify(next.visualStyle),
           next.status
         ]
       );

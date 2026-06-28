@@ -105,7 +105,16 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         >
           {cardType.key}
         </span>
-        <span className="v2CardTitle">{card.title}</span>
+        <span
+          className="v2CardTitle"
+          style={{
+            fontFamily: card.visualStyle?.fontFamily,
+            textAlign: card.visualStyle?.textAlign,
+            color: card.visualStyle?.textColor,
+          }}
+        >
+          {card.title}
+        </span>
       </div>
 
       {/* Port labels row — compact */}

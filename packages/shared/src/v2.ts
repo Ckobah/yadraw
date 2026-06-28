@@ -29,6 +29,12 @@ export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
 
+export const v2CardVisualStyleSchema = z.object({
+  fontFamily: z.string().min(1).max(80).optional(),
+  textAlign: z.enum(["left", "center", "right"]).optional(),
+  textColor: z.string().min(1).max(32).optional(),
+});
+
 export const v2WorkspaceSchema = z.object({
   id: v2UuidSchema,
   name: z.string().min(1),
@@ -92,6 +98,7 @@ export const v2CardSchema = z.object({
   data: v2JsonObjectSchema,
   position: v2PositionSchema,
   size: v2SizeSchema,
+  visualStyle: v2CardVisualStyleSchema.default({}),
   status: v2CardStatusSchema,
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
@@ -154,6 +161,7 @@ export const v2UpdateCardBodySchema = z
     data: v2JsonObjectSchema.optional(),
     position: v2PositionSchema.optional(),
     size: v2SizeSchema.optional(),
+    visualStyle: v2CardVisualStyleSchema.optional(),
     status: v2CardStatusSchema.optional()
   })
   .strict();
@@ -245,6 +253,7 @@ export type V2ConnectionStatus = z.infer<typeof v2ConnectionStatusSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
+export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;

@@ -309,6 +309,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       onNodeDoubleClick={handleNodeDoubleClick}
       onConnect={handleConnect}
       onEdgesDelete={handleEdgesDelete}
+      onPaneClick={() => setVisualEditingCardId(null)}
       nodeTypes={nodeTypes}
       fitView
       fitViewOptions={{ padding: 0.3 }}
