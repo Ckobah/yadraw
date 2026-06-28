@@ -11,7 +11,7 @@ import {
   type Edge,
   type Connection,
 } from "@xyflow/react";
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback, useEffect, useState } from "react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -57,6 +57,21 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const { board, cards, connections, cardTypes } = boardDetail;
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  const toggleCardExpanded = useCallback((cardId: string) => {
+    setExpandedCardIds((current) => {
+      const next = new Set(current);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  }, []);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const nodes: V2CardNode[] = cards.map((card: V2Card) => {
@@ -118,6 +133,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     () => ({ v2Card: V2CardNodeComponent }),
     []
   );
+
+  // ── Sync expanded state into node data ───────────────────────────
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          expanded: expandedCardIds.has(node.id),
+          onToggleExpanded: toggleCardExpanded,
+        },
+      }))
+    );
+  }, [expandedCardIds, setNodes, toggleCardExpanded]);
 
   // ── Drag save ────────────────────────────────────────────────────
   const handleNodeDragStop = useCallback(

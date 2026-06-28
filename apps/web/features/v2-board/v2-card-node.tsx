@@ -8,6 +8,8 @@ import type { Node } from "@xyflow/react";
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
+  expanded?: boolean;
+  onToggleExpanded?: (cardId: string) => void;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
@@ -95,15 +97,34 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         )}
       </div>
 
-      {/* Expand arrow — no behavior yet */}
+      {/* Expand arrow */}
       <button
-        className="v2CardExpandButton nodrag"
         type="button"
-        aria-label="Expand card details"
-        tabIndex={-1}
+        className="v2CardExpandButton nodrag"
+        aria-label={data.expanded ? "Collapse card" : "Expand card"}
+        aria-expanded={data.expanded ?? false}
+        onClick={(event) => {
+          event.stopPropagation();
+          data.onToggleExpanded?.(card.id);
+        }}
       >
-        <ChevronDown size={14} />
+        <ChevronDown
+          size={16}
+          className={data.expanded ? "v2CardExpandIcon v2CardExpandIconOpen" : "v2CardExpandIcon"}
+        />
       </button>
+
+      {/* Expanded content */}
+      {data.expanded ? (
+        <div className="v2CardExpandedContent">
+          <p className="v2CardDescription">
+            {card.description || "No description"}
+          </p>
+          <pre className="v2CardDataPreview">
+            {JSON.stringify(card.data, null, 2)}
+          </pre>
+        </div>
+      ) : null}
     </article>
   );
 }
