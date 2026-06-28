@@ -2257,6 +2257,12 @@ button:disabled {
   font-size: 8px;
 }
 
+/* ── V2 card body — flex vertical align area ── */
+
+.v2CardBody {
+  overflow-y: auto;
+}
+
 .v2CardExpandButton {
   position: absolute;
   bottom: 4px;

@@ -143,6 +143,7 @@ export async function updateV2CardVisualStyle(
     fontFamily?: string;
     textAlign?: "left" | "center" | "right";
     textColor?: string;
+    bodyVerticalAlign?: "top" | "center" | "bottom";
   }
 ): Promise<void> {
   const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {

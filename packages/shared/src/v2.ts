@@ -33,6 +33,7 @@ export const v2CardVisualStyleSchema = z.object({
   fontFamily: z.string().min(1).max(80).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
   textColor: z.string().min(1).max(32).optional(),
+  bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
 });
 
 export const v2WorkspaceSchema = z.object({

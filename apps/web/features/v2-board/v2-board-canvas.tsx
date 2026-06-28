@@ -193,6 +193,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         fontFamily?: string;
         textAlign?: "left" | "center" | "right";
         textColor?: string;
+        bodyVerticalAlign?: "top" | "center" | "bottom";
       }
     ) => {
       // Find current visualStyle from nodes state
@@ -427,6 +428,24 @@ export function V2BoardCanvas({ boardDetail }: Props) {
                   });
                 }}
               />
+            </label>
+
+            {/* Body vertical alignment */}
+            <label className="v2VisualEditLabel">
+              Body vertical
+              <span className="v2VisualEditAlignRow">
+                {(["top", "center", "bottom"] as const).map((valign) => (
+                  <button
+                    key={valign}
+                    type="button"
+                    className={`v2VisualEditAlignBtn nodrag${(vs.bodyVerticalAlign ?? "top") === valign ? " v2VisualEditAlignBtnActive" : ""}`}
+                    onClick={() => handleUpdateVisualStyle(visualEditingCardId, { bodyVerticalAlign: valign })}
+                    title={valign.charAt(0).toUpperCase() + valign.slice(1)}
+                  >
+                    {valign === "top" ? "\u2191" : valign === "center" ? "\u2195" : "\u2193"}
+                  </button>
+                ))}
+              </span>
             </label>
 
             <span className="v2VisualEditHint">

@@ -24,6 +24,14 @@ function getOutputPort(ports: V2CardTypePort[]): V2CardTypePort | undefined {
   return ports.find((p) => p.direction === "output");
 }
 
+function bodyVerticalJustify(
+  value?: "top" | "center" | "bottom"
+): "flex-start" | "center" | "flex-end" {
+  if (value === "center") return "center";
+  if (value === "bottom") return "flex-end";
+  return "flex-start";
+}
+
 const accentColorByType: Record<string, string> = {
   source: "var(--green)",
   task: "var(--blue)",
@@ -45,6 +53,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     <article
       className="v2CardNode"
       style={{
+        display: "flex",
+        flexDirection: "column",
         borderColor: selected ? accentColor : "var(--line)",
         boxShadow: selected
           ? `0 0 0 2px ${accentColor}33, var(--shadow)`
@@ -97,7 +107,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         />
       )}
 
-      {/* Compact header */}
+      {/* Compact header (fixed top) */}
       <div className="v2CardHeader">
         <span
           className="v2CardTypeBadge"
@@ -117,7 +127,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </span>
       </div>
 
-      {/* Port labels row — compact */}
+      {/* Port labels row — compact (fixed below header) */}
       <div
         className="v2CardPortRow"
         style={{
@@ -138,7 +148,37 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         )}
       </div>
 
-      {/* Expand arrow */}
+      {/* Body area — flexes to fill remaining space, vertically aligns */}
+      <div
+        className="v2CardBody"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: bodyVerticalJustify(card.visualStyle?.bodyVerticalAlign),
+          flex: 1,
+          minHeight: 0,
+        }}
+      >
+        {/* Expanded content */}
+        {data.expanded ? (
+          <div
+            className="v2CardExpandedContent"
+            style={{
+              fontFamily: card.visualStyle?.fontFamily ?? undefined,
+              color: card.visualStyle?.textColor ?? undefined,
+            }}
+          >
+            <p className="v2CardDescription">
+              {card.description || "No description"}
+            </p>
+            <pre className="v2CardDataPreview">
+              {JSON.stringify(card.data, null, 2)}
+            </pre>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Expand arrow — absolute position relative to article */}
       <button
         type="button"
         className="v2CardExpandButton nodrag"
@@ -154,24 +194,6 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           className={data.expanded ? "v2CardExpandIcon v2CardExpandIconOpen" : "v2CardExpandIcon"}
         />
       </button>
-
-      {/* Expanded content */}
-      {data.expanded ? (
-        <div
-          className="v2CardExpandedContent"
-          style={{
-            fontFamily: card.visualStyle?.fontFamily ?? undefined,
-            color: card.visualStyle?.textColor ?? undefined,
-          }}
-        >
-          <p className="v2CardDescription">
-            {card.description || "No description"}
-          </p>
-          <pre className="v2CardDataPreview">
-            {JSON.stringify(card.data, null, 2)}
-          </pre>
-        </div>
-      ) : null}
     </article>
   );
 }

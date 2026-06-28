@@ -159,6 +159,30 @@ describe("v2CardVisualStyleSchema", () => {
       v2CardVisualStyleSchema.parse({ textColor: "a".repeat(33) })
     ).toThrow();
   });
+
+  it("accepts bodyVerticalAlign: top", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({ bodyVerticalAlign: "top" })
+    ).toEqual({ bodyVerticalAlign: "top" });
+  });
+
+  it("accepts bodyVerticalAlign: center", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({ bodyVerticalAlign: "center" })
+    ).toEqual({ bodyVerticalAlign: "center" });
+  });
+
+  it("accepts bodyVerticalAlign: bottom", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({ bodyVerticalAlign: "bottom" })
+    ).toEqual({ bodyVerticalAlign: "bottom" });
+  });
+
+  it("rejects invalid bodyVerticalAlign", () => {
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ bodyVerticalAlign: "stretch" })
+    ).toThrow();
+  });
 });
 
 describe("v2CardSchema with visualStyle", () => {
@@ -210,6 +234,15 @@ describe("v2UpdateCardBodySchema with visualStyle", () => {
         unknownField: true
       })
     ).toThrow();
+  });
+
+  it("accepts visualStyle with bodyVerticalAlign in update body", () => {
+    const result = v2UpdateCardBodySchema.parse({
+      visualStyle: { bodyVerticalAlign: "bottom", textAlign: "left" }
+    });
+    expect(result).toEqual({
+      visualStyle: { bodyVerticalAlign: "bottom", textAlign: "left" }
+    });
   });
 });
 
