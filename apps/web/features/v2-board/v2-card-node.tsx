@@ -1,6 +1,6 @@
 "use client";
 
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { ChevronDown } from "lucide-react";
 import type { V2Card, V2CardType, V2CardTypePort } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
@@ -10,6 +10,8 @@ export type V2CardNodeData = {
   cardType: V2CardType;
   expanded?: boolean;
   onToggleExpanded?: (cardId: string) => void;
+  isVisualEditing?: boolean;
+  onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
@@ -47,9 +49,32 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         boxShadow: selected
           ? `0 0 0 2px ${accentColor}33, var(--shadow)`
           : "var(--shadow)",
-        width: card.size.width,
+        width: "100%",
+        height: "100%",
       }}
     >
+      {/* Resize handles in visual edit mode */}
+      <NodeResizer
+        isVisible={Boolean(data.isVisualEditing)}
+        minWidth={220}
+        minHeight={120}
+        handleStyle={{
+          width: 10,
+          height: 10,
+          backgroundColor: "#000",
+          border: "2px solid #fff",
+          borderRadius: 1,
+        }}
+        lineStyle={{
+          borderColor: "#000",
+        }}
+        onResizeEnd={(_event, params) => {
+          data.onResizeCard?.(card.id, {
+            width: params.width,
+            height: params.height,
+          });
+        }}
+      />
       {/* Input handle — only if card type has an input port */}
       {inputPort && (
         <Handle

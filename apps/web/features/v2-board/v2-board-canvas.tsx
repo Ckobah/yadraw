@@ -21,6 +21,7 @@ import type {
 import { V2CardNodeComponent, type V2CardNode } from "./v2-card-node";
 import {
   updateV2CardPosition,
+  updateV2CardSize,
   createV2Connection,
   deleteV2Connection,
 } from "./api";
@@ -73,6 +74,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     });
   }, []);
 
+  // ── Visual edit mode (state only — handlers below useNodesState) ──
+  const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
+
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const nodes: V2CardNode[] = cards.map((card: V2Card) => {
       const cardType = cardTypeMap.get(card.cardTypeId);
@@ -94,6 +98,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             createdAt: "",
             updatedAt: "",
           },
+        },
+        style: {
+          width: card.size.width,
+          height: card.size.height,
         },
       };
     });
@@ -134,7 +142,50 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
-  // ── Sync expanded state into node data ───────────────────────────
+  // ── Visual edit handlers ─────────────────────────────────────────
+  const handleResizeCard = useCallback(
+    async (cardId: string, size: { width: number; height: number }) => {
+      // Optimistic local update
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id !== cardId) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              card: { ...node.data.card, size },
+            },
+            style: {
+              ...node.style,
+              width: size.width,
+              height: size.height,
+            },
+          };
+        })
+      );
+
+      setSaveStatus("saving");
+      try {
+        await updateV2CardSize(cardId, size);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to save card size:", err);
+        setSaveStatus("error");
+      }
+    },
+    [setNodes]
+  );
+
+  const handleNodeDoubleClick = useCallback(
+    (_event: unknown, node: V2CardNode) => {
+      setVisualEditingCardId((current) =>
+        current === node.id ? null : node.id
+      );
+    },
+    []
+  );
+
+  // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => ({
@@ -143,10 +194,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           ...node.data,
           expanded: expandedCardIds.has(node.id),
           onToggleExpanded: toggleCardExpanded,
+          isVisualEditing: visualEditingCardId === node.id,
+          onResizeCard: handleResizeCard,
         },
       }))
     );
-  }, [expandedCardIds, setNodes, toggleCardExpanded]);
+  }, [expandedCardIds, setNodes, toggleCardExpanded, visualEditingCardId, handleResizeCard]);
 
   // ── Drag save ────────────────────────────────────────────────────
   const handleNodeDragStop = useCallback(
@@ -253,6 +306,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onNodeDragStop={handleNodeDragStop}
+      onNodeDoubleClick={handleNodeDoubleClick}
       onConnect={handleConnect}
       onEdgesDelete={handleEdgesDelete}
       nodeTypes={nodeTypes}
@@ -266,6 +320,21 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       panOnDrag={true}
       zoomOnScroll={true}
     >
+      {/* Visual edit mode indicator */}
+      {visualEditingCardId && (() => {
+        const editingCard = cards.find((c) => c.id === visualEditingCardId);
+        return (
+          <div className="v2VisualEditPanel">
+            <strong>Visual edit mode</strong>
+            <span>
+              Editing: <em>{editingCard?.title ?? visualEditingCardId}</em>
+            </span>
+            <span className="v2VisualEditHint">
+              Drag corner handles to resize. Only width and height are editable.
+            </span>
+          </div>
+        );
+      })()}
       <Background color="var(--line)" gap={24} size={1} />
       <Controls showInteractive={false} />
       <MiniMap

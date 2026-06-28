@@ -114,6 +114,29 @@ export async function updateV2CardPosition(
   }
 }
 
+export async function updateV2CardSize(
+  cardId: string,
+  size: { width: number; height: number }
+): Promise<void> {
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ size }),
+  });
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Size update failed with ${response.status}`,
+      body
+    );
+  }
+}
+
 export async function createV2Connection(
   boardId: string,
   input: {

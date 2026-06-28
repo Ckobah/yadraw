@@ -2286,6 +2286,43 @@ button:disabled {
   outline-offset: -2px;
 }
 
+/* ── Visual edit mode panel ──────────────────── */
+
+.v2VisualEditPanel {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 2px solid #000;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.v2VisualEditPanel strong {
+  font-size: 14px;
+  color: #000;
+}
+
+.v2VisualEditPanel em {
+  font-style: italic;
+  color: var(--text);
+}
+
+.v2VisualEditHint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .v2CardExpandIcon {
   transition: transform 0.2s ease;
 }
