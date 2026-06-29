@@ -8,6 +8,7 @@ export type ApiErrorCode =
   | "internal_error"
   | "invalid_payload"
   | "not_found"
+  | "service_unavailable"
   | "unauthorized";
 
 export type ApiErrorBody = {

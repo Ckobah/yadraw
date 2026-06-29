@@ -1,4 +1,6 @@
+import { createHash, randomUUID } from "node:crypto";
 import {
+  type V2CardAttachment,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2UpdateCardBodySchema,
@@ -12,9 +14,21 @@ import {
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
-import type { V2Repository } from "./repository.js";
+import type {
+  V2CreateCardAttachmentRecordInput,
+  V2FileDownloadRecord,
+  V2Repository
+} from "./repository.js";
+import type { GetObjectResult, V2ObjectStorage } from "./storage.js";
 
-export type V2ServiceErrorCode = "not_found" | "validation_failed" | "conflict" | "forbidden";
+export const V2_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+export type V2ServiceErrorCode =
+  | "not_found"
+  | "validation_failed"
+  | "conflict"
+  | "forbidden"
+  | "storage_unavailable";
 
 export class V2ServiceError extends Error {
   constructor(
@@ -34,6 +48,32 @@ export type V2BoardService = {
   deleteCard(context: RequestContext, cardId: string): Promise<{ deleted: true; id: string }>;
   createConnection(context: RequestContext, boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
   deleteConnection(context: RequestContext, connectionId: string): Promise<{ deleted: true; id: string }>;
+  listCardAttachments(context: RequestContext, cardId: string): Promise<V2CardAttachment[]>;
+  uploadCardAttachment(
+    context: RequestContext,
+    cardId: string,
+    input: {
+      filename: string;
+      body: Buffer;
+      mimeType?: string | null;
+      role?: string;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<V2CardAttachment>;
+  downloadFile(
+    context: RequestContext,
+    fileId: string
+  ): Promise<{
+    filename: string;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    object: GetObjectResult;
+  }>;
+  detachCardAttachment(
+    context: RequestContext,
+    cardId: string,
+    attachmentId: string
+  ): Promise<{ deleted: true; id: string }>;
 };
 
 function cloneJson<T>(value: T): T {
@@ -56,10 +96,71 @@ function forbidden(): never {
   throw new V2ServiceError("forbidden", "Forbidden");
 }
 
-export function createV2BoardService(repository: V2Repository): V2BoardService {
+function storageUnavailable(): never {
+  throw new V2ServiceError("storage_unavailable", "V2 object storage is not configured");
+}
+
+function safeFilename(filename: string): string {
+  const sanitized = filename
+    .replace(/[\\\/]+/g, "-")
+    .replace(/[\u0000-\u001f\u007f]+/g, "")
+    .trim()
+    .slice(0, 160);
+
+  return sanitized || "file";
+}
+
+function buildStoragePath(workspaceId: string, cardId: string, fileId: string, filename: string): string {
+  return `workspaces/${workspaceId}/cards/${cardId}/${fileId}-${safeFilename(filename)}`;
+}
+
+function sha256Hex(body: Buffer): string {
+  return createHash("sha256").update(body).digest("hex");
+}
+
+export function createV2BoardService(
+  repository: V2Repository,
+  options: {
+    objectStorage?: V2ObjectStorage | null;
+    storageBucket?: string | null;
+  } = {}
+): V2BoardService {
   async function authorizeWorkspace(context: RequestContext, workspaceId: string, accessLevel: V2AccessLevel) {
     const role = await repository.getWorkspaceRole(context.userId, workspaceId);
     if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
+  }
+
+  function requireStorage(): { objectStorage: V2ObjectStorage; bucket: string } {
+    if (!options.objectStorage || !options.storageBucket) {
+      storageUnavailable();
+    }
+    return {
+      objectStorage: options.objectStorage,
+      bucket: options.storageBucket
+    };
+  }
+
+  function requireAttachmentRepository(): {
+    listCardAttachments(cardId: string): Promise<V2CardAttachment[]>;
+    createCardAttachment(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
+    getFileForDownload(fileId: string): Promise<V2FileDownloadRecord | null>;
+    detachCardAttachment(cardId: string, attachmentId: string): Promise<boolean>;
+  } {
+    if (
+      !repository.listCardAttachments ||
+      !repository.createCardAttachment ||
+      !repository.getFileForDownload ||
+      !repository.detachCardAttachment
+    ) {
+      throw new V2ServiceError("storage_unavailable", "V2 attachment repository is not available");
+    }
+
+    return {
+      listCardAttachments: repository.listCardAttachments.bind(repository),
+      createCardAttachment: repository.createCardAttachment.bind(repository),
+      getFileForDownload: repository.getFileForDownload.bind(repository),
+      detachCardAttachment: repository.detachCardAttachment.bind(repository)
+    };
   }
 
   return {
@@ -228,6 +329,108 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
       }
 
       return { deleted: true, id: connectionId };
+    },
+
+    async listCardAttachments(context, cardId) {
+      const existing = await repository.getCard(cardId);
+      if (!existing) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "read");
+      return requireAttachmentRepository().listCardAttachments(cardId);
+    },
+
+    async uploadCardAttachment(context, cardId, input) {
+      const card = await repository.getCard(cardId);
+      if (!card) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, card.workspaceId, "write");
+
+      if (input.body.length === 0) {
+        validationFailed("File is empty");
+      }
+      if (input.body.length > V2_MAX_ATTACHMENT_BYTES) {
+        validationFailed("File exceeds 25MB limit");
+      }
+
+      const role = (input.role ?? "attachment").trim() || "attachment";
+      const fileId = randomUUID();
+      const filename = safeFilename(input.filename);
+      const storage = requireStorage();
+      const storagePath = buildStoragePath(card.workspaceId, card.id, fileId, filename);
+      const mimeType = input.mimeType?.trim() || "application/octet-stream";
+      const sha256 = sha256Hex(input.body);
+
+      await storage.objectStorage.putObject({
+        bucket: storage.bucket,
+        key: storagePath,
+        body: input.body,
+        contentType: mimeType,
+        metadata: {
+          "yadraw-card-id": card.id,
+          "yadraw-file-id": fileId
+        }
+      });
+
+      try {
+        return await requireAttachmentRepository().createCardAttachment({
+          fileId,
+          cardId: card.id,
+          workspaceId: card.workspaceId,
+          storageBucket: storage.bucket,
+          storagePath,
+          filename,
+          mimeType,
+          sizeBytes: input.body.length,
+          sha256,
+          role,
+          metadata: cloneJson(input.metadata ?? {}),
+          createdBy: context.userId
+        });
+      } catch (error) {
+        console.warn(
+          {
+            fileId,
+            cardId: card.id,
+            storageBucket: storage.bucket,
+            storagePath
+          },
+          "V2 attachment DB insert failed after object upload; orphan object may remain"
+        );
+        throw error;
+      }
+    },
+
+    async downloadFile(context, fileId) {
+      const file = await requireAttachmentRepository().getFileForDownload(fileId);
+      if (!file) {
+        notFound("File not found");
+      }
+      await authorizeWorkspace(context, file.workspaceId, "read");
+      const storage = requireStorage();
+      const object = await storage.objectStorage.getObject(file.storageBucket, file.storagePath);
+
+      return {
+        filename: file.filename,
+        mimeType: file.mimeType ?? object.contentType ?? "application/octet-stream",
+        sizeBytes: file.sizeBytes ?? object.contentLength ?? null,
+        object
+      };
+    },
+
+    async detachCardAttachment(context, cardId, attachmentId) {
+      const card = await repository.getCard(cardId);
+      if (!card) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, card.workspaceId, "write");
+      const deleted = await requireAttachmentRepository().detachCardAttachment(cardId, attachmentId);
+      if (!deleted) {
+        notFound("Attachment not found");
+      }
+
+      return { deleted: true, id: attachmentId };
     }
   };
 }

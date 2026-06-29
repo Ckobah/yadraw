@@ -1,13 +1,15 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { config } from "dotenv";
 import Fastify from "fastify";
 import type { RequestContext } from "./context.js";
 import { getRequestContext } from "./context.js";
 import { sendApiError } from "./http.js";
-import { V2ServiceError, createV2BoardService } from "./v2/service.js";
+import { V2ServiceError, V2_MAX_ATTACHMENT_BYTES, createV2BoardService } from "./v2/service.js";
 import { createV2PostgresRepository } from "./v2/repository.js";
 import { registerV2Routes } from "./v2/routes.js";
 import { validateV2RuntimeConfig } from "./v2/config.js";
+import { createS3ObjectStorage, readV2StorageConfig } from "./v2/storage.js";
 
 config({ path: new URL("../../../.env", import.meta.url) });
 config();
@@ -19,7 +21,8 @@ declare module "fastify" {
 }
 
 const server = Fastify({
-  logger: true
+  logger: true,
+  bodyLimit: V2_MAX_ATTACHMENT_BYTES + 1024 * 1024
 });
 
 const corsOrigins = (process.env.CORS_ORIGIN ?? "http://127.0.0.1:3000,http://localhost:3000")
@@ -30,6 +33,8 @@ const corsOrigins = (process.env.CORS_ORIGIN ?? "http://127.0.0.1:3000,http://lo
 await server.register(cors, {
   origin: corsOrigins
 });
+
+await server.register(multipart);
 
 function readV2StorageMode(): "v2-postgres" | "memory" {
   const mode = process.env.YADRAW_V2_STORAGE ?? "v2-postgres";
@@ -63,7 +68,11 @@ async function createV2Repository() {
 
 // Create v2 service and register v2 routes
 const v2Repository = await createV2Repository();
-const v2Service = createV2BoardService(v2Repository);
+const v2StorageConfig = readV2StorageConfig();
+const v2Service = createV2BoardService(v2Repository, {
+  objectStorage: v2StorageConfig ? createS3ObjectStorage(v2StorageConfig) : null,
+  storageBucket: v2StorageConfig?.bucket ?? null
+});
 registerV2Routes(server, v2Service);
 
 server.setErrorHandler((error, request, reply) => {

@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Pool, type QueryResultRow } from "pg";
 import {
   v2BoardDetailSchema,
+  v2CardAttachmentSchema,
   v2CardSchema,
   v2CardTypeSchema,
   v2ConnectionSchema,
   type V2Board,
   type V2BoardDetail,
+  type V2CardAttachment,
   type V2Card,
   type V2CardStatus,
   type V2CardType,
@@ -42,6 +44,31 @@ export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
   status: V2ConnectionStatus;
 };
 
+export type V2CreateCardAttachmentRecordInput = {
+  fileId: string;
+  cardId: string;
+  workspaceId: string;
+  storageBucket: string;
+  storagePath: string;
+  filename: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  sha256?: string | null;
+  role?: string;
+  metadata?: Record<string, unknown>;
+  createdBy?: string | null;
+};
+
+export type V2FileDownloadRecord = {
+  fileId: string;
+  workspaceId: string;
+  storageBucket: string;
+  storagePath: string;
+  filename: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+};
+
 export type V2Repository = {
   close?(): Promise<void>;
   getWorkspaceRole(userId: string, workspaceId: string): Promise<V2WorkspaceRole | null>;
@@ -59,6 +86,10 @@ export type V2Repository = {
   getConnection(connectionId: string): Promise<V2Connection | null>;
   createConnection(input: V2CreateConnectionRecordInput): Promise<V2Connection>;
   deleteConnection(connectionId: string): Promise<boolean>;
+  listCardAttachments?(cardId: string): Promise<V2CardAttachment[]>;
+  createCardAttachment?(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
+  getFileForDownload?(fileId: string): Promise<V2FileDownloadRecord | null>;
+  detachCardAttachment?(cardId: string, attachmentId: string): Promise<boolean>;
 };
 
 type V2MemorySeed = {
@@ -73,6 +104,33 @@ type V2MemorySeed = {
   cardTypes: V2CardType[];
   cards: V2Card[];
   connections: V2Connection[];
+  files?: Array<{
+    id: string;
+    workspaceId: string;
+    storageBucket: string;
+    storagePath: string;
+    filename: string;
+    mimeType?: string | null;
+    sizeBytes?: number | null;
+    sha256?: string | null;
+    metadata: Record<string, unknown>;
+    processingStatus: "pending" | "processing" | "processed" | "failed";
+    createdBy?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt?: string | null;
+  }>;
+  cardFiles?: Array<{
+    id: string;
+    workspaceId: string;
+    cardId: string;
+    fileId: string;
+    role: string;
+    metadata: Record<string, unknown>;
+    createdBy?: string | null;
+    createdAt: string;
+    deletedAt?: string | null;
+  }>;
 };
 
 function nowIso(): string {
@@ -389,10 +447,38 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
   };
 }
 
+function attachmentFromRow(row: QueryResultRow): V2CardAttachment {
+  return v2CardAttachmentSchema.parse({
+    id: String(row.card_file_id ?? row.id),
+    cardId: String(row.card_id),
+    fileId: String(row.file_id),
+    role: String(row.role),
+    filename: String(row.filename),
+    mimeType: row.mime_type === null || row.mime_type === undefined ? null : String(row.mime_type),
+    sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? null : Number(row.size_bytes),
+    processingStatus: row.processing_status,
+    createdAt: toIso(row.created_at)
+  });
+}
+
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
-  const state = cloneJson(seed);
+  const state = {
+    ...cloneJson(seed),
+    files: cloneJson(seed.files ?? []),
+    cardFiles: cloneJson(seed.cardFiles ?? [])
+  };
   const deletedCardIds = new Set<string>();
   const deletedConnectionIds = new Set<string>();
+  const deletedCardFileIds = new Set<string>(
+    state.cardFiles
+      .filter((cardFile) => cardFile.deletedAt)
+      .map((cardFile) => cardFile.id)
+  );
+  const deletedFileIds = new Set<string>(
+    state.files
+      .filter((file) => file.deletedAt)
+      .map((file) => file.id)
+  );
 
   function activeCards(): V2Card[] {
     return state.cards.filter((card) => !deletedCardIds.has(card.id));
@@ -552,6 +638,110 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       if (!exists) return false;
 
       deletedConnectionIds.add(connectionId);
+      return true;
+    },
+
+    async listCardAttachments(cardId) {
+      if (deletedCardIds.has(cardId)) return [];
+      const card = state.cards.find((item) => item.id === cardId);
+      if (!card) return [];
+
+      return state.cardFiles
+        .filter((cardFile) => cardFile.cardId === cardId && !deletedCardFileIds.has(cardFile.id))
+        .map((cardFile) => {
+          const file = state.files.find(
+            (item) => item.id === cardFile.fileId && !deletedFileIds.has(item.id)
+          );
+          if (!file) return null;
+          return v2CardAttachmentSchema.parse({
+            id: cardFile.id,
+            cardId: cardFile.cardId,
+            fileId: cardFile.fileId,
+            role: cardFile.role,
+            filename: file.filename,
+            mimeType: file.mimeType ?? null,
+            sizeBytes: file.sizeBytes ?? null,
+            processingStatus: file.processingStatus,
+            createdAt: cardFile.createdAt
+          });
+        })
+        .filter((attachment): attachment is V2CardAttachment => attachment !== null);
+    },
+
+    async createCardAttachment(input) {
+      const card = state.cards.find((item) => item.id === input.cardId && !deletedCardIds.has(item.id));
+      if (!card) {
+        throw new Error("Card not found");
+      }
+
+      const timestamp = nowIso();
+      const file = {
+        id: input.fileId,
+        workspaceId: input.workspaceId,
+        storageBucket: input.storageBucket,
+        storagePath: input.storagePath,
+        filename: input.filename,
+        mimeType: input.mimeType ?? null,
+        sizeBytes: input.sizeBytes ?? null,
+        sha256: input.sha256 ?? null,
+        metadata: {},
+        processingStatus: "processed" as const,
+        createdBy: input.createdBy ?? null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null
+      };
+      const cardFile = {
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        cardId: input.cardId,
+        fileId: input.fileId,
+        role: input.role ?? "attachment",
+        metadata: cloneJson(input.metadata ?? {}),
+        createdBy: input.createdBy ?? null,
+        createdAt: timestamp,
+        deletedAt: null
+      };
+
+      state.files.push(file);
+      state.cardFiles.push(cardFile);
+
+      return v2CardAttachmentSchema.parse({
+        id: cardFile.id,
+        cardId: cardFile.cardId,
+        fileId: cardFile.fileId,
+        role: cardFile.role,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        processingStatus: file.processingStatus,
+        createdAt: cardFile.createdAt
+      });
+    },
+
+    async getFileForDownload(fileId) {
+      const file = state.files.find((item) => item.id === fileId && !deletedFileIds.has(item.id));
+      if (!file) return null;
+
+      return {
+        fileId: file.id,
+        workspaceId: file.workspaceId,
+        storageBucket: file.storageBucket,
+        storagePath: file.storagePath,
+        filename: file.filename,
+        mimeType: file.mimeType ?? null,
+        sizeBytes: file.sizeBytes ?? null
+      };
+    },
+
+    async detachCardAttachment(cardId, attachmentId) {
+      const cardFile = state.cardFiles.find(
+        (item) => item.id === attachmentId && item.cardId === cardId && !deletedCardFileIds.has(item.id)
+      );
+      if (!cardFile) return false;
+
+      cardFile.deletedAt = nowIso();
+      deletedCardFileIds.add(cardFile.id);
       return true;
     }
   };
@@ -979,6 +1169,162 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             and deleted_at is null
         `,
         [connectionId]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async listCardAttachments(cardId) {
+      const result = await pool.query(
+        `
+          select
+            cf.id as card_file_id,
+            cf.card_id,
+            cf.file_id,
+            cf.role,
+            cf.created_at,
+            f.filename,
+            f.mime_type,
+            f.size_bytes,
+            f.processing_status
+          from card_files cf
+          join files f
+            on f.id = cf.file_id
+            and f.deleted_at is null
+          where cf.card_id = $1
+            and cf.deleted_at is null
+          order by cf.created_at asc, cf.id asc
+        `,
+        [cardId]
+      );
+
+      return result.rows.map(attachmentFromRow);
+    },
+
+    async createCardAttachment(input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const fileResult = await client.query(
+          `
+            insert into files (
+              id,
+              workspace_id,
+              storage_bucket,
+              storage_path,
+              filename,
+              mime_type,
+              size_bytes,
+              sha256,
+              metadata,
+              processing_status,
+              processing_error,
+              created_by
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, 'processed', null, $9)
+            returning *
+          `,
+          [
+            input.fileId,
+            input.workspaceId,
+            input.storageBucket,
+            input.storagePath,
+            input.filename,
+            input.mimeType ?? null,
+            input.sizeBytes ?? null,
+            input.sha256 ?? null,
+            input.createdBy ?? null
+          ]
+        );
+
+        const cardFileResult = await client.query(
+          `
+            insert into card_files (
+              workspace_id,
+              card_id,
+              file_id,
+              role,
+              metadata,
+              created_by
+            )
+            values ($1, $2, $3, $4, $5::jsonb, $6)
+            returning *
+          `,
+          [
+            input.workspaceId,
+            input.cardId,
+            input.fileId,
+            input.role ?? "attachment",
+            JSON.stringify(input.metadata ?? {}),
+            input.createdBy ?? null
+          ]
+        );
+
+        await client.query("commit");
+
+        const fileRow = fileResult.rows[0] as QueryResultRow;
+        const cardFileRow = cardFileResult.rows[0] as QueryResultRow;
+        return v2CardAttachmentSchema.parse({
+          id: String(cardFileRow.id),
+          cardId: String(cardFileRow.card_id),
+          fileId: String(cardFileRow.file_id),
+          role: String(cardFileRow.role),
+          filename: String(fileRow.filename),
+          mimeType: fileRow.mime_type === null ? null : String(fileRow.mime_type),
+          sizeBytes: fileRow.size_bytes === null ? null : Number(fileRow.size_bytes),
+          processingStatus: fileRow.processing_status,
+          createdAt: toIso(cardFileRow.created_at)
+        });
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async getFileForDownload(fileId) {
+      const result = await pool.query(
+        `
+          select
+            id,
+            workspace_id,
+            storage_bucket,
+            storage_path,
+            filename,
+            mime_type,
+            size_bytes
+          from files
+          where id = $1
+            and deleted_at is null
+          limit 1
+        `,
+        [fileId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+
+      return {
+        fileId: String(row.id),
+        workspaceId: String(row.workspace_id),
+        storageBucket: String(row.storage_bucket),
+        storagePath: String(row.storage_path),
+        filename: String(row.filename),
+        mimeType: row.mime_type === null || row.mime_type === undefined ? null : String(row.mime_type),
+        sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? null : Number(row.size_bytes)
+      };
+    },
+
+    async detachCardAttachment(cardId, attachmentId) {
+      const result = await pool.query(
+        `
+          update card_files
+          set deleted_at = now()
+          where id = $1
+            and card_id = $2
+            and deleted_at is null
+        `,
+        [attachmentId, cardId]
       );
 
       return (result.rowCount ?? 0) > 0;
