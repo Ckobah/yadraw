@@ -8,24 +8,6 @@ describe("validateV2RuntimeConfig", () => {
     ).not.toThrow();
   });
 
-  it("throws on legacy-postgres in production", () => {
-    expect(() =>
-      validateV2RuntimeConfig("production", "legacy-postgres"),
-    ).toThrow(
-      "YADRAW_V2_STORAGE=legacy-postgres is migration-only and is not allowed in production",
-    );
-  });
-
-  it("allows legacy-postgres in development", () => {
-    expect(() =>
-      validateV2RuntimeConfig("development", "legacy-postgres"),
-    ).not.toThrow();
-  });
-
-  it("allows legacy-postgres in test", () => {
-    expect(() => validateV2RuntimeConfig("test", "legacy-postgres")).not.toThrow();
-  });
-
   it("allows memory in development", () => {
     expect(() =>
       validateV2RuntimeConfig("development", "memory"),
@@ -34,7 +16,7 @@ describe("validateV2RuntimeConfig", () => {
 
   it("allows undefined env (defaults to development guard behavior)", () => {
     expect(() =>
-      validateV2RuntimeConfig(undefined, "legacy-postgres"),
+      validateV2RuntimeConfig(undefined, "v2-postgres"),
     ).not.toThrow();
   });
 
@@ -42,5 +24,21 @@ describe("validateV2RuntimeConfig", () => {
     expect(() =>
       validateV2RuntimeConfig("production", undefined),
     ).not.toThrow();
+  });
+
+  it("throws on memory in production", () => {
+    expect(() =>
+      validateV2RuntimeConfig("production", "memory"),
+    ).toThrow(
+      "YADRAW_V2_STORAGE must be 'v2-postgres' in production",
+    );
+  });
+
+  it("throws on unknown storage in production", () => {
+    expect(() =>
+      validateV2RuntimeConfig("production", "legacy-postgres"),
+    ).toThrow(
+      "YADRAW_V2_STORAGE must be 'v2-postgres' in production",
+    );
   });
 });
