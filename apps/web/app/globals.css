@@ -2741,6 +2741,46 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.v2InspectorSectionHeader {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.v2InspectorAttachButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid #e4e7f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.v2InspectorAttachButton:hover:not(:disabled),
+.v2InspectorAttachButton:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 44%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  outline: 0;
+}
+
+.v2InspectorAttachButton:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.v2InspectorFileInput {
+  display: none;
+}
+
 .v2InspectorAdvancedList div {
   display: grid;
   min-width: 0;
@@ -2889,6 +2929,112 @@ button:disabled {
   font-size: 13px;
   font-weight: 560;
   line-height: 1.35;
+}
+
+.v2InspectorAttachmentList {
+  display: grid;
+  gap: 7px;
+}
+
+.v2InspectorAttachmentRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #e4e7f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.v2InspectorAttachmentIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 24%, #fff);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--v2-inspector-accent);
+}
+
+.v2InspectorAttachmentText {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2InspectorAttachmentText strong,
+.v2InspectorAttachmentText span,
+.v2InspectorAttachmentText em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2InspectorAttachmentText strong {
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 730;
+  line-height: 1.2;
+}
+
+.v2InspectorAttachmentText span {
+  color: #7b8495;
+  font-size: 11.5px;
+  font-weight: 560;
+  line-height: 1.2;
+}
+
+.v2InspectorAttachmentText em {
+  color: var(--v2-inspector-accent);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 740;
+  line-height: 1.1;
+}
+
+.v2InspectorAttachmentActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.v2InspectorAttachmentActions a,
+.v2InspectorAttachmentActions button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #e4e7f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+}
+
+.v2InspectorAttachmentActions a:hover,
+.v2InspectorAttachmentActions a:focus-visible,
+.v2InspectorAttachmentActions button:hover:not(:disabled),
+.v2InspectorAttachmentActions button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 44%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  color: var(--v2-inspector-accent);
+  outline: 0;
+}
+
+.v2InspectorAttachmentActions button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.v2InspectorAttachmentError {
+  margin: 0;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 660;
+  line-height: 1.25;
 }
 
 .v2InspectorConnectionGroup {

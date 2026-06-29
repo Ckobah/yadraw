@@ -2,7 +2,13 @@
  * Server-side API client for v2 board endpoints.
  * Follows the existing API URL pattern from apps/web/app/boards/[boardId]/page.tsx.
  */
-import type { V2BoardDetail, V2Card, V2Connection, V2CreateCardRequest } from "@yadraw/shared";
+import type {
+  V2BoardDetail,
+  V2Card,
+  V2CardAttachment,
+  V2Connection,
+  V2CreateCardRequest,
+} from "@yadraw/shared";
 import type { V2CardType } from "@yadraw/shared";
 
 const apiBaseUrl =
@@ -315,4 +321,81 @@ export async function deleteV2Connection(
       body
     );
   }
+}
+
+export async function listV2CardAttachments(
+  cardId: string
+): Promise<V2CardAttachment[]> {
+  const response = await fetch(
+    `/v2/actions/cards/${encodeURIComponent(cardId)}/attachments`,
+    { method: "GET", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card attachments request failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CardAttachment[]>;
+}
+
+export async function uploadV2CardAttachment(
+  cardId: string,
+  input: {
+    file: File;
+    role?: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<V2CardAttachment> {
+  const formData = new FormData();
+  formData.set("file", input.file);
+  formData.set("role", input.role ?? "attachment");
+  if (input.metadata) {
+    formData.set("metadata", JSON.stringify(input.metadata));
+  }
+
+  const response = await fetch(
+    `/v2/actions/cards/${encodeURIComponent(cardId)}/attachments`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: formData,
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Attachment upload failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CardAttachment>;
+}
+
+export async function deleteV2CardAttachment(
+  cardId: string,
+  attachmentId: string
+): Promise<void> {
+  const response = await fetch(
+    `/v2/actions/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Attachment detach failed with ${response.status}`,
+      body
+    );
+  }
+}
+
+export function getV2FileDownloadUrl(fileId: string): string {
+  return `/v2/actions/files/${encodeURIComponent(fileId)}/download`;
 }

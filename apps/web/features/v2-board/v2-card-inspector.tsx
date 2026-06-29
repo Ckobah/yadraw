@@ -3,6 +3,7 @@
 import { Database, X } from "lucide-react";
 import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
+import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
 import { V2CardBasicsSection } from "./v2-card-basics-section";
 import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
@@ -77,6 +78,7 @@ export function V2CardInspector({
           saveStatus={saveStatus}
           onUpdateCardData={onUpdateCardData}
         />
+        <V2CardAttachmentsSection cardId={card.id} />
         <V2CardConnectionsSection
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}
