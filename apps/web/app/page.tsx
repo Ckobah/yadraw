@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { demoIds } from "@yadraw/shared";
+import { v2DemoIds } from "@yadraw/shared";
 
 export default function Home() {
-  redirect(`/v2/boards/${demoIds.board}`);
+  redirect(`/v2/boards/${v2DemoIds.board}`);
 }

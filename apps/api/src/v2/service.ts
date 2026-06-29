@@ -62,28 +62,13 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
     if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
   }
 
-  async function authorizeBoard(context: RequestContext, boardId: string, accessLevel: V2AccessLevel) {
-    const role = await repository.getBoardRole(context.userId, boardId);
-    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
-  }
-
-  async function authorizeCard(context: RequestContext, cardId: string, accessLevel: V2AccessLevel) {
-    const role = await repository.getCardRole(context.userId, cardId);
-    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
-  }
-
-  async function authorizeConnection(context: RequestContext, connectionId: string, accessLevel: V2AccessLevel) {
-    const role = await repository.getConnectionRole(context.userId, connectionId);
-    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
-  }
-
   return {
     async getBoard(context, boardId) {
-      await authorizeBoard(context, boardId, "read");
       const board = await repository.getBoardDetail(boardId);
       if (!board) {
         notFound("Board not found");
       }
+      await authorizeWorkspace(context, board.workspace.id, "read");
 
       return board;
     },
@@ -95,11 +80,11 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
 
     async createCard(context, boardId, rawInput) {
       const input = v2CreateCardBodySchema.parse(rawInput);
-      await authorizeBoard(context, boardId, "write");
       const board = await repository.getBoard(boardId);
       if (!board) {
         notFound("Board not found");
       }
+      await authorizeWorkspace(context, board.workspaceId, "write");
 
       const cardType = await repository.getCardType(input.cardTypeId);
       if (!cardType) {
@@ -126,7 +111,11 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
 
     async updateCard(context, cardId, rawInput) {
       const input = v2UpdateCardBodySchema.parse(rawInput);
-      await authorizeCard(context, cardId, "write");
+      const existing = await repository.getCard(cardId);
+      if (!existing) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "write");
       const card = await repository.updateCard(cardId, input);
       if (!card) {
         notFound("Card not found");
@@ -136,7 +125,11 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
     },
 
     async deleteCard(context, cardId) {
-      await authorizeCard(context, cardId, "write");
+      const existing = await repository.getCard(cardId);
+      if (!existing) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "write");
       const deleted = await repository.deleteCard(cardId);
       if (!deleted) {
         notFound("Card not found");
@@ -147,11 +140,11 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
 
     async createConnection(context, boardId, rawInput) {
       const input = v2CreateConnectionBodySchema.parse(rawInput);
-      await authorizeBoard(context, boardId, "write");
       const board = await repository.getBoard(boardId);
       if (!board) {
         notFound("Board not found");
       }
+      await authorizeWorkspace(context, board.workspaceId, "write");
 
       if (input.sourceCardId === input.targetCardId) {
         validationFailed("Connection cannot link a card to itself");
@@ -224,7 +217,11 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
     },
 
     async deleteConnection(context, connectionId) {
-      await authorizeConnection(context, connectionId, "write");
+      const existing = await repository.getConnection(connectionId);
+      if (!existing) {
+        notFound("Connection not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "write");
       const deleted = await repository.deleteConnection(connectionId);
       if (!deleted) {
         notFound("Connection not found");

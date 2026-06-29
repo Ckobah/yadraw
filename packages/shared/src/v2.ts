@@ -242,6 +242,16 @@ export const v2ApiContracts = {
   }
 } as const;
 
+export const v2DemoIds = {
+  workspace: "11111111-1111-4111-8111-111111111111",
+  project: "22222222-2222-4222-8222-222222222222",
+  board: "33333333-3333-4333-8333-333333333333",
+  cardTypes: {
+    source: "44444444-4444-4444-8444-444444444444",
+    task: "55555555-5555-4555-8555-555555555555"
+  }
+} as const;
+
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
 export type V2Board = z.infer<typeof v2BoardSchema>;

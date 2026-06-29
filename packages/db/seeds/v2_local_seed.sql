@@ -170,3 +170,102 @@ set workspace_id = excluded.workspace_id,
     sort_order = excluded.sort_order,
     updated_at = now(),
     deleted_at = null;
+
+insert into cards (
+  id,
+  workspace_id,
+  board_id,
+  card_type_id,
+  title,
+  description,
+  data,
+  position_x,
+  position_y,
+  width,
+  height,
+  visual_style,
+  status
+)
+values
+  (
+    '77777777-7777-4777-8777-777777777771',
+    '11111111-1111-4111-8111-111111111111',
+    '33333333-3333-4333-8333-333333333333',
+    '44444444-4444-4444-8444-444444444444',
+    'Incoming data',
+    'Source payload for the board.',
+    '{"kind":"source","endpoint":"/input"}'::jsonb,
+    120,
+    160,
+    280,
+    160,
+    '{}'::jsonb,
+    'active'
+  ),
+  (
+    '77777777-7777-4777-8777-777777777772',
+    '11111111-1111-4111-8111-111111111111',
+    '33333333-3333-4333-8333-333333333333',
+    '55555555-5555-4555-8555-555555555555',
+    'Normalize payload',
+    'Transforms incoming data into a clean JSON shape.',
+    '{"kind":"task","operation":"normalize"}'::jsonb,
+    520,
+    160,
+    300,
+    180,
+    '{}'::jsonb,
+    'active'
+  )
+on conflict (id) do update
+set workspace_id = excluded.workspace_id,
+    board_id = excluded.board_id,
+    card_type_id = excluded.card_type_id,
+    title = excluded.title,
+    description = excluded.description,
+    data = excluded.data,
+    position_x = excluded.position_x,
+    position_y = excluded.position_y,
+    width = excluded.width,
+    height = excluded.height,
+    visual_style = excluded.visual_style,
+    status = excluded.status,
+    updated_at = now(),
+    deleted_at = null;
+
+insert into connections (
+  id,
+  workspace_id,
+  board_id,
+  source_card_id,
+  target_card_id,
+  source_port_key,
+  target_port_key,
+  type,
+  label,
+  status
+)
+values (
+  '88888888-8888-4888-8888-888888888881',
+  '11111111-1111-4111-8111-111111111111',
+  '33333333-3333-4333-8333-333333333333',
+  '77777777-7777-4777-8777-777777777771',
+  '77777777-7777-4777-8777-777777777772',
+  'payload',
+  'input',
+  'data',
+  'payload',
+  'active'
+)
+on conflict (id) do update
+set workspace_id = excluded.workspace_id,
+    board_id = excluded.board_id,
+    source_card_id = excluded.source_card_id,
+    target_card_id = excluded.target_card_id,
+    source_port_key = excluded.source_port_key,
+    target_port_key = excluded.target_port_key,
+    type = excluded.type,
+    label = excluded.label,
+    status = excluded.status,
+    updated_at = now(),
+    deleted_at = null;

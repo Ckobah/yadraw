@@ -44,7 +44,7 @@ describe("v2 board service", () => {
     });
 
     await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
-      cards: [expect.objectContaining({ id: card.id })]
+      cards: expect.arrayContaining([expect.objectContaining({ id: card.id })])
     });
   });
 
@@ -85,6 +85,17 @@ describe("v2 board service", () => {
       })
     ).rejects.toMatchObject({
       code: "forbidden"
+    });
+  });
+
+  it("returns not_found for missing boards before authorization decisions", async () => {
+    const { seed } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    await expect(
+      service.getBoard(ownerContext, "b4f94635-6fd5-4a6b-8608-61a69c81fbe2")
+    ).rejects.toMatchObject({
+      code: "not_found"
     });
   });
 
@@ -135,7 +146,7 @@ describe("v2 board service", () => {
       code: "validation_failed"
     });
 
-    await service.createConnection(ownerContext, seed.board.id, {
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -229,6 +240,7 @@ describe("v2 board service", () => {
       updatedAt: "2026-01-01T00:00:00.000Z"
     };
 
+    seed.cards = [];
     seed.connections = [orphanConnection];
 
     const repository = createV2MemoryRepository(seed);
@@ -246,7 +258,7 @@ describe("v2 board service", () => {
     const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
     const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
 
-    await service.createConnection(ownerContext, seed.board.id, {
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -258,10 +270,9 @@ describe("v2 board service", () => {
       id: source.id
     });
 
-    await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
-      cards: [expect.objectContaining({ id: task.id })],
-      connections: []
-    });
+    const board = await service.getBoard(ownerContext, seed.board.id);
+    expect(board.cards).toEqual(expect.arrayContaining([expect.objectContaining({ id: task.id })]));
+    expect(board.connections.map((item) => item.id)).not.toContain(connection.id);
   });
 });
 

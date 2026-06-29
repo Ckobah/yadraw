@@ -313,6 +313,54 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       updatedAt: timestamp
     }
   ];
+  const cards: V2Card[] = [
+    {
+      id: "77777777-7777-4777-8777-777777777771",
+      workspaceId: workspace.id,
+      boardId: board.id,
+      cardTypeId: sourceTypeId,
+      title: "Incoming data",
+      description: "Source payload for the board.",
+      data: { kind: "source", endpoint: "/input" },
+      position: { x: 120, y: 160 },
+      size: { width: 280, height: 160 },
+      visualStyle: {},
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "77777777-7777-4777-8777-777777777772",
+      workspaceId: workspace.id,
+      boardId: board.id,
+      cardTypeId: taskTypeId,
+      title: "Normalize payload",
+      description: "Transforms incoming data into a clean JSON shape.",
+      data: { kind: "task", operation: "normalize" },
+      position: { x: 520, y: 160 },
+      size: { width: 300, height: 180 },
+      visualStyle: {},
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
+  const connections: V2Connection[] = [
+    {
+      id: "88888888-8888-4888-8888-888888888881",
+      workspaceId: workspace.id,
+      boardId: board.id,
+      sourceCardId: cards[0]!.id,
+      targetCardId: cards[1]!.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      type: "data",
+      label: "payload",
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
 
   return {
     workspace,
@@ -336,8 +384,8 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       }
     ],
     cardTypes,
-    cards: [],
-    connections: []
+    cards,
+    connections
   };
 }
 
