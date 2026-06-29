@@ -198,6 +198,29 @@ export async function updateV2CardBasics(
   }
 }
 
+export async function updateV2CardData(
+  cardId: string,
+  data: Record<string, unknown>
+): Promise<void> {
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ data }),
+  });
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card data update failed with ${response.status}`,
+      body
+    );
+  }
+}
+
 export async function createV2Card(
   boardId: string,
   input: V2CreateCardRequest

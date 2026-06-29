@@ -31,6 +31,7 @@ import {
   updateV2CardSize,
   updateV2CardVisualStyle,
   updateV2CardBasics,
+  updateV2CardData,
   createV2Connection,
   deleteV2Connection,
   deleteV2Card,
@@ -344,6 +345,56 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setNodes]
   );
 
+  const handleUpdateCardData = useCallback(
+    async (cardId: string, data: Record<string, unknown>) => {
+      const previous = nodesRef.current.find((node) => node.id === cardId)?.data.card.data;
+
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id !== cardId) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              card: {
+                ...node.data.card,
+                data,
+              },
+            },
+          };
+        })
+      );
+
+      setSaveStatus("saving");
+      try {
+        await updateV2CardData(cardId, data);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to save card data:", err);
+        if (previous) {
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id !== cardId) return node;
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  card: {
+                    ...node.data.card,
+                    data: previous,
+                  },
+                },
+              };
+            })
+          );
+        }
+        setSaveStatus("error");
+        throw err;
+      }
+    },
+    [setNodes]
+  );
+
   const handleStartVisualEditor = useCallback((cardId: string) => {
     setVisualEditingCardId(cardId);
   }, []);
@@ -591,6 +642,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           cardById={cardById}
           saveStatus={saveStatus}
           onUpdateCardBasics={handleUpdateCardBasics}
+          onUpdateCardData={handleUpdateCardData}
           onClose={() => setSelectedCardId(null)}
         />
       ) : null}

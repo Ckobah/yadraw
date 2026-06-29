@@ -2808,6 +2808,123 @@ button:disabled {
   word-break: break-word;
 }
 
+.v2InspectorDataEditor {
+  display: grid;
+  gap: 8px;
+}
+
+.v2InspectorDataRow {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e4e7f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.v2InspectorDataRowGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 28px;
+  gap: 8px;
+  align-items: center;
+}
+
+.v2InspectorDataKeyInput,
+.v2InspectorDataTypeSelect,
+.v2InspectorDataValue {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dfe5ef;
+  border-radius: 10px;
+  background: #fff;
+  color: #182230;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.35;
+  transition: border-color 0.14s, box-shadow 0.14s, background 0.14s;
+}
+
+.v2InspectorDataKeyInput,
+.v2InspectorDataTypeSelect,
+.v2InspectorDataValue {
+  height: 34px;
+  padding: 0 9px;
+}
+
+.v2InspectorDataTypeSelect {
+  cursor: pointer;
+}
+
+.v2InspectorDataJsonValue {
+  min-height: 88px;
+  padding: 9px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+}
+
+.v2InspectorDataKeyInput::placeholder,
+.v2InspectorDataValue::placeholder {
+  color: #98a2b3;
+  font-weight: 560;
+}
+
+.v2InspectorDataKeyInput:focus,
+.v2InspectorDataTypeSelect:focus,
+.v2InspectorDataValue:focus {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 58%, #dfe5ef);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--v2-inspector-accent) 12%, transparent);
+  outline: 0;
+}
+
+.v2InspectorDataDeleteButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #e4e7f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+}
+
+.v2InspectorDataDeleteButton:hover,
+.v2InspectorDataDeleteButton:focus-visible {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+  outline: 0;
+}
+
+.v2InspectorDataError {
+  margin: 0;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 660;
+  line-height: 1.25;
+}
+
+.v2InspectorDataFooter {
+  display: grid;
+  gap: 8px;
+}
+
+.v2InspectorDataFooter > span {
+  min-width: 0;
+  overflow: hidden;
+  color: #8a93a5;
+  font-size: 11px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2InspectorDataFooter .v2InspectorEditActions {
+  flex-wrap: wrap;
+}
+
 .v2InspectorEmpty {
   margin: 0;
   color: #8a93a5;
