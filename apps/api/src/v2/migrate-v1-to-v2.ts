@@ -19,7 +19,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { config } from "dotenv";
@@ -32,6 +32,7 @@ const { Pool } = pg;
 
 interface MigrationReport {
   workspaces: { v1: number; v2: number; errors: string[] };
+  workspaceMembers: { v1: number; v2: number; errors: string[] };
   projects: { v1: number; v2: number; errors: string[] };
   boards: { v1: number; v2: number; errors: string[] };
   cardTypes: { v1: number; v2: number; errors: string[] };
@@ -44,6 +45,7 @@ interface MigrationReport {
 function createEmptyReport(): MigrationReport {
   return {
     workspaces: { v1: 0, v2: 0, errors: [] },
+    workspaceMembers: { v1: 0, v2: 0, errors: [] },
     projects: { v1: 0, v2: 0, errors: [] },
     boards: { v1: 0, v2: 0, errors: [] },
     cardTypes: { v1: 0, v2: 0, errors: [] },
@@ -212,18 +214,18 @@ async function runMigration(): Promise<MigrationReport> {
 
   // ── Step 1: Apply v2 schema (if not already applied) ──
   console.log("── Step 1: Apply v2 schema ──");
-  if (!v2AlreadyPopulated) {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const schemaPath = resolve(
-      __dirname,
-      "../../../../packages/db/migrations/v2/001_core_foundation.sql",
-    );
-    const schemaSql = readFileSync(schemaPath, "utf-8");
-    await v2.query(schemaSql);
-    console.log("  ✓ v2 schema applied");
-  } else {
-    console.log("  ✓ v2 schema already exists (skipped)");
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const migrationsPath = resolve(
+    __dirname,
+    "../../../../packages/db/migrations/v2",
+  );
+  const migrationFiles = readdirSync(migrationsPath)
+    .filter((filename) => filename.endsWith(".sql"))
+    .sort();
+  for (const filename of migrationFiles) {
+    await v2.query(readFileSync(resolve(migrationsPath, filename), "utf-8"));
+    console.log(`  ✓ applied ${filename}`);
   }
 
   // ── Step 2: Migrate workspaces ──
@@ -266,9 +268,58 @@ async function runMigration(): Promise<MigrationReport> {
   }
   console.log(`  ✓ ${report.workspaces.v2} migrated`);
 
-  // ── Step 3: Migrate projects ──
+  // ── Step 3: Migrate workspace members ──
   console.log();
-  console.log("── Step 3: Migrate projects ──");
+  console.log("── Step 3: Migrate workspace members ──");
+  const v1Members = await v1.query(
+    `select workspace_id, user_id, role, created_at, updated_at
+     from workspace_members
+     order by workspace_id, user_id`,
+  );
+  report.workspaceMembers.v1 = v1Members.rows.length;
+  console.log(`  Found ${report.workspaceMembers.v1} workspace member(s)`);
+
+  for (const member of v1Members.rows) {
+    try {
+      const workspaceCheck = await v2.query(
+        "select id from workspaces where id = $1",
+        [member.workspace_id],
+      );
+      if (workspaceCheck.rows.length === 0) {
+        report.warnings.push(
+          `Workspace member ${member.user_id}: workspace ${member.workspace_id} not in v2, skipping`,
+        );
+        continue;
+      }
+
+      const role = member.role === "guest" ? "viewer" : safeString(member.role || "viewer");
+      await v2.query(
+        `insert into workspace_members (workspace_id, user_id, role, created_at, updated_at, deleted_at)
+         values ($1, $2, $3, $4, $5, null)
+         on conflict (workspace_id, user_id) do update set
+           role = excluded.role,
+           updated_at = excluded.updated_at,
+           deleted_at = null`,
+        [
+          member.workspace_id,
+          member.user_id,
+          role,
+          toTimestamp(member.created_at),
+          toTimestamp(member.updated_at),
+        ],
+      );
+      report.workspaceMembers.v2++;
+    } catch (err: any) {
+      report.workspaceMembers.errors.push(
+        `Workspace member ${member.workspace_id}/${member.user_id}: ${err.message ?? err}`,
+      );
+    }
+  }
+  console.log(`  ✓ ${report.workspaceMembers.v2} migrated`);
+
+  // ── Step 4: Migrate projects ──
+  console.log();
+  console.log("── Step 4: Migrate projects ──");
   const v1Projects = await v1.query(
     `select id, workspace_id, name, created_at, updated_at, deleted_at from projects order by created_at`,
   );
@@ -805,6 +856,7 @@ async function runMigration(): Promise<MigrationReport> {
 function printReport(report: MigrationReport): void {
   const entries: [string, { v1: number; v2: number; errors: string[] }][] = [
     ["Workspaces", report.workspaces],
+    ["Workspace Members", report.workspaceMembers],
     ["Projects", report.projects],
     ["Boards", report.boards],
     ["Card Types", report.cardTypes],
@@ -866,7 +918,8 @@ runMigration()
   .then((report) => {
     printReport(report);
     process.exit(
-      report.workspaces.errors.length +
+        report.workspaces.errors.length +
+        report.workspaceMembers.errors.length +
         report.projects.errors.length +
         report.boards.errors.length +
         report.cardTypes.errors.length +

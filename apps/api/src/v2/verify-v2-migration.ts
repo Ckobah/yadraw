@@ -59,8 +59,36 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     fail(`Workspaces: ${v1Ws} v1 → ${v2Ws} v2 (mismatch)`);
   }
 
-  // ── Check 2: Board count ──
-  console.log("2. Board count");
+  // ── Check 2: Workspace member count ──
+  console.log("2. Workspace member count");
+  const v1Members = (await v1.query("select count(*) from workspace_members")).rows[0]
+    .count;
+  const v2Members = (await v2.query("select count(*) from workspace_members where deleted_at is null")).rows[0]
+    .count;
+  if (Number(v1Members) === Number(v2Members)) {
+    pass(`Workspace members: ${v1Members} v1 → ${v2Members} v2`);
+  } else {
+    fail(`Workspace members: ${v1Members} v1 → ${v2Members} v2 (mismatch)`);
+  }
+
+  const boardsWithoutMembers = await v2.query(
+    `select b.id
+     from boards b
+     left join workspace_members wm
+       on wm.workspace_id = b.workspace_id
+       and wm.deleted_at is null
+     where b.deleted_at is null
+     group by b.id
+     having count(wm.id) = 0`,
+  );
+  if (boardsWithoutMembers.rows.length === 0) {
+    pass("Every active board belongs to a workspace with at least one member");
+  } else {
+    fail(`${boardsWithoutMembers.rows.length} active board(s) have no workspace members`);
+  }
+
+  // ── Check 3: Board count ──
+  console.log("3. Board count");
   const v1Boards = (await v1.query("select count(*) from boards where deleted_at is null")).rows[0]
     .count;
   const v2Boards = (await v2.query("select count(*) from boards where deleted_at is null")).rows[0]
@@ -71,8 +99,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     fail(`Boards: ${v1Boards} v1 → ${v2Boards} v2 (mismatch)`);
   }
 
-  // ── Check 3: Card count ──
-  console.log("3. Card count");
+  // ── Check 4: Card count ──
+  console.log("4. Card count");
   const v1Cards = (await v1.query("select count(*) from cards where deleted_at is null")).rows[0]
     .count;
   const v2Cards = (await v2.query("select count(*) from cards where deleted_at is null")).rows[0]
@@ -83,8 +111,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     fail(`Cards: ${v1Cards} v1 → ${v2Cards} v2 (mismatch)`);
   }
 
-  // ── Check 4: Connection count ──
-  console.log("4. Connection count");
+  // ── Check 5: Connection count ──
+  console.log("5. Connection count");
   const v1Conns = (await v1.query("select count(*) from connections where deleted_at is null")).rows[0]
     .count;
   const v2Conns = (await v2.query("select count(*) from connections where deleted_at is null")).rows[0]
@@ -96,8 +124,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     warn(`Connections: ${v1Conns} v1 → ${v2Conns} v2 (expected if some had unresolvable ports)`);
   }
 
-  // ── Check 5: No _yadraw in cards.data ──
-  console.log("5. No _yadraw in cards.data");
+  // ── Check 6: No _yadraw in cards.data ──
+  console.log("6. No _yadraw in cards.data");
   const yadrawCards = await v2.query(
     `select count(*) from cards where data ? '_yadraw' and deleted_at is null`,
   );
@@ -107,8 +135,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     fail(`${yadrawCards.rows[0].count} cards still contain _yadraw in data`);
   }
 
-  // ── Check 6: Card type ports exist for types that have cards ──
-  console.log("6. card_type_ports exist for types with cards");
+  // ── Check 7: Card type ports exist for types that have cards ──
+  console.log("7. card_type_ports exist for types with cards");
   const typesWithCards = await v2.query(
     `select distinct ct.id, ct.name
      from card_types ct
@@ -135,8 +163,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     warn(`${missingPortsCount} card type(s) with cards lack ports (acceptable if types have no defined ports)`);
   }
 
-  // ── Check 7: Connection references are valid ──
-  console.log("7. Connection references are valid");
+  // ── Check 8: Connection references are valid ──
+  console.log("8. Connection references are valid");
   const badSrcCards = await v2.query(
     `select c.id from connections c
      left join cards sc on sc.id = c.source_card_id
@@ -156,8 +184,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
       fail(`${badTgtCards.rows.length} connections reference invalid target cards`);
   }
 
-  // ── Check 7b: No orphan connections to soft-deleted cards ──
-  console.log("7b. No orphan connections to soft-deleted cards");
+  // ── Check 8b: No orphan connections to soft-deleted cards ──
+  console.log("8b. No orphan connections to soft-deleted cards");
   const orphanConns = await v2.query(
     `select c.id, c.source_card_id, c.target_card_id
      from connections c
@@ -179,8 +207,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     }
   }
 
-  // ── Check 8: Connection source_port_key exists among output ports
-  console.log("8. Source port keys match card type output ports");
+  // ── Check 9: Connection source_port_key exists among output ports
+  console.log("9. Source port keys match card type output ports");
   const connPortCheck = await v2.query(
     `select c.id, c.source_card_id, c.source_port_key,
             ca.card_type_id
@@ -206,8 +234,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     warn(`${sourceBadCount} connection(s) reference non-existent source port keys (port may use "default" fallback)`);
   }
 
-  // ── Check 9: Connection target_port_key exists among input ports
-  console.log("9. Target port keys match card type input ports");
+  // ── Check 10: Connection target_port_key exists among input ports
+  console.log("10. Target port keys match card type input ports");
   const connPortCheck2 = await v2.query(
     `select c.id, c.target_card_id, c.target_port_key,
             ca.card_type_id
@@ -233,8 +261,8 @@ async function verify(v1Url: string, v2Url: string): Promise<VerifyResult> {
     warn(`${targetBadCount} connection(s) reference non-existent target port keys (port may use "default" fallback)`);
   }
 
-  // ── Check 10: Deck is selectable via v2 API ──
-  console.log("10. V2 API connectivity test");
+  // ── Check 11: Deck is selectable via v2 API ──
+  console.log("11. V2 API connectivity test");
   const boardCount = await v2.query(
     "select count(*) from boards where deleted_at is null",
   );

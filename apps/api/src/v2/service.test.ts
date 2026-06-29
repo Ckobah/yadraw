@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createDefaultV2MemorySeed, createV2MemoryRepository } from "./repository.js";
 import { createV2BoardService, V2ServiceError } from "./service.js";
 
+const ownerContext = {
+  userId: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
+  source: "dev" as const
+};
+const viewerContext = {
+  userId: "9f18a762-53e5-4922-9b0b-8f168921bb0f",
+  source: "dev" as const
+};
+
 function getSeedParts() {
   const seed = createDefaultV2MemorySeed();
   const sourceType = seed.cardTypes.find((cardType) => cardType.key === "source");
@@ -19,7 +28,7 @@ describe("v2 board service", () => {
     const { seed, sourceType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
 
-    const card = await service.createCard(seed.board.id, {
+    const card = await service.createCard(ownerContext, seed.board.id, {
       cardTypeId: sourceType.id
     });
 
@@ -34,7 +43,7 @@ describe("v2 board service", () => {
       status: "draft"
     });
 
-    await expect(service.getBoard(seed.board.id)).resolves.toMatchObject({
+    await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
       cards: [expect.objectContaining({ id: card.id })]
     });
   });
@@ -42,12 +51,12 @@ describe("v2 board service", () => {
   it("updates card fields through validated request payloads", async () => {
     const { seed, sourceType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
-    const card = await service.createCard(seed.board.id, {
+    const card = await service.createCard(ownerContext, seed.board.id, {
       cardTypeId: sourceType.id
     });
 
     await expect(
-      service.updateCard(card.id, {
+      service.updateCard(ownerContext, card.id, {
         title: "Webhook",
         data: { endpoint: "/hook" },
         position: { x: 128, y: 256 }
@@ -60,19 +69,38 @@ describe("v2 board service", () => {
     });
   });
 
+  it("allows viewers to read board data but rejects write operations", async () => {
+    const { seed, sourceType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    await expect(service.getBoard(viewerContext, seed.board.id)).resolves.toMatchObject({
+      board: { id: seed.board.id }
+    });
+    await expect(service.listCardTypes(viewerContext, seed.workspace.id)).resolves.toMatchObject({
+      cardTypes: expect.arrayContaining([expect.objectContaining({ id: sourceType.id })])
+    });
+    await expect(
+      service.createCard(viewerContext, seed.board.id, {
+        cardTypeId: sourceType.id
+      })
+    ).rejects.toMatchObject({
+      code: "forbidden"
+    });
+  });
+
   it("creates typed connections only through valid output and input ports", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
-    const source = await service.createCard(seed.board.id, {
+    const source = await service.createCard(ownerContext, seed.board.id, {
       cardTypeId: sourceType.id,
       title: "Webhook"
     });
-    const task = await service.createCard(seed.board.id, {
+    const task = await service.createCard(ownerContext, seed.board.id, {
       cardTypeId: taskType.id,
       title: "Transform"
     });
 
-    const connection = await service.createConnection(seed.board.id, {
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -93,11 +121,11 @@ describe("v2 board service", () => {
   it("rejects invalid ports and duplicate connections", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
-    const source = await service.createCard(seed.board.id, { cardTypeId: sourceType.id });
-    const task = await service.createCard(seed.board.id, { cardTypeId: taskType.id });
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
 
     await expect(
-      service.createConnection(seed.board.id, {
+      service.createConnection(ownerContext, seed.board.id, {
         sourceCardId: source.id,
         targetCardId: task.id,
         sourcePortKey: "missing",
@@ -107,7 +135,7 @@ describe("v2 board service", () => {
       code: "validation_failed"
     });
 
-    await service.createConnection(seed.board.id, {
+    await service.createConnection(ownerContext, seed.board.id, {
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -115,7 +143,7 @@ describe("v2 board service", () => {
     });
 
     await expect(
-      service.createConnection(seed.board.id, {
+      service.createConnection(ownerContext, seed.board.id, {
         sourceCardId: source.id,
         targetCardId: task.id,
         sourcePortKey: "payload",
@@ -123,7 +151,7 @@ describe("v2 board service", () => {
       })
     ).rejects.toBeInstanceOf(V2ServiceError);
     await expect(
-      service.createConnection(seed.board.id, {
+      service.createConnection(ownerContext, seed.board.id, {
         sourceCardId: source.id,
         targetCardId: task.id,
         sourcePortKey: "payload",
@@ -215,22 +243,22 @@ describe("v2 board service", () => {
   it("soft-deletes cards and removes their active connections from the board detail", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
-    const source = await service.createCard(seed.board.id, { cardTypeId: sourceType.id });
-    const task = await service.createCard(seed.board.id, { cardTypeId: taskType.id });
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
 
-    await service.createConnection(seed.board.id, {
+    await service.createConnection(ownerContext, seed.board.id, {
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
       targetPortKey: "input"
     });
 
-    await expect(service.deleteCard(source.id)).resolves.toEqual({
+    await expect(service.deleteCard(ownerContext, source.id)).resolves.toEqual({
       deleted: true,
       id: source.id
     });
 
-    await expect(service.getBoard(seed.board.id)).resolves.toMatchObject({
+    await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
       cards: [expect.objectContaining({ id: task.id })],
       connections: []
     });

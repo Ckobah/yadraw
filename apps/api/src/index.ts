@@ -125,6 +125,8 @@ server.setErrorHandler((error, request, reply) => {
         return sendApiError(reply, 400, "invalid_payload", error.message);
       case "conflict":
         return sendApiError(reply, 409, "conflict", error.message);
+      case "forbidden":
+        return sendApiError(reply, 403, "forbidden", error.message);
     }
   }
 

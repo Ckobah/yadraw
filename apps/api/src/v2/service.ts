@@ -10,9 +10,11 @@ import {
   type V2CreateConnectionRequest,
   type V2UpdateCardRequest
 } from "@yadraw/shared";
+import type { RequestContext } from "../context.js";
+import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
 import type { V2Repository } from "./repository.js";
 
-export type V2ServiceErrorCode = "not_found" | "validation_failed" | "conflict";
+export type V2ServiceErrorCode = "not_found" | "validation_failed" | "conflict" | "forbidden";
 
 export class V2ServiceError extends Error {
   constructor(
@@ -25,13 +27,13 @@ export class V2ServiceError extends Error {
 }
 
 export type V2BoardService = {
-  getBoard(boardId: string): Promise<V2BoardDetail>;
-  listCardTypes(workspaceId: string): Promise<V2CardType[]>;
-  createCard(boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
-  updateCard(cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
-  deleteCard(cardId: string): Promise<{ deleted: true; id: string }>;
-  createConnection(boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
-  deleteConnection(connectionId: string): Promise<{ deleted: true; id: string }>;
+  getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
+  listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
+  createCard(context: RequestContext, boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
+  updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
+  deleteCard(context: RequestContext, cardId: string): Promise<{ deleted: true; id: string }>;
+  createConnection(context: RequestContext, boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
+  deleteConnection(context: RequestContext, connectionId: string): Promise<{ deleted: true; id: string }>;
 };
 
 function cloneJson<T>(value: T): T {
@@ -50,9 +52,34 @@ function conflict(message: string): never {
   throw new V2ServiceError("conflict", message);
 }
 
+function forbidden(): never {
+  throw new V2ServiceError("forbidden", "Forbidden");
+}
+
 export function createV2BoardService(repository: V2Repository): V2BoardService {
+  async function authorizeWorkspace(context: RequestContext, workspaceId: string, accessLevel: V2AccessLevel) {
+    const role = await repository.getWorkspaceRole(context.userId, workspaceId);
+    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
+  }
+
+  async function authorizeBoard(context: RequestContext, boardId: string, accessLevel: V2AccessLevel) {
+    const role = await repository.getBoardRole(context.userId, boardId);
+    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
+  }
+
+  async function authorizeCard(context: RequestContext, cardId: string, accessLevel: V2AccessLevel) {
+    const role = await repository.getCardRole(context.userId, cardId);
+    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
+  }
+
+  async function authorizeConnection(context: RequestContext, connectionId: string, accessLevel: V2AccessLevel) {
+    const role = await repository.getConnectionRole(context.userId, connectionId);
+    if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
+  }
+
   return {
-    async getBoard(boardId) {
+    async getBoard(context, boardId) {
+      await authorizeBoard(context, boardId, "read");
       const board = await repository.getBoardDetail(boardId);
       if (!board) {
         notFound("Board not found");
@@ -61,12 +88,14 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
       return board;
     },
 
-    async listCardTypes(workspaceId) {
-      return repository.listCardTypes(workspaceId);
+    async listCardTypes(context, workspaceId) {
+      await authorizeWorkspace(context, workspaceId, "read");
+      return { cardTypes: await repository.listCardTypes(workspaceId) };
     },
 
-    async createCard(boardId, rawInput) {
+    async createCard(context, boardId, rawInput) {
       const input = v2CreateCardBodySchema.parse(rawInput);
+      await authorizeBoard(context, boardId, "write");
       const board = await repository.getBoard(boardId);
       if (!board) {
         notFound("Board not found");
@@ -90,12 +119,14 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
         data: cloneJson(input.data ?? cardType.defaultData),
         position: input.position ?? { x: 0, y: 0 },
         size: input.size ?? cardType.defaultSize,
+        visualStyle: {},
         status: input.status ?? "draft"
       });
     },
 
-    async updateCard(cardId, rawInput) {
+    async updateCard(context, cardId, rawInput) {
       const input = v2UpdateCardBodySchema.parse(rawInput);
+      await authorizeCard(context, cardId, "write");
       const card = await repository.updateCard(cardId, input);
       if (!card) {
         notFound("Card not found");
@@ -104,7 +135,8 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
       return card;
     },
 
-    async deleteCard(cardId) {
+    async deleteCard(context, cardId) {
+      await authorizeCard(context, cardId, "write");
       const deleted = await repository.deleteCard(cardId);
       if (!deleted) {
         notFound("Card not found");
@@ -113,8 +145,9 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
       return { deleted: true, id: cardId };
     },
 
-    async createConnection(boardId, rawInput) {
+    async createConnection(context, boardId, rawInput) {
       const input = v2CreateConnectionBodySchema.parse(rawInput);
+      await authorizeBoard(context, boardId, "write");
       const board = await repository.getBoard(boardId);
       if (!board) {
         notFound("Board not found");
@@ -190,7 +223,8 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
       });
     },
 
-    async deleteConnection(connectionId) {
+    async deleteConnection(context, connectionId) {
+      await authorizeConnection(context, connectionId, "write");
       const deleted = await repository.deleteConnection(connectionId);
       if (!deleted) {
         notFound("Connection not found");

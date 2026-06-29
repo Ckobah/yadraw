@@ -28,6 +28,7 @@ export const v2ViewportSchema = z.object({
 export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
+export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
 
 export const v2CardVisualStyleSchema = z.object({
   fontFamily: z.string().min(1).max(80).optional(),
@@ -251,6 +252,7 @@ export type V2Viewport = z.infer<typeof v2ViewportSchema>;
 export type V2CardStatus = z.infer<typeof v2CardStatusSchema>;
 export type V2PortDirection = z.infer<typeof v2PortDirectionSchema>;
 export type V2ConnectionStatus = z.infer<typeof v2ConnectionStatusSchema>;
+export type V2WorkspaceRole = z.infer<typeof v2WorkspaceRoleSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;

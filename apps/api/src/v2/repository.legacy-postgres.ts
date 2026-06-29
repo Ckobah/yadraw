@@ -42,6 +42,7 @@ import {
   type V2CardTypePort,
   type V2ConnectionStatus,
   type V2JsonObject,
+  type V2WorkspaceRole,
 } from "@yadraw/shared";
 import type { V2Repository } from "./repository.js";
 import type { V2CreateCardRecordInput, V2CreateConnectionRecordInput } from "./repository.js";
@@ -502,7 +503,63 @@ export function createV2LegacyPostgresRepository(databaseUrl: string): V2Reposit
     return rows.map((row) => legacyCardTypeFromRow(row, groupedPorts.get(String(row.id)) ?? []));
   }
 
+  function roleFromRow(row: QueryResultRow | undefined): V2WorkspaceRole | null {
+    return row?.role ? (String(row.role) as V2WorkspaceRole) : null;
+  }
+
   return {
+    async close() {
+      await pool.end();
+    },
+
+    async getWorkspaceRole(userId, workspaceId) {
+      const result = await pool.query(
+        `select wm.role
+         from workspace_members wm
+         join workspaces w on w.id = wm.workspace_id and w.deleted_at is null
+         where wm.user_id = $1 and wm.workspace_id = $2
+         limit 1`,
+        [userId, workspaceId]
+      );
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getBoardRole(userId, boardId) {
+      const result = await pool.query(
+        `select wm.role
+         from boards b
+         join workspace_members wm on wm.workspace_id = b.workspace_id
+         where wm.user_id = $1 and b.id = $2 and b.deleted_at is null
+         limit 1`,
+        [userId, boardId]
+      );
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getCardRole(userId, cardId) {
+      const result = await pool.query(
+        `select wm.role
+         from cards c
+         join workspace_members wm on wm.workspace_id = c.workspace_id
+         where wm.user_id = $1 and c.id = $2 and c.deleted_at is null
+         limit 1`,
+        [userId, cardId]
+      );
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getConnectionRole(userId, connectionId) {
+      const result = await pool.query(
+        `select wm.role
+         from connections c
+         join workspace_members wm on wm.workspace_id = c.workspace_id
+         where wm.user_id = $1 and c.id = $2 and c.deleted_at is null
+         limit 1`,
+        [userId, connectionId]
+      );
+      return roleFromRow(result.rows[0]);
+    },
+
     async getBoardDetail(boardId) {
       const boardResult = await pool.query(
         `select

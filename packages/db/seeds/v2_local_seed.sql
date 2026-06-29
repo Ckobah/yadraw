@@ -10,6 +10,28 @@ set name = excluded.name,
     updated_at = now(),
     deleted_at = null;
 
+insert into workspace_members (workspace_id, user_id, role)
+values
+  (
+    '11111111-1111-4111-8111-111111111111',
+    '02f38bb1-0cde-4473-95ef-1d50db3467e4',
+    'owner'
+  ),
+  (
+    '11111111-1111-4111-8111-111111111111',
+    'bb7ef8c4-91fd-4f3a-86d2-fb760a532c45',
+    'editor'
+  ),
+  (
+    '11111111-1111-4111-8111-111111111111',
+    '9f18a762-53e5-4922-9b0b-8f168921bb0f',
+    'viewer'
+  )
+on conflict (workspace_id, user_id) do update
+set role = excluded.role,
+    updated_at = now(),
+    deleted_at = null;
+
 insert into projects (id, workspace_id, name)
 values (
   '22222222-2222-4222-8222-222222222222',

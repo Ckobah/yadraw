@@ -19,7 +19,8 @@ import {
   type V2Size,
   type V2UpdateCardInput,
   type V2Viewport,
-  type V2Workspace
+  type V2Workspace,
+  type V2WorkspaceRole
 } from "@yadraw/shared";
 
 export type V2CreateCardRecordInput = {
@@ -42,6 +43,11 @@ export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
 };
 
 export type V2Repository = {
+  close?(): Promise<void>;
+  getWorkspaceRole(userId: string, workspaceId: string): Promise<V2WorkspaceRole | null>;
+  getBoardRole(userId: string, boardId: string): Promise<V2WorkspaceRole | null>;
+  getCardRole(userId: string, cardId: string): Promise<V2WorkspaceRole | null>;
+  getConnectionRole(userId: string, connectionId: string): Promise<V2WorkspaceRole | null>;
   getBoardDetail(boardId: string): Promise<V2BoardDetail | null>;
   getBoard(boardId: string): Promise<V2Board | null>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
@@ -59,6 +65,11 @@ type V2MemorySeed = {
   workspace: V2Workspace;
   project: V2Project;
   board: V2Board;
+  workspaceMembers: Array<{
+    workspaceId: string;
+    userId: string;
+    role: V2WorkspaceRole;
+  }>;
   cardTypes: V2CardType[];
   cards: V2Card[];
   connections: V2Connection[];
@@ -303,7 +314,31 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
     }
   ];
 
-  return { workspace, project, board, cardTypes, cards: [], connections: [] };
+  return {
+    workspace,
+    project,
+    board,
+    workspaceMembers: [
+      {
+        workspaceId: workspace.id,
+        userId: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
+        role: "owner"
+      },
+      {
+        workspaceId: workspace.id,
+        userId: "bb7ef8c4-91fd-4f3a-86d2-fb760a532c45",
+        role: "editor"
+      },
+      {
+        workspaceId: workspace.id,
+        userId: "9f18a762-53e5-4922-9b0b-8f168921bb0f",
+        role: "viewer"
+      }
+    ],
+    cardTypes,
+    cards: [],
+    connections: []
+  };
 }
 
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
@@ -325,7 +360,38 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     );
   }
 
+  function roleForWorkspace(userId: string, workspaceId: string): V2WorkspaceRole | null {
+    return (
+      state.workspaceMembers.find(
+        (member) => member.workspaceId === workspaceId && member.userId === userId
+      )?.role ?? null
+    );
+  }
+
   return {
+    async close() {},
+
+    async getWorkspaceRole(userId, workspaceId) {
+      return roleForWorkspace(userId, workspaceId);
+    },
+
+    async getBoardRole(userId, boardId) {
+      const board = boardId === state.board.id ? state.board : null;
+      return board ? roleForWorkspace(userId, board.workspaceId) : null;
+    },
+
+    async getCardRole(userId, cardId) {
+      if (deletedCardIds.has(cardId)) return null;
+      const card = state.cards.find((item) => item.id === cardId);
+      return card ? roleForWorkspace(userId, card.workspaceId) : null;
+    },
+
+    async getConnectionRole(userId, connectionId) {
+      if (deletedConnectionIds.has(connectionId)) return null;
+      const connection = state.connections.find((item) => item.id === connectionId);
+      return connection ? roleForWorkspace(userId, connection.workspaceId) : null;
+    },
+
     async getBoardDetail(boardId) {
       if (boardId !== state.board.id) return null;
       return v2BoardDetailSchema.parse({
@@ -368,6 +434,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         data: cloneJson(input.data),
         position: input.position,
         size: input.size,
+        visualStyle: cloneJson(input.visualStyle ?? {}),
         status: input.status,
         createdAt: timestamp,
         updatedAt: timestamp
@@ -468,7 +535,86 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     return rows.map((row) => cardTypeFromRow(row, groupedPorts.get(String(row.id)) ?? []));
   }
 
+  function roleFromRow(row: QueryResultRow | undefined): V2WorkspaceRole | null {
+    return row?.role ? (String(row.role) as V2WorkspaceRole) : null;
+  }
+
   return {
+    async close() {
+      await pool.end();
+    },
+
+    async getWorkspaceRole(userId, workspaceId) {
+      const result = await pool.query(
+        `
+          select wm.role
+          from workspace_members wm
+          join workspaces w on w.id = wm.workspace_id and w.deleted_at is null
+          where wm.user_id = $1
+            and wm.workspace_id = $2
+            and wm.deleted_at is null
+          limit 1
+        `,
+        [userId, workspaceId]
+      );
+
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getBoardRole(userId, boardId) {
+      const result = await pool.query(
+        `
+          select wm.role
+          from boards b
+          join workspace_members wm on wm.workspace_id = b.workspace_id
+          where wm.user_id = $1
+            and b.id = $2
+            and b.deleted_at is null
+            and wm.deleted_at is null
+          limit 1
+        `,
+        [userId, boardId]
+      );
+
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getCardRole(userId, cardId) {
+      const result = await pool.query(
+        `
+          select wm.role
+          from cards c
+          join workspace_members wm on wm.workspace_id = c.workspace_id
+          where wm.user_id = $1
+            and c.id = $2
+            and c.deleted_at is null
+            and wm.deleted_at is null
+          limit 1
+        `,
+        [userId, cardId]
+      );
+
+      return roleFromRow(result.rows[0]);
+    },
+
+    async getConnectionRole(userId, connectionId) {
+      const result = await pool.query(
+        `
+          select wm.role
+          from connections c
+          join workspace_members wm on wm.workspace_id = c.workspace_id
+          where wm.user_id = $1
+            and c.id = $2
+            and c.deleted_at is null
+            and wm.deleted_at is null
+          limit 1
+        `,
+        [userId, connectionId]
+      );
+
+      return roleFromRow(result.rows[0]);
+    },
+
     async getBoardDetail(boardId) {
       const boardResult = await pool.query(
         `
