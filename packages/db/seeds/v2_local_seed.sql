@@ -90,8 +90,8 @@ values
     'Source',
     'Provides input data.',
     '{"kind":"source"}'::jsonb,
-    280,
-    160
+    172,
+    122
   ),
   (
     '55555555-5555-4555-8555-555555555555',
@@ -100,8 +100,8 @@ values
     'Task',
     'Transforms input data.',
     '{"kind":"task"}'::jsonb,
-    300,
-    180
+    172,
+    122
   )
 on conflict (id) do update
 set workspace_id = excluded.workspace_id,
@@ -197,8 +197,8 @@ values
     '{"kind":"source","endpoint":"/input"}'::jsonb,
     120,
     160,
-    280,
-    160,
+    172,
+    122,
     '{}'::jsonb,
     'active'
   ),
@@ -210,10 +210,10 @@ values
     'Normalize payload',
     'Transforms incoming data into a clean JSON shape.',
     '{"kind":"task","operation":"normalize"}'::jsonb,
-    520,
+    390,
     160,
-    300,
-    180,
+    172,
+    122,
     '{}'::jsonb,
     'active'
   )

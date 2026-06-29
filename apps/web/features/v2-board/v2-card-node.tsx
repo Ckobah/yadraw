@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import { ChevronDown } from "lucide-react";
+import { Database, MoreHorizontal } from "lucide-react";
 import type { V2Card, V2CardType, V2CardTypePort } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
 
@@ -43,6 +43,12 @@ const accentColorByType: Record<string, string> = {
   note: "var(--blue)",
 };
 
+function getCardSummary(card: V2Card): string {
+  if (card.description.trim()) return card.description.trim();
+  const kind = card.data.kind;
+  return typeof kind === "string" && kind.trim() ? kind.trim() : "No description";
+}
+
 export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const accentColor = accentColorByType[cardType.key] ?? "var(--blue)";
@@ -57,17 +63,18 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         flexDirection: "column",
         borderColor: selected ? accentColor : "var(--line)",
         boxShadow: selected
-          ? `0 0 0 2px ${accentColor}33, var(--shadow)`
-          : "var(--shadow)",
+          ? `0 0 0 3px ${accentColor}22, var(--v2-card-shadow)`
+          : "var(--v2-card-shadow)",
         width: "100%",
         height: "100%",
+        ["--v2-card-accent" as string]: accentColor,
       }}
     >
       {/* Resize handles in visual edit mode */}
       <NodeResizer
         isVisible={Boolean(data.isVisualEditing)}
-        minWidth={220}
-        minHeight={120}
+        minWidth={160}
+        minHeight={104}
         handleStyle={{
           width: 10,
           height: 10,
@@ -109,46 +116,24 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
       {/* Compact header (fixed top) */}
       <div className="v2CardHeader">
-        <span
-          className="v2CardTypeBadge"
-          style={{ backgroundColor: accentColor }}
-        >
-          {cardType.key}
+        <span className="v2CardTypeIcon" aria-hidden="true">
+          <Database size={17} strokeWidth={2.1} />
         </span>
-        <span
-          className="v2CardTitle"
-          style={{
-            fontFamily: card.visualStyle?.fontFamily,
-            textAlign: card.visualStyle?.textAlign,
-            color: card.visualStyle?.textColor,
+        <span className="v2CardTypeLabel">{cardType.name}</span>
+        <button
+          type="button"
+          className="v2CardMenuButton nodrag"
+          aria-label={data.expanded ? "Collapse card details" : "Expand card details"}
+          aria-expanded={data.expanded ?? false}
+          onClick={(event) => {
+            event.stopPropagation();
+            data.onToggleExpanded?.(card.id);
           }}
         >
-          {card.title}
-        </span>
+          <MoreHorizontal size={18} strokeWidth={2.2} />
+        </button>
       </div>
 
-      {/* Port labels row — compact (fixed below header) */}
-      <div
-        className="v2CardPortRow"
-        style={{
-          fontFamily: card.visualStyle?.fontFamily ?? undefined,
-          textAlign: card.visualStyle?.textAlign ?? undefined,
-          color: card.visualStyle?.textColor ?? undefined,
-        }}
-      >
-        {inputPort && (
-          <span className="v2CardPortLabel v2CardPortLabelInput">
-            {inputPort.label}
-          </span>
-        )}
-        {outputPort && (
-          <span className="v2CardPortLabel v2CardPortLabelOutput">
-            {outputPort.label}
-          </span>
-        )}
-      </div>
-
-      {/* Body area — flexes to fill remaining space, vertically aligns */}
       <div
         className="v2CardBody"
         style={{
@@ -159,6 +144,27 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           minHeight: 0,
         }}
       >
+        <span
+          className="v2CardTitle"
+          style={{
+            fontFamily: card.visualStyle?.fontFamily,
+            textAlign: card.visualStyle?.textAlign,
+            color: card.visualStyle?.textColor,
+          }}
+        >
+          {card.title}
+        </span>
+        {!data.expanded ? (
+          <span
+            className="v2CardSubtitle"
+            style={{
+              fontFamily: card.visualStyle?.fontFamily ?? undefined,
+              textAlign: card.visualStyle?.textAlign ?? undefined,
+            }}
+          >
+            {getCardSummary(card)}
+          </span>
+        ) : null}
         {/* Expanded content */}
         {data.expanded ? (
           <div
@@ -177,23 +183,6 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           </div>
         ) : null}
       </div>
-
-      {/* Expand arrow — absolute position relative to article */}
-      <button
-        type="button"
-        className="v2CardExpandButton nodrag"
-        aria-label={data.expanded ? "Collapse card" : "Expand card"}
-        aria-expanded={data.expanded ?? false}
-        onClick={(event) => {
-          event.stopPropagation();
-          data.onToggleExpanded?.(card.id);
-        }}
-      >
-        <ChevronDown
-          size={16}
-          className={data.expanded ? "v2CardExpandIcon v2CardExpandIconOpen" : "v2CardExpandIcon"}
-        />
-      </button>
     </article>
   );
 }

@@ -254,7 +254,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       name: "Source",
       description: "Provides input data.",
       defaultData: { kind: "source" },
-      defaultSize: { width: 280, height: 160 },
+      defaultSize: { width: 172, height: 122 },
       ports: [
         {
           id: "66666666-6666-4666-8666-666666666661",
@@ -280,7 +280,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       name: "Task",
       description: "Transforms input data.",
       defaultData: { kind: "task" },
-      defaultSize: { width: 300, height: 180 },
+      defaultSize: { width: 172, height: 122 },
       ports: [
         {
           id: "66666666-6666-4666-8666-666666666662",
@@ -323,7 +323,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       description: "Source payload for the board.",
       data: { kind: "source", endpoint: "/input" },
       position: { x: 120, y: 160 },
-      size: { width: 280, height: 160 },
+      size: { width: 172, height: 122 },
       visualStyle: {},
       status: "active",
       createdAt: timestamp,
@@ -337,8 +337,8 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       title: "Normalize payload",
       description: "Transforms incoming data into a clean JSON shape.",
       data: { kind: "task", operation: "normalize" },
-      position: { x: 520, y: 160 },
-      size: { width: 300, height: 180 },
+      position: { x: 390, y: 160 },
+      size: { width: 172, height: 122 },
       visualStyle: {},
       status: "active",
       createdAt: timestamp,

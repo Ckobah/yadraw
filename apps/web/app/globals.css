@@ -2185,11 +2185,14 @@ button:disabled {
 
 .v2CardNode {
   position: relative;
-  border: 2px solid var(--line);
-  border-radius: 8px;
+  --v2-card-accent: var(--blue);
+  --v2-card-shadow: 0 12px 28px rgba(23, 100, 220, 0.16);
+  overflow: visible;
+  border: 1.5px solid rgba(48, 135, 255, 0.58);
+  border-radius: 9px;
   background: #fff;
-  padding: 10px 12px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  padding: 0;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
   cursor: default;
   user-select: none;
 }
@@ -2197,93 +2200,79 @@ button:disabled {
 .v2CardHeader {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 7px;
+  min-height: 44px;
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(180deg, #eef6ff 0%, #f8fbff 100%);
+  padding: 0 12px 0 14px;
 }
 
-.v2CardTypeBadge {
+.v2CardTypeIcon {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 4px;
-  color: #fff;
+  display: grid;
+  width: 21px;
+  height: 21px;
+  place-items: center;
+  color: var(--v2-card-accent);
+}
+
+.v2CardTypeLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-card-accent);
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
   line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.v2CardMenuButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--v2-card-accent);
+  cursor: pointer;
+}
+
+.v2CardMenuButton:hover,
+.v2CardMenuButton:focus-visible {
+  background: rgba(48, 135, 255, 0.09);
+  outline: 0;
 }
 
 .v2CardTitle {
   min-width: 0;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.3;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--text);
+  font-size: 13.5px;
+  font-weight: 760;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-.v2CardPortRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-
-.v2CardPortLabel {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--muted);
-  line-height: 1;
-}
-
-.v2CardPortLabelInput::before {
-  content: "◀ ";
-  font-size: 8px;
-}
-
-.v2CardPortLabelOutput::before {
-  content: "▶ ";
-  font-size: 8px;
-}
-
-/* ── V2 card body — flex vertical align area ── */
 
 .v2CardBody {
-  overflow-y: auto;
+  gap: 8px;
+  overflow: hidden;
+  padding: 14px 18px 15px;
 }
 
-.v2CardExpandButton {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.5;
-  cursor: pointer;
-  transition: opacity 0.15s, background 0.15s;
-  z-index: 1;
-}
-
-.v2CardExpandButton:hover {
-  opacity: 1;
-  background: var(--panel-soft);
-}
-
-.v2CardExpandButton:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: -2px;
+.v2CardSubtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: #7a8190;
+  font-size: 11.5px;
+  font-weight: 520;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Visual edit mode panel ──────────────────── */
@@ -2421,18 +2410,9 @@ button:disabled {
   border-radius: 2px;
 }
 
-.v2CardExpandIcon {
-  transition: transform 0.2s ease;
-}
-
-.v2CardExpandIconOpen {
-  transform: rotate(180deg);
-}
-
 .v2CardExpandedContent {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
   max-height: 200px;
   overflow-y: auto;
 }
@@ -2440,8 +2420,8 @@ button:disabled {
 .v2CardDescription {
   font-size: 12px;
   line-height: 1.4;
-  color: var(--text);
-  margin: 0 0 6px 0;
+  color: #5f6675;
+  margin: 0;
   word-break: break-word;
 }
 
@@ -2462,17 +2442,18 @@ button:disabled {
 /* ── V2 card handles ────────────────────── */
 
 .v2CardHandle {
-  width: 8px !important;
-  height: 8px !important;
-  border: 2px solid var(--line-strong) !important;
+  width: 15px !important;
+  height: 15px !important;
+  border: 1.6px solid #2f8cff !important;
   border-radius: 999px !important;
   background: #fff !important;
+  box-shadow: 0 2px 5px rgba(47, 140, 255, 0.22) !important;
 }
 
 .v2CardHandleInput {
-  left: -5px !important;
+  left: -8px !important;
 }
 
 .v2CardHandleOutput {
-  right: -5px !important;
+  right: -8px !important;
 }
