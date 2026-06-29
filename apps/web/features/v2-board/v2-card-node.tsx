@@ -1,6 +1,7 @@
 "use client";
 
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlignCenter,
   AlignLeft,
@@ -19,15 +20,21 @@ import type { Node } from "@xyflow/react";
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
-  expanded?: boolean;
-  onToggleExpanded?: (cardId: string) => void;
   isVisualEditing?: boolean;
+  onStartVisualEditor?: (cardId: string) => void;
+  onDuplicateCard?: (cardId: string) => void;
+  onDeleteCard?: (cardId: string) => void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => void;
   onCloseVisualEditor?: () => void;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
+
+export const V2_CARD_MIN_SIZE = {
+  width: 196,
+  height: 122,
+} as const;
 
 function getInputPort(ports: V2CardTypePort[]): V2CardTypePort | undefined {
   return ports.find((p) => p.direction === "input");
@@ -64,6 +71,8 @@ function getCardSummary(card: V2Card): string {
 
 export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const accentColor = accentColorByType[cardType.key] ?? "var(--blue)";
   const inputPort = getInputPort(cardType.ports);
   const outputPort = getOutputPort(cardType.ports);
@@ -79,6 +88,27 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
     data.onUpdateVisualStyle?.(card.id, patch);
+  }
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+
+    function closeOnOutsidePointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof globalThis.Node &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setIsMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
+  }, [isMenuOpen]);
+
+  function runMenuAction(action: () => void) {
+    setIsMenuOpen(false);
+    action();
   }
 
   return (
@@ -99,8 +129,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       {/* Resize handles in visual edit mode */}
       <NodeResizer
         isVisible={Boolean(data.isVisualEditing)}
-        minWidth={160}
-        minHeight={104}
+        minWidth={V2_CARD_MIN_SIZE.width}
+        minHeight={V2_CARD_MIN_SIZE.height}
         handleStyle={{
           width: 10,
           height: 10,
@@ -256,18 +286,52 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           <Database size={17} strokeWidth={2.1} />
         </span>
         <span className="v2CardTypeLabel">{cardType.name}</span>
-        <button
-          type="button"
-          className="v2CardMenuButton nodrag"
-          aria-label={data.expanded ? "Collapse card details" : "Expand card details"}
-          aria-expanded={data.expanded ?? false}
-          onClick={(event) => {
-            event.stopPropagation();
-            data.onToggleExpanded?.(card.id);
-          }}
+        <div
+          ref={menuRef}
+          className="v2CardActionMenuWrap nodrag"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
         >
-          <MoreHorizontal size={18} strokeWidth={2.2} />
-        </button>
+          <button
+            type="button"
+            className="v2CardMenuButton"
+            aria-label="Card actions"
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsMenuOpen((current) => !current);
+            }}
+          >
+            <MoreHorizontal size={18} strokeWidth={2.2} />
+          </button>
+          {isMenuOpen ? (
+            <div className="v2CardActionMenu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runMenuAction(() => data.onStartVisualEditor?.(card.id))}
+              >
+                Редактировать
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => runMenuAction(() => data.onDuplicateCard?.(card.id))}
+              >
+                Дублировать
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="v2CardActionMenuDanger"
+                onClick={() => runMenuAction(() => data.onDeleteCard?.(card.id))}
+              >
+                Удалить
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div
@@ -286,30 +350,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         >
           {card.title}
         </span>
-        {!data.expanded ? (
-          <span
-            className="v2CardSubtitle"
-            style={textStyle}
-          >
-            {getCardSummary(card)}
-          </span>
-        ) : null}
-        {/* Expanded content */}
-        {data.expanded ? (
-          <div
-            className="v2CardExpandedContent"
-            style={{
-              ...textStyle,
-            }}
-          >
-            <p className="v2CardDescription">
-              {card.description || "No description"}
-            </p>
-            <pre className="v2CardDataPreview">
-              {JSON.stringify(card.data, null, 2)}
-            </pre>
-          </div>
-        ) : null}
+        <span
+          className="v2CardSubtitle"
+          style={textStyle}
+        >
+          {getCardSummary(card)}
+        </span>
       </div>
     </article>
   );

@@ -104,7 +104,7 @@ export function createV2BoardService(repository: V2Repository): V2BoardService {
         data: cloneJson(input.data ?? cardType.defaultData),
         position: input.position ?? { x: 0, y: 0 },
         size: input.size ?? cardType.defaultSize,
-        visualStyle: {},
+        visualStyle: cloneJson(input.visualStyle ?? {}),
         status: input.status ?? "draft"
       });
     },

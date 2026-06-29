@@ -69,6 +69,25 @@ describe("v2 board service", () => {
     });
   });
 
+  it("preserves visual style when creating a card", async () => {
+    const { seed, sourceType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    const card = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      title: "Styled source",
+      visualStyle: {
+        textAlign: "center",
+        fontWeight: "700"
+      }
+    });
+
+    expect(card.visualStyle).toEqual({
+      textAlign: "center",
+      fontWeight: "700"
+    });
+  });
+
   it("allows viewers to read board data but rejects write operations", async () => {
     const { seed, sourceType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));

@@ -90,7 +90,7 @@ values
     'Source',
     'Provides input data.',
     '{"kind":"source"}'::jsonb,
-    172,
+    196,
     122
   ),
   (
@@ -100,7 +100,7 @@ values
     'Task',
     'Transforms input data.',
     '{"kind":"task"}'::jsonb,
-    172,
+    196,
     122
   )
 on conflict (id) do update
@@ -197,7 +197,7 @@ values
     '{"kind":"source","endpoint":"/input"}'::jsonb,
     120,
     160,
-    172,
+    196,
     122,
     '{}'::jsonb,
     'active'
@@ -212,7 +212,7 @@ values
     '{"kind":"task","operation":"normalize"}'::jsonb,
     390,
     160,
-    172,
+    196,
     122,
     '{}'::jsonb,
     'active'

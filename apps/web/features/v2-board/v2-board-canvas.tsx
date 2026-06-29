@@ -19,13 +19,19 @@ import type {
   V2CardType,
   V2CardVisualStyle,
 } from "@yadraw/shared";
-import { V2CardNodeComponent, type V2CardNode } from "./v2-card-node";
 import {
+  V2_CARD_MIN_SIZE,
+  V2CardNodeComponent,
+  type V2CardNode,
+} from "./v2-card-node";
+import {
+  createV2Card,
   updateV2CardPosition,
   updateV2CardSize,
   updateV2CardVisualStyle,
   createV2Connection,
   deleteV2Connection,
+  deleteV2Card,
 } from "./api";
 
 type Props = {
@@ -56,57 +62,65 @@ function isValidHandle(
   );
 }
 
+function clampCardSize(size: V2Card["size"]): V2Card["size"] {
+  return {
+    width: Math.max(size.width, V2_CARD_MIN_SIZE.width),
+    height: Math.max(size.height, V2_CARD_MIN_SIZE.height),
+  };
+}
+
+function fallbackCardType(card: V2Card, workspaceId: string): V2CardType {
+  return {
+    id: card.cardTypeId,
+    workspaceId,
+    key: "unknown",
+    name: "Unknown",
+    description: "",
+    defaultData: {},
+    defaultSize: { width: 200, height: 120 },
+    ports: [],
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+function buildCardNode(
+  card: V2Card,
+  cardTypeMap: Map<string, V2CardType>,
+  workspaceId: string
+): V2CardNode {
+  const size = clampCardSize(card.size);
+
+  return {
+    id: card.id,
+    type: "v2Card",
+    position: { x: card.position.x, y: card.position.y },
+    data: {
+      card: {
+        ...card,
+        size,
+      },
+      cardType: cardTypeMap.get(card.cardTypeId) ?? fallbackCardType(card, workspaceId),
+    },
+    style: {
+      width: size.width,
+      height: size.height,
+    },
+  };
+}
+
 export function V2BoardCanvas({ boardDetail }: Props) {
   const { board, cards, connections, cardTypes } = boardDetail;
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(
-    () => new Set()
-  );
-
-  const toggleCardExpanded = useCallback((cardId: string) => {
-    setExpandedCardIds((current) => {
-      const next = new Set(current);
-      if (next.has(cardId)) {
-        next.delete(cardId);
-      } else {
-        next.add(cardId);
-      }
-      return next;
-    });
-  }, []);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    const nodes: V2CardNode[] = cards.map((card: V2Card) => {
-      const cardType = cardTypeMap.get(card.cardTypeId);
-      return {
-        id: card.id,
-        type: "v2Card",
-        position: { x: card.position.x, y: card.position.y },
-        data: {
-          card,
-          cardType: cardType ?? {
-            id: card.cardTypeId,
-            workspaceId: board.workspaceId,
-            key: "unknown",
-            name: "Unknown",
-            description: "",
-            defaultData: {},
-            defaultSize: { width: 200, height: 120 },
-            ports: [],
-            createdAt: "",
-            updatedAt: "",
-          },
-        },
-        style: {
-          width: card.size.width,
-          height: card.size.height,
-        },
-      };
-    });
+    const nodes: V2CardNode[] = cards.map((card: V2Card) =>
+      buildCardNode(card, cardTypeMap, board.workspaceId)
+    );
 
     const edges: Edge[] = connections.map((conn: V2Connection) => ({
       id: conn.id,
@@ -152,6 +166,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   // ── Visual edit handlers ─────────────────────────────────────────
   const handleResizeCard = useCallback(
     async (cardId: string, size: { width: number; height: number }) => {
+      const nextSize = clampCardSize(size);
+
       // Optimistic local update
       setNodes((nds) =>
         nds.map((node) => {
@@ -160,12 +176,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             ...node,
             data: {
               ...node.data,
-              card: { ...node.data.card, size },
+              card: { ...node.data.card, size: nextSize },
             },
             style: {
               ...node.style,
-              width: size.width,
-              height: size.height,
+              width: nextSize.width,
+              height: nextSize.height,
             },
           };
         })
@@ -173,7 +189,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
       setSaveStatus("saving");
       try {
-        await updateV2CardSize(cardId, size);
+        await updateV2CardSize(cardId, nextSize);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to save card size:", err);
@@ -229,6 +245,67 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setNodes]
   );
 
+  const handleStartVisualEditor = useCallback((cardId: string) => {
+    setVisualEditingCardId(cardId);
+  }, []);
+
+  const handleDuplicateCard = useCallback(
+    async (cardId: string) => {
+      const sourceNode = nodesRef.current.find((node) => node.id === cardId);
+      if (!sourceNode) return;
+
+      const sourceCard = sourceNode.data.card;
+      const nextPosition = {
+        x: sourceNode.position.x + 32,
+        y: sourceNode.position.y + 32,
+      };
+
+      setSaveStatus("saving");
+      try {
+        const created = await createV2Card(board.id, {
+          cardTypeId: sourceCard.cardTypeId,
+          title: `${sourceCard.title} Copy`,
+          description: sourceCard.description,
+          data: sourceCard.data,
+          position: nextPosition,
+          size: clampCardSize(sourceCard.size),
+          visualStyle: sourceCard.visualStyle ?? {},
+          status: sourceCard.status,
+        });
+
+        setNodes((current) => [
+          ...current,
+          buildCardNode(created, cardTypeMap, board.workspaceId),
+        ]);
+        setVisualEditingCardId(created.id);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to duplicate card:", err);
+        setSaveStatus("error");
+      }
+    },
+    [board.id, board.workspaceId, cardTypeMap, setNodes]
+  );
+
+  const handleDeleteCard = useCallback(
+    async (cardId: string) => {
+      setSaveStatus("saving");
+      try {
+        await deleteV2Card(cardId);
+        setNodes((current) => current.filter((node) => node.id !== cardId));
+        setEdges((current) =>
+          current.filter((edge) => edge.source !== cardId && edge.target !== cardId)
+        );
+        setVisualEditingCardId((current) => (current === cardId ? null : current));
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to delete card:", err);
+        setSaveStatus("error");
+      }
+    },
+    [setEdges, setNodes]
+  );
+
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     setNodes((nds) =>
@@ -236,9 +313,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         ...node,
         data: {
           ...node.data,
-          expanded: expandedCardIds.has(node.id),
-          onToggleExpanded: toggleCardExpanded,
           isVisualEditing: visualEditingCardId === node.id,
+          onStartVisualEditor: handleStartVisualEditor,
+          onDuplicateCard: handleDuplicateCard,
+          onDeleteCard: handleDeleteCard,
           onResizeCard: handleResizeCard,
           onUpdateVisualStyle: handleUpdateVisualStyle,
           onCloseVisualEditor: () => setVisualEditingCardId(null),
@@ -246,10 +324,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       }))
     );
   }, [
-    expandedCardIds,
     setNodes,
-    toggleCardExpanded,
     visualEditingCardId,
+    handleStartVisualEditor,
+    handleDuplicateCard,
+    handleDeleteCard,
     handleResizeCard,
     handleUpdateVisualStyle,
   ]);
@@ -276,10 +355,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
       // Basic client-side validation via card types
       const sourceType = cardTypeMap.get(
-        cards.find((c) => c.id === source)?.cardTypeId ?? ""
+        nodesRef.current.find((node) => node.id === source)?.data.card.cardTypeId ?? ""
       );
       const targetType = cardTypeMap.get(
-        cards.find((c) => c.id === target)?.cardTypeId ?? ""
+        nodesRef.current.find((node) => node.id === target)?.data.card.cardTypeId ?? ""
       );
       if (
         !isValidHandle(sourceType, sourceHandle, "output") ||
@@ -337,7 +416,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("error");
       }
     },
-    [board.id, cardTypeMap, cards, setEdges]
+    [board.id, cardTypeMap, setEdges]
   );
 
   // ── Delete connection ────────────────────────────────────────────

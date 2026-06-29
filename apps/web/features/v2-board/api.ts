@@ -2,7 +2,7 @@
  * Server-side API client for v2 board endpoints.
  * Follows the existing API URL pattern from apps/web/app/boards/[boardId]/page.tsx.
  */
-import type { V2BoardDetail, V2Connection } from "@yadraw/shared";
+import type { V2BoardDetail, V2Card, V2Connection, V2CreateCardRequest } from "@yadraw/shared";
 import type { V2CardType } from "@yadraw/shared";
 
 const apiBaseUrl =
@@ -163,6 +163,46 @@ export async function updateV2CardVisualStyle(
     throw new V2ApiError(
       response.status,
       `Visual style update failed with ${response.status}`,
+      body
+    );
+  }
+}
+
+export async function createV2Card(
+  boardId: string,
+  input: V2CreateCardRequest
+): Promise<V2Card> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/cards`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card creation failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2Card>;
+}
+
+export async function deleteV2Card(cardId: string): Promise<void> {
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card deletion failed with ${response.status}`,
       body
     );
   }

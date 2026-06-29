@@ -91,6 +91,26 @@ describe("v2 API contracts", () => {
     ).toThrow();
   });
 
+  it("allows visual style when creating cards", () => {
+    expect(
+      v2CreateCardBodySchema.parse({
+        cardTypeId,
+        title: "Styled card",
+        visualStyle: {
+          textAlign: "center",
+          fontWeight: "700"
+        }
+      })
+    ).toMatchObject({
+      cardTypeId,
+      title: "Styled card",
+      visualStyle: {
+        textAlign: "center",
+        fontWeight: "700"
+      }
+    });
+  });
+
   it("applies defaults for connection creation requests", () => {
     expect(
       v2CreateConnectionBodySchema.parse({

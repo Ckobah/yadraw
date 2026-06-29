@@ -152,6 +152,7 @@ export const v2CreateCardBodySchema = z.object({
   data: v2JsonObjectSchema.optional(),
   position: v2PositionSchema.optional(),
   size: v2SizeSchema.optional(),
+  visualStyle: v2CardVisualStyleSchema.optional(),
   status: v2CardStatusSchema.optional()
 });
 
