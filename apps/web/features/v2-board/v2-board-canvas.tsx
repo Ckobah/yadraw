@@ -11,7 +11,7 @@ import {
   type Edge,
   type Connection,
 } from "@xyflow/react";
-import { useMemo, useCallback, useEffect, useState } from "react";
+import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -138,6 +138,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const nodesRef = useRef(nodes);
+
+  useEffect(() => {
+    nodesRef.current = nodes;
+  }, [nodes]);
 
   const nodeTypes = useMemo(
     () => ({ v2Card: V2CardNodeComponent }),
@@ -190,18 +195,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleUpdateVisualStyle = useCallback(
     async (
       cardId: string,
-      patch: {
-        fontFamily?: string;
-        textAlign?: "left" | "center" | "right";
-        textColor?: string;
-        fontWeight?: "400" | "600" | "700";
-        fontStyle?: "normal" | "italic";
-        textDecoration?: "none" | "underline";
-        bodyVerticalAlign?: "top" | "center" | "bottom";
-      }
+      patch: V2CardVisualStyle
     ) => {
-      // Find current visualStyle from nodes state
-      const node = nodes.find((n) => n.id === cardId);
+      const node = nodesRef.current.find((n) => n.id === cardId);
       const current = (node?.data as { card?: { visualStyle?: V2CardVisualStyle } })?.card?.visualStyle ?? {};
       const nextVisualStyle = Object.fromEntries(
         Object.entries({ ...current, ...patch }).filter(([, value]) => value !== undefined && value !== "")
@@ -230,7 +226,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("error");
       }
     },
-    [nodes, setNodes]
+    [setNodes]
   );
 
   // ── Sync dynamic state into node data ────────────────────────────
