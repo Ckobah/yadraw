@@ -30,6 +30,7 @@ import {
   updateV2CardPosition,
   updateV2CardSize,
   updateV2CardVisualStyle,
+  updateV2CardBasics,
   createV2Connection,
   deleteV2Connection,
   deleteV2Card,
@@ -283,6 +284,66 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setNodes]
   );
 
+  const handleUpdateCardBasics = useCallback(
+    async (
+      cardId: string,
+      input: { title?: string; description?: string | null }
+    ) => {
+      const patch: { title?: string; description?: string } = {};
+      if (input.title !== undefined) patch.title = input.title;
+      if (input.description !== undefined) patch.description = input.description ?? "";
+      if (patch.title === undefined && patch.description === undefined) return;
+
+      const previous = nodesRef.current.find((node) => node.id === cardId)?.data.card;
+
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id !== cardId) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              card: {
+                ...node.data.card,
+                ...(patch.title !== undefined ? { title: patch.title } : {}),
+                ...(patch.description !== undefined ? { description: patch.description } : {}),
+              },
+            },
+          };
+        })
+      );
+
+      setSaveStatus("saving");
+      try {
+        await updateV2CardBasics(cardId, patch);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to save card basics:", err);
+        if (previous) {
+          setNodes((nds) =>
+            nds.map((node) => {
+              if (node.id !== cardId) return node;
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  card: {
+                    ...node.data.card,
+                    title: previous.title,
+                    description: previous.description,
+                  },
+                },
+              };
+            })
+          );
+        }
+        setSaveStatus("error");
+        throw err;
+      }
+    },
+    [setNodes]
+  );
+
   const handleStartVisualEditor = useCallback((cardId: string) => {
     setVisualEditingCardId(cardId);
   }, []);
@@ -528,6 +589,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}
           cardById={cardById}
+          saveStatus={saveStatus}
+          onUpdateCardBasics={handleUpdateCardBasics}
           onClose={() => setSelectedCardId(null)}
         />
       ) : null}

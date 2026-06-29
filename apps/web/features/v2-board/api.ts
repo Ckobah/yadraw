@@ -168,6 +168,36 @@ export async function updateV2CardVisualStyle(
   }
 }
 
+export async function updateV2CardBasics(
+  cardId: string,
+  input: {
+    title?: string;
+    description?: string | null;
+  }
+): Promise<void> {
+  const body: { title?: string; description?: string } = {};
+  if (input.title !== undefined) body.title = input.title;
+  if (input.description !== undefined) body.description = input.description ?? "";
+
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card basics update failed with ${response.status}`,
+      body
+    );
+  }
+}
+
 export async function createV2Card(
   boardId: string,
   input: V2CreateCardRequest
