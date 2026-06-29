@@ -29,6 +29,12 @@ export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
 export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
+export const v2FileProcessingStatusSchema = z.enum([
+  "pending",
+  "processing",
+  "processed",
+  "failed"
+]);
 
 export const v2CardVisualStyleSchema = z.object({
   fontFamily: z.string().min(1).max(80).optional(),
@@ -122,6 +128,49 @@ export const v2ConnectionSchema = z.object({
   status: v2ConnectionStatusSchema,
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
+});
+
+export const v2FileSchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  storageBucket: z.string().min(1),
+  storagePath: z.string().min(1),
+  filename: z.string().min(1),
+  mimeType: z.string().nullable().optional(),
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
+  sha256: z.string().nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  processingStatus: v2FileProcessingStatusSchema,
+  processingError: z.record(z.string(), z.unknown()).nullable().optional(),
+  createdBy: v2UuidSchema.nullable().optional(),
+  createdAt: v2TimestampSchema,
+  updatedAt: v2TimestampSchema,
+  deletedAt: v2TimestampSchema.nullable().optional()
+});
+
+export const v2CardFileSchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  cardId: v2UuidSchema,
+  fileId: v2UuidSchema,
+  role: z.string().min(1).default("attachment"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  file: v2FileSchema.optional(),
+  createdBy: v2UuidSchema.nullable().optional(),
+  createdAt: v2TimestampSchema,
+  deletedAt: v2TimestampSchema.nullable().optional()
+});
+
+export const v2CardAttachmentSchema = z.object({
+  id: v2UuidSchema,
+  cardId: v2UuidSchema,
+  fileId: v2UuidSchema,
+  role: z.string().min(1),
+  filename: z.string().min(1),
+  mimeType: z.string().nullable().optional(),
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
+  processingStatus: v2FileProcessingStatusSchema,
+  createdAt: v2TimestampSchema
 });
 
 export const v2BoardDetailSchema = z.object({
@@ -256,6 +305,11 @@ export const v2DemoIds = {
   }
 } as const;
 
+export const V2FileProcessingStatusSchema = v2FileProcessingStatusSchema;
+export const V2FileSchema = v2FileSchema;
+export const V2CardFileSchema = v2CardFileSchema;
+export const V2CardAttachmentSchema = v2CardAttachmentSchema;
+
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
 export type V2Board = z.infer<typeof v2BoardSchema>;
@@ -267,11 +321,15 @@ export type V2CardStatus = z.infer<typeof v2CardStatusSchema>;
 export type V2PortDirection = z.infer<typeof v2PortDirectionSchema>;
 export type V2ConnectionStatus = z.infer<typeof v2ConnectionStatusSchema>;
 export type V2WorkspaceRole = z.infer<typeof v2WorkspaceRoleSchema>;
+export type V2FileProcessingStatus = z.infer<typeof v2FileProcessingStatusSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
+export type V2File = z.infer<typeof v2FileSchema>;
+export type V2CardFile = z.infer<typeof v2CardFileSchema>;
+export type V2CardAttachment = z.infer<typeof v2CardAttachmentSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;

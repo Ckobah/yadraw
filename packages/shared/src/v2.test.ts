@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   v2ApiContracts,
   v2BoardDetailSchema,
+  v2CardAttachmentSchema,
+  v2CardFileSchema,
   v2CardSchema,
   v2CardVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
+  v2FileProcessingStatusSchema,
+  v2FileSchema,
   v2UpdateCardBodySchema
 } from "./v2.js";
 
@@ -15,6 +19,9 @@ const projectId = "22222222-2222-4222-8222-222222222222";
 const boardId = "33333333-3333-4333-8333-333333333333";
 const cardTypeId = "44444444-4444-4444-8444-444444444444";
 const portId = "55555555-5555-4555-8555-555555555555";
+const cardId = "66666666-6666-4666-8666-666666666666";
+const fileId = "77777777-7777-4777-8777-777777777777";
+const cardFileId = "88888888-8888-4888-8888-888888888888";
 
 describe("v2 API contracts", () => {
   it("parses the minimal board detail DTO", () => {
@@ -225,7 +232,7 @@ describe("v2CardVisualStyleSchema", () => {
 
 describe("v2CardSchema with visualStyle", () => {
   const baseCard = {
-    id: "66666666-6666-4666-8666-666666666666",
+    id: cardId,
     workspaceId,
     boardId,
     cardTypeId,
@@ -264,6 +271,113 @@ describe("v2CardSchema with visualStyle", () => {
       fontStyle: "italic",
       textDecoration: "underline"
     });
+  });
+});
+
+describe("v2 file attachment schemas", () => {
+  const baseFile = {
+    id: fileId,
+    workspaceId,
+    storageBucket: "workspace-files",
+    storagePath: `${workspaceId}/cards/${cardId}/bearing.pdf`,
+    filename: "bearing.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 2048,
+    sha256: "abc123",
+    metadata: { source: "manual" },
+    processingStatus: "pending",
+    processingError: null,
+    createdBy: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null
+  } as const;
+
+  it("accepts a valid file", () => {
+    expect(v2FileSchema.parse(baseFile)).toMatchObject({
+      id: fileId,
+      workspaceId,
+      filename: "bearing.pdf",
+      processingStatus: "pending"
+    });
+  });
+
+  it("rejects empty filename", () => {
+    expect(() =>
+      v2FileSchema.parse({
+        ...baseFile,
+        filename: ""
+      })
+    ).toThrow();
+  });
+
+  it("rejects negative sizeBytes", () => {
+    expect(() =>
+      v2FileSchema.parse({
+        ...baseFile,
+        sizeBytes: -1
+      })
+    ).toThrow();
+  });
+
+  it("rejects unknown processing status", () => {
+    expect(() => v2FileProcessingStatusSchema.parse("queued")).toThrow();
+  });
+
+  it("accepts a valid card-file link", () => {
+    expect(
+      v2CardFileSchema.parse({
+        id: cardFileId,
+        workspaceId,
+        cardId,
+        fileId,
+        role: "attachment",
+        metadata: { pinned: true },
+        file: baseFile,
+        createdBy: null,
+        createdAt: timestamp,
+        deletedAt: null
+      })
+    ).toMatchObject({
+      id: cardFileId,
+      cardId,
+      fileId,
+      role: "attachment"
+    });
+  });
+
+  it("accepts a compact card attachment", () => {
+    expect(
+      v2CardAttachmentSchema.parse({
+        id: cardFileId,
+        cardId,
+        fileId,
+        role: "attachment",
+        filename: "bearing.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 2048,
+        processingStatus: "processed",
+        createdAt: timestamp
+      })
+    ).toMatchObject({
+      filename: "bearing.pdf",
+      processingStatus: "processed"
+    });
+  });
+
+  it("rejects negative sizeBytes in compact card attachment", () => {
+    expect(() =>
+      v2CardAttachmentSchema.parse({
+        id: cardFileId,
+        cardId,
+        fileId,
+        role: "attachment",
+        filename: "bearing.pdf",
+        sizeBytes: -1,
+        processingStatus: "processed",
+        createdAt: timestamp
+      })
+    ).toThrow();
   });
 });
 
