@@ -121,12 +121,18 @@ describe("v2CardVisualStyleSchema", () => {
       v2CardVisualStyleSchema.parse({
         fontFamily: "Inter",
         textAlign: "center",
-        textColor: "#111827"
+        textColor: "#111827",
+        fontWeight: "700",
+        fontStyle: "italic",
+        textDecoration: "underline"
       })
     ).toEqual({
       fontFamily: "Inter",
       textAlign: "center",
-      textColor: "#111827"
+      textColor: "#111827",
+      fontWeight: "700",
+      fontStyle: "italic",
+      textDecoration: "underline"
     });
   });
 
@@ -183,6 +189,18 @@ describe("v2CardVisualStyleSchema", () => {
       v2CardVisualStyleSchema.parse({ bodyVerticalAlign: "stretch" })
     ).toThrow();
   });
+
+  it("rejects invalid text emphasis values", () => {
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ fontWeight: "900" })
+    ).toThrow();
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ fontStyle: "oblique" })
+    ).toThrow();
+    expect(() =>
+      v2CardVisualStyleSchema.parse({ textDecoration: "line-through" })
+    ).toThrow();
+  });
 });
 
 describe("v2CardSchema with visualStyle", () => {
@@ -209,12 +227,22 @@ describe("v2CardSchema with visualStyle", () => {
   it("accepts card with visualStyle", () => {
     const card = v2CardSchema.parse({
       ...baseCard,
-      visualStyle: { fontFamily: "Mono", textAlign: "left", textColor: "#333" }
+      visualStyle: {
+        fontFamily: "Mono",
+        textAlign: "left",
+        textColor: "#333",
+        fontWeight: "700",
+        fontStyle: "italic",
+        textDecoration: "underline"
+      }
     });
     expect(card.visualStyle).toEqual({
       fontFamily: "Mono",
       textAlign: "left",
-      textColor: "#333"
+      textColor: "#333",
+      fontWeight: "700",
+      fontStyle: "italic",
+      textDecoration: "underline"
     });
   });
 });
@@ -238,10 +266,22 @@ describe("v2UpdateCardBodySchema with visualStyle", () => {
 
   it("accepts visualStyle with bodyVerticalAlign in update body", () => {
     const result = v2UpdateCardBodySchema.parse({
-      visualStyle: { bodyVerticalAlign: "bottom", textAlign: "left" }
+      visualStyle: {
+        bodyVerticalAlign: "bottom",
+        textAlign: "left",
+        fontWeight: "700",
+        fontStyle: "italic",
+        textDecoration: "underline"
+      }
     });
     expect(result).toEqual({
-      visualStyle: { bodyVerticalAlign: "bottom", textAlign: "left" }
+      visualStyle: {
+        bodyVerticalAlign: "bottom",
+        textAlign: "left",
+        fontWeight: "700",
+        fontStyle: "italic",
+        textDecoration: "underline"
+      }
     });
   });
 });

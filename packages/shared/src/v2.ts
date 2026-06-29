@@ -34,6 +34,9 @@ export const v2CardVisualStyleSchema = z.object({
   fontFamily: z.string().min(1).max(80).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
   textColor: z.string().min(1).max(32).optional(),
+  fontWeight: z.enum(["400", "600", "700"]).optional(),
+  fontStyle: z.enum(["normal", "italic"]).optional(),
+  textDecoration: z.enum(["none", "underline"]).optional(),
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
 });
 

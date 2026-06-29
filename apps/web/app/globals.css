@@ -2275,139 +2275,165 @@ button:disabled {
   white-space: nowrap;
 }
 
-/* ── Visual edit mode panel ──────────────────── */
+.react-flow__node-v2Card {
+  overflow: visible;
+}
 
-.v2VisualEditPanel {
+.v2CardTextToolbar {
   position: absolute;
-  top: 12px;
+  top: -78px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 10;
+  z-index: 30;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 16px;
-  background: #fff;
-  border: 2px solid #000;
+  align-items: flex-end;
+  gap: 10px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid #bcc7d8;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  font-size: 13px;
-  line-height: 1.4;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.v2VisualEditPanel strong {
-  font-size: 14px;
-  color: #000;
-}
-
-.v2VisualEditPanel em {
-  font-style: italic;
-  color: var(--text);
-}
-
-.v2VisualEditHint {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 4px;
-}
-
-/* ── Visual edit panel controls ──────────────── */
-
-.v2VisualEditPanelHeader {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 4px;
-}
-
-.v2VisualEditCardTitle {
-  font-size: 12px;
-  color: var(--text);
-}
-
-.v2VisualEditCardTitle em {
-  font-weight: 600;
-}
-
-.v2VisualEditLabel {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.v2VisualEditSelect {
-  padding: 2px 6px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  font-size: 12px;
   background: #fff;
-  color: var(--text);
-  cursor: pointer;
-  min-width: 110px;
+  box-shadow: 0 14px 35px rgba(31, 45, 73, 0.16);
+  color: #111827;
+  pointer-events: auto;
+  white-space: nowrap;
 }
 
-.v2VisualEditSelect:focus {
-  outline: 2px solid var(--blue);
-  outline-offset: -1px;
+.v2CardTextToolbar::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid #bcc7d8;
+  border-bottom: 1px solid #bcc7d8;
+  background: #fff;
+  transform: translateX(-50%) rotate(45deg);
 }
 
-.v2VisualEditAlignRow {
+.v2ToolbarGroup {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  align-content: flex-end;
+  padding-right: 10px;
+  border-right: 1px solid #e1e6ef;
+}
+
+.v2ToolbarGroup:last-of-type {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.v2ToolbarGroupInline {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+.v2ToolbarLabel {
+  color: #606b80;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+}
+
+.v2ToolbarButtonRow {
   display: flex;
   gap: 4px;
 }
 
-.v2VisualEditAlignBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 26px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+.v2ToolbarIconButton,
+.v2ToolbarCloseButton {
+  display: grid;
+  place-items: center;
+  border: 1px solid #d9e0eb;
   background: #fff;
-  color: var(--text);
-  font-size: 13px;
+  color: #273142;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
 }
 
-.v2VisualEditAlignBtn:hover {
-  background: var(--panel-soft);
-}
-
-.v2VisualEditAlignBtnActive {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: #fff;
-}
-
-.v2VisualEditAlignBtnActive:hover {
-  background: var(--blue);
-}
-
-.v2VisualEditColor {
-  width: 32px;
+.v2ToolbarIconButton {
+  width: 26px;
   height: 26px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 5px;
+}
+
+.v2ToolbarIconButton:hover,
+.v2ToolbarIconButtonActive {
+  border-color: #2f8cff;
+  background: #edf5ff;
+  color: #1f7df2;
+}
+
+.v2ToolbarSelect {
+  width: 82px;
+  height: 28px;
+  border: 1px solid #d9e0eb;
+  border-radius: 5px;
+  background: #fff;
+  color: #273142;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 8px;
+}
+
+.v2ToolbarColor {
+  width: 42px;
+  height: 28px;
+  padding: 3px;
+  border: 1px solid #d9e0eb;
+  border-radius: 5px;
+  background: #fff;
   cursor: pointer;
-  background: none;
 }
 
-.v2VisualEditColor::-webkit-color-swatch-wrapper {
-  padding: 2px;
+.v2ToolbarColor::-webkit-color-swatch-wrapper {
+  padding: 0;
 }
 
-.v2VisualEditColor::-webkit-color-swatch {
-  border: none;
-  border-radius: 2px;
+.v2ToolbarColor::-webkit-color-swatch {
+  border: 0;
+  border-radius: 3px;
+}
+
+.v2ToolbarCloseButton {
+  position: relative;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  align-self: start;
+  border-color: transparent;
+  border-radius: 999px;
+  color: #475467;
+}
+
+.v2ToolbarCloseButton:hover {
+  background: #f2f4f7;
+}
+
+.v2ToolbarSelect:focus,
+.v2ToolbarColor:focus-visible,
+.v2ToolbarIconButton:focus-visible,
+.v2ToolbarCloseButton:focus-visible {
+  outline: 2px solid rgba(47, 140, 255, 0.42);
+  outline-offset: 1px;
+}
+
+@media (max-width: 760px) {
+  .v2CardTextToolbar {
+    top: -112px;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: min(360px, calc(100vw - 28px));
+  }
+
+  .v2ToolbarGroup {
+    border-right: 0;
+    padding-right: 0;
+  }
 }
 
 .v2CardExpandedContent {

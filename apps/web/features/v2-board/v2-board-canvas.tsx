@@ -17,6 +17,7 @@ import type {
   V2Card,
   V2Connection,
   V2CardType,
+  V2CardVisualStyle,
 } from "@yadraw/shared";
 import { V2CardNodeComponent, type V2CardNode } from "./v2-card-node";
 import {
@@ -193,13 +194,18 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         fontFamily?: string;
         textAlign?: "left" | "center" | "right";
         textColor?: string;
+        fontWeight?: "400" | "600" | "700";
+        fontStyle?: "normal" | "italic";
+        textDecoration?: "none" | "underline";
         bodyVerticalAlign?: "top" | "center" | "bottom";
       }
     ) => {
       // Find current visualStyle from nodes state
       const node = nodes.find((n) => n.id === cardId);
-      const current = (node?.data as { card?: { visualStyle?: Record<string, string> } })?.card?.visualStyle ?? {};
-      const nextVisualStyle = { ...current, ...patch };
+      const current = (node?.data as { card?: { visualStyle?: V2CardVisualStyle } })?.card?.visualStyle ?? {};
+      const nextVisualStyle = Object.fromEntries(
+        Object.entries({ ...current, ...patch }).filter(([, value]) => value !== undefined && value !== "")
+      ) as V2CardVisualStyle;
 
       // Optimistic local update
       setNodes((nds) =>
@@ -238,10 +244,19 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onToggleExpanded: toggleCardExpanded,
           isVisualEditing: visualEditingCardId === node.id,
           onResizeCard: handleResizeCard,
+          onUpdateVisualStyle: handleUpdateVisualStyle,
+          onCloseVisualEditor: () => setVisualEditingCardId(null),
         },
       }))
     );
-  }, [expandedCardIds, setNodes, toggleCardExpanded, visualEditingCardId, handleResizeCard]);
+  }, [
+    expandedCardIds,
+    setNodes,
+    toggleCardExpanded,
+    visualEditingCardId,
+    handleResizeCard,
+    handleUpdateVisualStyle,
+  ]);
 
   // ── Drag save ────────────────────────────────────────────────────
   const handleNodeDragStop = useCallback(
@@ -363,97 +378,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       panOnDrag={true}
       zoomOnScroll={true}
     >
-      {/* Visual edit mode indicator & controls */}
-      {visualEditingCardId && (() => {
-        const editingNode = nodes.find((n) => n.id === visualEditingCardId);
-        const editingCard = editingNode?.data?.card ?? cards.find((c) => c.id === visualEditingCardId);
-        const vs = editingCard?.visualStyle ?? {};
-        return (
-          <div className="v2VisualEditPanel">
-            <div className="v2VisualEditPanelHeader">
-              <strong>Visual edit mode</strong>
-              <span className="v2VisualEditCardTitle">
-                Editing: <em>{editingCard?.title ?? visualEditingCardId}</em>
-              </span>
-            </div>
-
-            {/* Font family */}
-            <label className="v2VisualEditLabel">
-              Font family
-              <select
-                className="v2VisualEditSelect nodrag"
-                value={vs.fontFamily ?? ""}
-                onChange={(e) => {
-                  handleUpdateVisualStyle(visualEditingCardId, {
-                    fontFamily: e.target.value || undefined,
-                  });
-                }}
-              >
-                <option value="">Default</option>
-                <option value="Inter">Inter</option>
-                <option value="Arial">Arial</option>
-                <option value="Georgia">Georgia</option>
-                <option value="monospace">Monospace</option>
-              </select>
-            </label>
-
-            {/* Text align */}
-            <label className="v2VisualEditLabel">
-              Text align
-              <span className="v2VisualEditAlignRow">
-                {(["left", "center", "right"] as const).map((align) => (
-                  <button
-                    key={align}
-                    type="button"
-                    className={`v2VisualEditAlignBtn nodrag${(vs.textAlign ?? "left") === align ? " v2VisualEditAlignBtnActive" : ""}`}
-                    onClick={() => handleUpdateVisualStyle(visualEditingCardId, { textAlign: align })}
-                    title={align.charAt(0).toUpperCase() + align.slice(1)}
-                  >
-                    {align === "left" ? "\u2190" : align === "center" ? "\u2194" : "\u2192"}
-                  </button>
-                ))}
-              </span>
-            </label>
-
-            {/* Text color */}
-            <label className="v2VisualEditLabel">
-              Text color
-              <input
-                type="color"
-                className="v2VisualEditColor nodrag"
-                value={vs.textColor ?? "#111827"}
-                onChange={(e) => {
-                  handleUpdateVisualStyle(visualEditingCardId, {
-                    textColor: e.target.value,
-                  });
-                }}
-              />
-            </label>
-
-            {/* Body vertical alignment */}
-            <label className="v2VisualEditLabel">
-              Body vertical
-              <span className="v2VisualEditAlignRow">
-                {(["top", "center", "bottom"] as const).map((valign) => (
-                  <button
-                    key={valign}
-                    type="button"
-                    className={`v2VisualEditAlignBtn nodrag${(vs.bodyVerticalAlign ?? "top") === valign ? " v2VisualEditAlignBtnActive" : ""}`}
-                    onClick={() => handleUpdateVisualStyle(visualEditingCardId, { bodyVerticalAlign: valign })}
-                    title={valign.charAt(0).toUpperCase() + valign.slice(1)}
-                  >
-                    {valign === "top" ? "\u2191" : valign === "center" ? "\u2195" : "\u2193"}
-                  </button>
-                ))}
-              </span>
-            </label>
-
-            <span className="v2VisualEditHint">
-              Drag corner handles to resize. Double-click card to exit.
-            </span>
-          </div>
-        );
-      })()}
       <Background color="var(--line)" gap={24} size={1} />
       <Controls showInteractive={false} />
       <MiniMap

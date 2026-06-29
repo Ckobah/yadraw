@@ -143,6 +143,9 @@ export async function updateV2CardVisualStyle(
     fontFamily?: string;
     textAlign?: "left" | "center" | "right";
     textColor?: string;
+    fontWeight?: "400" | "600" | "700";
+    fontStyle?: "normal" | "italic";
+    textDecoration?: "none" | "underline";
     bodyVerticalAlign?: "top" | "center" | "bottom";
   }
 ): Promise<void> {
