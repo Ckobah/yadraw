@@ -24,7 +24,7 @@ function getSeedParts() {
 }
 
 describe("v2 board service", () => {
-  it("creates cards from card type defaults", async () => {
+  it("creates cards from minimal canvas input", async () => {
     const { seed, sourceType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
 
@@ -38,13 +38,60 @@ describe("v2 board service", () => {
       cardTypeId: sourceType.id,
       title: "Source",
       description: "",
-      data: sourceType.defaultData,
+      data: {},
       size: sourceType.defaultSize,
-      status: "draft"
+      position: { x: 0, y: 0 },
+      visualStyle: {},
+      status: "active"
     });
 
     await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
       cards: expect.arrayContaining([expect.objectContaining({ id: card.id })])
+    });
+  });
+
+  it("creates cards with explicit data, size, and position", async () => {
+    const { seed, sourceType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    const card = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { custom: true },
+      position: { x: 144, y: 288 },
+      size: { width: 240, height: 150 }
+    });
+
+    expect(card).toMatchObject({
+      data: { custom: true },
+      position: { x: 144, y: 288 },
+      size: { width: 240, height: 150 },
+      visualStyle: {}
+    });
+  });
+
+  it("rejects create card for unknown boards", async () => {
+    const { seed, sourceType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    await expect(
+      service.createCard(ownerContext, "b4f94635-6fd5-4a6b-8608-61a69c81fbe2", {
+        cardTypeId: sourceType.id
+      })
+    ).rejects.toMatchObject({
+      code: "not_found"
+    });
+  });
+
+  it("rejects create card for unknown card types", async () => {
+    const { seed } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+
+    await expect(
+      service.createCard(ownerContext, seed.board.id, {
+        cardTypeId: "99999999-9999-4999-8999-999999999999"
+      })
+    ).rejects.toMatchObject({
+      code: "not_found"
     });
   });
 

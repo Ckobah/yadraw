@@ -25,6 +25,7 @@ import {
   type V2CardNode,
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
+import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import {
   createV2Card,
   updateV2CardPosition,
@@ -464,6 +465,38 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setEdges, setNodes]
   );
 
+  const handleCreateCard = useCallback(
+    async (
+      cardType: V2CardType,
+      position: { x: number; y: number }
+    ) => {
+      setSaveStatus("saving");
+      try {
+        const created = await createV2Card(board.id, {
+          cardTypeId: cardType.id,
+          title: cardType.name,
+          description: "",
+          data: {},
+          position,
+          size: clampCardSize(cardType.defaultSize),
+        });
+
+        setNodes((current) => [
+          ...current,
+          buildCardNode(created, cardTypeMap, board.workspaceId),
+        ]);
+        setSelectedCardId(created.id);
+        setVisualEditingCardId(null);
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to create card:", err);
+        setSaveStatus("error");
+        throw err;
+      }
+    },
+    [board.id, board.workspaceId, cardTypeMap, setNodes]
+  );
+
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     setNodes((nds) =>
@@ -621,6 +654,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         panOnDrag={true}
         zoomOnScroll={true}
       >
+        <V2CardCreateToolbar
+          cardTypes={cardTypes}
+          onCreateCard={handleCreateCard}
+        />
         <Background color="var(--line)" gap={24} size={1} />
         <Controls showInteractive={false} />
         <MiniMap

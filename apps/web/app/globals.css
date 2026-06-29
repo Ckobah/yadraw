@@ -2181,6 +2181,143 @@ button:disabled {
   min-height: 0;
 }
 
+/* ── V2 create card toolbar ─────────────── */
+
+.v2CreateToolbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: 220px;
+  pointer-events: auto;
+}
+
+.v2CreateToolbarButton {
+  display: inline-flex;
+  width: fit-content;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #d8e0ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0 12px;
+  color: #182230;
+  font-size: 13px;
+  font-weight: 780;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.v2CreateToolbarButton:hover:not(:disabled),
+.v2CreateToolbarButton:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--purple) 42%, #d8e0ec);
+  background: #fbfaff;
+  color: var(--purple);
+  outline: 0;
+}
+
+.v2CreateToolbarButton:disabled {
+  opacity: 0.54;
+}
+
+.v2CreateToolbarPopover {
+  display: grid;
+  gap: 8px;
+  width: 220px;
+  border: 1px solid #dfe6f1;
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  box-shadow: 0 18px 46px rgba(24, 34, 48, 0.14);
+}
+
+.v2CreateToolbarTitle {
+  color: #7b8495;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.v2CreateTypeList {
+  display: grid;
+  gap: 6px;
+}
+
+.v2CreateTypeButton {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #e8edf5;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.v2CreateTypeButton:hover:not(:disabled),
+.v2CreateTypeButton:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v2-create-accent) 42%, #e8edf5);
+  background: color-mix(in srgb, var(--v2-create-accent) 8%, #fff);
+  outline: 0;
+}
+
+.v2CreateTypeIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--v2-create-accent) 28%, #fff);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--v2-create-accent);
+}
+
+.v2CreateTypeText {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2CreateTypeText strong,
+.v2CreateTypeText em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CreateTypeText strong {
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.1;
+}
+
+.v2CreateTypeText em {
+  color: #7b8495;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 660;
+  line-height: 1.1;
+}
+
+.v2CreateToolbarError {
+  margin: 0;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff7ed;
+  padding: 7px 9px;
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
 /* ── V2 card node ───────────────────────── */
 
 .v2CardNode {

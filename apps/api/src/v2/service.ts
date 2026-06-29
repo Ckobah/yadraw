@@ -202,11 +202,11 @@ export function createV2BoardService(
         cardTypeId: cardType.id,
         title: input.title ?? cardType.name,
         description: input.description ?? "",
-        data: cloneJson(input.data ?? cardType.defaultData),
+        data: cloneJson(input.data ?? {}),
         position: input.position ?? { x: 0, y: 0 },
         size: input.size ?? cardType.defaultSize,
         visualStyle: cloneJson(input.visualStyle ?? {}),
-        status: input.status ?? "draft"
+        status: input.status ?? "active"
       });
     },
 
