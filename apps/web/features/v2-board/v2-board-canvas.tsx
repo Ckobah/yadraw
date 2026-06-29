@@ -24,6 +24,7 @@ import {
   V2CardNodeComponent,
   type V2CardNode,
 } from "./v2-card-node";
+import { V2CardInspector } from "./v2-card-inspector";
 import {
   createV2Card,
   updateV2CardPosition,
@@ -113,6 +114,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const { board, cards, connections, cardTypes } = boardDetail;
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
@@ -152,6 +154,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [connectionRecords, setConnectionRecords] = useState<V2Connection[]>(connections);
   const nodesRef = useRef(nodes);
 
   useEffect(() => {
@@ -161,6 +164,33 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const nodeTypes = useMemo(
     () => ({ v2Card: V2CardNodeComponent }),
     []
+  );
+
+  const cardById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, node.data.card])),
+    [nodes]
+  );
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedCardId) ?? null,
+    [nodes, selectedCardId]
+  );
+  const selectedCard = selectedNode?.data.card ?? null;
+  const selectedCardType = selectedNode?.data.cardType ?? (
+    selectedCard ? cardTypeMap.get(selectedCard.cardTypeId) ?? null : null
+  );
+  const incomingConnections = useMemo(
+    () =>
+      selectedCard
+        ? connectionRecords.filter((connection) => connection.targetCardId === selectedCard.id)
+        : [],
+    [connectionRecords, selectedCard]
+  );
+  const outgoingConnections = useMemo(
+    () =>
+      selectedCard
+        ? connectionRecords.filter((connection) => connection.sourceCardId === selectedCard.id)
+        : [],
+    [connectionRecords, selectedCard]
   );
 
   // ── Visual edit handlers ─────────────────────────────────────────
@@ -201,9 +231,17 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: V2CardNode) => {
+      setSelectedCardId(node.id);
       setVisualEditingCardId((current) =>
         current === node.id ? null : node.id
       );
+    },
+    []
+  );
+
+  const handleNodeClick = useCallback(
+    (_event: unknown, node: V2CardNode) => {
+      setSelectedCardId(node.id);
     },
     []
   );
@@ -277,6 +315,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           ...current,
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
+        setSelectedCardId(created.id);
         setVisualEditingCardId(created.id);
         setSaveStatus("saved");
       } catch (err) {
@@ -296,6 +335,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setEdges((current) =>
           current.filter((edge) => edge.source !== cardId && edge.target !== cardId)
         );
+        setConnectionRecords((current) =>
+          current.filter(
+            (connection) =>
+              connection.sourceCardId !== cardId && connection.targetCardId !== cardId
+          )
+        );
+        setSelectedCardId((current) => (current === cardId ? null : current));
         setVisualEditingCardId((current) => (current === cardId ? null : current));
         setSaveStatus("saved");
       } catch (err) {
@@ -410,6 +456,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           },
         };
         setEdges((prev) => [...prev, newEdge]);
+        setConnectionRecords((prev) => [...prev, created]);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to create connection:", err);
@@ -427,43 +474,63 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           console.error("Failed to delete connection:", err)
         );
       }
+      const deletedIds = new Set(deletedEdges.map((edge) => edge.id));
+      setConnectionRecords((current) =>
+        current.filter((connection) => !deletedIds.has(connection.id))
+      );
     },
     []
   );
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onNodeDragStop={handleNodeDragStop}
-      onNodeDoubleClick={handleNodeDoubleClick}
-      onConnect={handleConnect}
-      onEdgesDelete={handleEdgesDelete}
-      onPaneClick={() => setVisualEditingCardId(null)}
-      nodeTypes={nodeTypes}
-      fitView
-      fitViewOptions={{ padding: 0.3 }}
-      minZoom={0.2}
-      maxZoom={2.5}
-      proOptions={{ hideAttribution: true }}
-      nodesConnectable={true}
-      elementsSelectable={true}
-      panOnDrag={true}
-      zoomOnScroll={true}
-    >
-      <Background color="var(--line)" gap={24} size={1} />
-      <Controls showInteractive={false} />
-      <MiniMap
-        style={{
-          border: "1px solid var(--line)",
-          borderRadius: 8,
-          overflow: "hidden",
+    <>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={handleNodeClick}
+        onNodeDragStop={handleNodeDragStop}
+        onNodeDoubleClick={handleNodeDoubleClick}
+        onConnect={handleConnect}
+        onEdgesDelete={handleEdgesDelete}
+        onPaneClick={() => {
+          setSelectedCardId(null);
+          setVisualEditingCardId(null);
         }}
-        nodeColor={() => "#7147e8"}
-        maskColor="rgba(0,0,0,0.08)"
-      />
-    </ReactFlow>
+        nodeTypes={nodeTypes}
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        minZoom={0.2}
+        maxZoom={2.5}
+        proOptions={{ hideAttribution: true }}
+        nodesConnectable={true}
+        elementsSelectable={true}
+        panOnDrag={true}
+        zoomOnScroll={true}
+      >
+        <Background color="var(--line)" gap={24} size={1} />
+        <Controls showInteractive={false} />
+        <MiniMap
+          style={{
+            border: "1px solid var(--line)",
+            borderRadius: 8,
+            overflow: "hidden",
+          }}
+          nodeColor={() => "#7147e8"}
+          maskColor="rgba(0,0,0,0.08)"
+        />
+      </ReactFlow>
+      {selectedCard ? (
+        <V2CardInspector
+          card={selectedCard}
+          cardType={selectedCardType}
+          incomingConnections={incomingConnections}
+          outgoingConnections={outgoingConnections}
+          cardById={cardById}
+          onClose={() => setSelectedCardId(null)}
+        />
+      ) : null}
+    </>
   );
 }

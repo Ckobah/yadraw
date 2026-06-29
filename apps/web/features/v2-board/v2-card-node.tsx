@@ -63,6 +63,10 @@ const accentColorByType: Record<string, string> = {
   note: "var(--blue)",
 };
 
+export function getV2CardAccentColor(cardTypeKey?: string): string {
+  return cardTypeKey ? accentColorByType[cardTypeKey] ?? "var(--blue)" : "var(--blue)";
+}
+
 function getCardSummary(card: V2Card): string {
   if (card.description.trim()) return card.description.trim();
   const kind = card.data.kind;
@@ -73,7 +77,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const accentColor = accentColorByType[cardType.key] ?? "var(--blue)";
+  const accentColor = getV2CardAccentColor(cardType.key);
   const inputPort = getInputPort(cardType.ports);
   const outputPort = getOutputPort(cardType.ports);
   const visualStyle = card.visualStyle ?? {};
