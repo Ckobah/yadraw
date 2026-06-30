@@ -1,7 +1,6 @@
 "use client";
 
 import { Copy, Database, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
 import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
@@ -11,8 +10,6 @@ import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
 
-type PendingCardAction = "duplicate" | "delete" | null;
-
 type V2CardInspectorProps = {
   card: V2Card;
   cardType: V2CardType | null;
@@ -20,6 +17,8 @@ type V2CardInspectorProps = {
   outgoingConnections: V2Connection[];
   cardById: Map<string, V2Card>;
   saveStatus: SaveStatus;
+  pendingAction: "duplicate" | "delete" | null;
+  actionError: string | null;
   onUpdateCardBasics: (
     cardId: string,
     input: { title?: string; description?: string | null }
@@ -40,6 +39,8 @@ export function V2CardInspector({
   outgoingConnections,
   cardById,
   saveStatus,
+  pendingAction,
+  actionError,
   onUpdateCardBasics,
   onUpdateCardData,
   onDuplicateCard,
@@ -47,38 +48,16 @@ export function V2CardInspector({
   onClose,
 }: V2CardInspectorProps) {
   const accentColor = getV2CardAccentColor(cardType?.key);
-  const [pendingAction, setPendingAction] = useState<PendingCardAction>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
   const actionsDisabled = pendingAction !== null;
 
-  useEffect(() => {
-    setPendingAction(null);
-    setActionError(null);
-  }, [card.id]);
-
-  async function handleDuplicateClick() {
+  function handleDuplicateClick() {
     if (actionsDisabled) return;
-    setPendingAction("duplicate");
-    setActionError(null);
-    try {
-      await onDuplicateCard(card.id);
-    } catch {
-      setActionError("Could not duplicate this card.");
-      setPendingAction(null);
-    }
+    void onDuplicateCard(card.id).catch(() => {});
   }
 
-  async function handleDeleteClick() {
+  function handleDeleteClick() {
     if (actionsDisabled) return;
-    if (!window.confirm("Delete this card?")) return;
-    setPendingAction("delete");
-    setActionError(null);
-    try {
-      await onDeleteCard(card.id);
-    } catch {
-      setActionError("Could not delete this card.");
-      setPendingAction(null);
-    }
+    void onDeleteCard(card.id).catch(() => {});
   }
 
   return (

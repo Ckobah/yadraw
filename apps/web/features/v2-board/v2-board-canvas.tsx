@@ -44,6 +44,15 @@ type Props = {
 };
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
+type CardAction = "duplicate" | "delete";
+type PendingCardAction = {
+  cardId: string;
+  action: CardAction;
+} | null;
+type CardActionError = {
+  cardId: string;
+  message: string;
+} | null;
 
 function buildCardTypeMap(
   cardTypes: V2CardType[]
@@ -119,6 +128,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
+  const [cardActionError, setCardActionError] = useState<CardActionError>(null);
+  const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
@@ -401,8 +413,19 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setVisualEditingCardId(cardId);
   }, []);
 
+  const handleEditCard = useCallback((cardId: string) => {
+    setSelectedCardId(cardId);
+    setVisualEditingCardId(null);
+    setCardActionError(null);
+  }, []);
+
   const handleDuplicateCard = useCallback(
     async (cardId: string) => {
+      if (cardActionLockRef.current) return;
+      const pending = { cardId, action: "duplicate" as const };
+      cardActionLockRef.current = pending;
+      setPendingCardAction(pending);
+      setCardActionError(null);
       setSaveStatus("saving");
       try {
         const created = await duplicateV2Card(cardId);
@@ -416,8 +439,15 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to duplicate card:", err);
+        setCardActionError({
+          cardId,
+          message: "Could not duplicate this card.",
+        });
         setSaveStatus("error");
         throw err;
+      } finally {
+        cardActionLockRef.current = null;
+        setPendingCardAction(null);
       }
     },
     [board.workspaceId, cardTypeMap, setNodes]
@@ -425,6 +455,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const handleDeleteCard = useCallback(
     async (cardId: string) => {
+      if (cardActionLockRef.current) return;
+      if (!window.confirm("Delete this card?")) return;
+      const pending = { cardId, action: "delete" as const };
+      cardActionLockRef.current = pending;
+      setPendingCardAction(pending);
+      setCardActionError(null);
       setSaveStatus("saving");
       try {
         await deleteV2Card(cardId);
@@ -443,8 +479,15 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to delete card:", err);
+        setCardActionError({
+          cardId,
+          message: "Could not delete this card.",
+        });
         setSaveStatus("error");
         throw err;
+      } finally {
+        cardActionLockRef.current = null;
+        setPendingCardAction(null);
       }
     },
     [setEdges, setNodes]
@@ -489,7 +532,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         ...node,
         data: {
           ...node.data,
+          isCardActionPending: pendingCardAction?.cardId === node.id,
+          pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
+          cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
           isVisualEditing: visualEditingCardId === node.id,
+          onEditCard: handleEditCard,
           onStartVisualEditor: handleStartVisualEditor,
           onDuplicateCard: handleDuplicateCard,
           onDeleteCard: handleDeleteCard,
@@ -502,6 +549,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   }, [
     setNodes,
     visualEditingCardId,
+    pendingCardAction,
+    cardActionError,
+    handleEditCard,
     handleStartVisualEditor,
     handleDuplicateCard,
     handleDeleteCard,
@@ -663,6 +713,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           outgoingConnections={outgoingConnections}
           cardById={cardById}
           saveStatus={saveStatus}
+          pendingAction={pendingCardAction?.cardId === selectedCard.id ? pendingCardAction.action : null}
+          actionError={cardActionError?.cardId === selectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onDuplicateCard={handleDuplicateCard}

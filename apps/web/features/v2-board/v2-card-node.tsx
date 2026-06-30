@@ -20,10 +20,14 @@ import type { Node } from "@xyflow/react";
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
+  isCardActionPending?: boolean;
+  pendingCardAction?: "duplicate" | "delete" | null;
+  cardActionError?: string | null;
   isVisualEditing?: boolean;
+  onEditCard?: (cardId: string) => void;
   onStartVisualEditor?: (cardId: string) => void;
-  onDuplicateCard?: (cardId: string) => void;
-  onDeleteCard?: (cardId: string) => void;
+  onDuplicateCard?: (cardId: string) => Promise<void> | void;
+  onDeleteCard?: (cardId: string) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => void;
   onCloseVisualEditor?: () => void;
@@ -110,9 +114,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
   }, [isMenuOpen]);
 
-  function runMenuAction(action: () => void) {
+  function runMenuAction(action: () => Promise<void> | void) {
+    if (data.isCardActionPending) return;
     setIsMenuOpen(false);
-    action();
+    void Promise.resolve(action()).catch(() => {});
   }
 
   return (
@@ -314,25 +319,30 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => runMenuAction(() => data.onStartVisualEditor?.(card.id))}
+                onClick={() => runMenuAction(() => data.onEditCard?.(card.id))}
               >
                 Редактировать
               </button>
               <button
                 type="button"
                 role="menuitem"
+                disabled={data.isCardActionPending}
                 onClick={() => runMenuAction(() => data.onDuplicateCard?.(card.id))}
               >
-                Дублировать
+                {data.pendingCardAction === "duplicate" ? "Дублирование..." : "Дублировать"}
               </button>
               <button
                 type="button"
                 role="menuitem"
                 className="v2CardActionMenuDanger"
+                disabled={data.isCardActionPending}
                 onClick={() => runMenuAction(() => data.onDeleteCard?.(card.id))}
               >
-                Удалить
+                {data.pendingCardAction === "delete" ? "Удаление..." : "Удалить"}
               </button>
+              {data.cardActionError ? (
+                <p className="v2CardActionMenuError">{data.cardActionError}</p>
+              ) : null}
             </div>
           ) : null}
         </div>
