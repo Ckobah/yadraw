@@ -665,6 +665,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onDuplicateCard={handleDuplicateCard}
+          onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}
         />
       ) : null}

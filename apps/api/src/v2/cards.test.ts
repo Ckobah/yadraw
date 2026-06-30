@@ -234,4 +234,105 @@ describe("v2 card API", () => {
     expect(response.json()).toMatchObject({ error: { code: "forbidden" } });
     await server.close();
   });
+
+  it("soft-deletes a card and its incident connections", async () => {
+    const { server, seed, repository } = createCardServer();
+    const source = seed.cards[0]!;
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/v2/cards/${source.id}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ deleted: true, id: source.id });
+    await expect(repository.getCard(source.id)).resolves.toBeNull();
+
+    const board = await repository.getBoardDetail(seed.board.id);
+    expect(board?.cards.some((card) => card.id === source.id)).toBe(false);
+    expect(board?.connections).toEqual([]);
+    await expect(repository.getConnection(seed.connections[0]!.id)).resolves.toBeNull();
+
+    await server.close();
+  });
+
+  it("rejects missing card deletes", async () => {
+    const { server } = createCardServer();
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: "/v2/cards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2"
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({ error: { code: "not_found" } });
+    await server.close();
+  });
+
+  it("rejects already deleted card deletes", async () => {
+    const { server, seed } = createCardServer();
+    const source = seed.cards[0]!;
+
+    const firstResponse = await server.inject({
+      method: "DELETE",
+      url: `/v2/cards/${source.id}`
+    });
+    expect(firstResponse.statusCode).toBe(200);
+
+    const secondResponse = await server.inject({
+      method: "DELETE",
+      url: `/v2/cards/${source.id}`
+    });
+
+    expect(secondResponse.statusCode).toBe(404);
+    expect(secondResponse.json()).toMatchObject({ error: { code: "not_found" } });
+    await server.close();
+  });
+
+  it("rejects inaccessible card deletes", async () => {
+    const { server, seed } = createCardServer(outsideContext);
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/v2/cards/${seed.cards[0]!.id}`
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: { code: "forbidden" } });
+    await server.close();
+  });
+
+  it("keeps attachment file and card-file records when deleting a card", async () => {
+    const { server, seed, repository } = createCardServer();
+    const source = seed.cards[0]!;
+    const fileId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const attachment = await repository.createCardAttachment?.({
+      fileId,
+      cardId: source.id,
+      workspaceId: source.workspaceId,
+      storageBucket: "test-bucket",
+      storagePath: "test/path.txt",
+      filename: "original.txt",
+      mimeType: "text/plain",
+      sizeBytes: 12,
+      sha256: null,
+      role: "attachment",
+      metadata: {},
+      createdBy: ownerContext.userId
+    });
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/v2/cards/${source.id}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    await expect(repository.getFileForDownload?.(fileId)).resolves.toMatchObject({
+      fileId,
+      filename: "original.txt"
+    });
+    await expect(repository.detachCardAttachment?.(source.id, attachment!.id)).resolves.toBe(true);
+
+    await server.close();
+  });
 });

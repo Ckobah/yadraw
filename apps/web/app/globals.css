@@ -2732,10 +2732,32 @@ button:disabled {
   font-weight: 760;
 }
 
+.v2InspectorDeleteButton {
+  display: inline-flex;
+  height: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #fed7aa;
+  border-radius: 9px;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 760;
+}
+
 .v2InspectorDuplicateButton:hover,
 .v2InspectorDuplicateButton:focus-visible {
   border-color: color-mix(in srgb, var(--v2-inspector-accent) 44%, #e4e7f0);
   background: color-mix(in srgb, var(--v2-inspector-accent) 13%, #fff);
+  outline: 0;
+}
+
+.v2InspectorDeleteButton:hover,
+.v2InspectorDeleteButton:focus-visible {
+  border-color: #fdba74;
+  background: #ffedd5;
   outline: 0;
 }
 

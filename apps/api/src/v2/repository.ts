@@ -1156,27 +1156,42 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     },
 
     async deleteCard(cardId) {
-      const result = await pool.query(
-        `
-          update cards
-          set deleted_at = now()
-          where id = $1
-            and deleted_at is null
-        `,
-        [cardId]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const result = await client.query(
+          `
+            update cards
+            set deleted_at = now()
+            where id = $1
+              and deleted_at is null
+          `,
+          [cardId]
+        );
 
-      await pool.query(
-        `
-          update connections
-          set deleted_at = now()
-          where deleted_at is null
-            and (source_card_id = $1 or target_card_id = $1)
-        `,
-        [cardId]
-      );
+        if ((result.rowCount ?? 0) === 0) {
+          await client.query("rollback");
+          return false;
+        }
 
-      return (result.rowCount ?? 0) > 0;
+        await client.query(
+          `
+            update connections
+            set deleted_at = now()
+            where deleted_at is null
+              and (source_card_id = $1 or target_card_id = $1)
+          `,
+          [cardId]
+        );
+
+        await client.query("commit");
+        return true;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async getConnection(connectionId) {

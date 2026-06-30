@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Database, X } from "lucide-react";
+import { Copy, Database, Trash2, X } from "lucide-react";
 import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
@@ -26,6 +26,7 @@ type V2CardInspectorProps = {
     data: Record<string, unknown>
   ) => Promise<void>;
   onDuplicateCard: (cardId: string) => Promise<void>;
+  onDeleteCard: (cardId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -39,9 +40,15 @@ export function V2CardInspector({
   onUpdateCardBasics,
   onUpdateCardData,
   onDuplicateCard,
+  onDeleteCard,
   onClose,
 }: V2CardInspectorProps) {
   const accentColor = getV2CardAccentColor(cardType?.key);
+
+  function handleDeleteClick() {
+    if (!window.confirm("Delete this card?")) return;
+    void onDeleteCard(card.id);
+  }
 
   return (
     <aside
@@ -66,6 +73,14 @@ export function V2CardInspector({
         >
           <Copy size={14} strokeWidth={2.2} />
           <span>Duplicate</span>
+        </button>
+        <button
+          type="button"
+          className="v2InspectorDeleteButton"
+          onClick={handleDeleteClick}
+        >
+          <Trash2 size={14} strokeWidth={2.2} />
+          <span>Delete</span>
         </button>
         <button
           type="button"
