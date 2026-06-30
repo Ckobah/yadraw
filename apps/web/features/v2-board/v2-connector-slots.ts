@@ -210,15 +210,16 @@ function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
 
 function buildV2ConnectorSlotsFromVisualStyle(
   visualStyle: unknown
-): V2ConnectorSlot[] {
+): V2ConnectorSlot[] | null {
   const rawSlots = readVisualStyleConnectorSlots(visualStyle);
-  if (!rawSlots || rawSlots.length === 0) return [];
+  if (!rawSlots) return null;
+  if (rawSlots.length === 0) return [];
 
   const slots = rawSlots
     .map((rawSlot) => sanitizeSavedConnectorSlot(rawSlot))
     .filter((slot): slot is V2ConnectorSlot => slot !== null);
 
-  return slots.length === rawSlots.length ? slots : [];
+  return slots.length === rawSlots.length ? slots : null;
 }
 
 export function buildV2ConnectorSlots(params: {
@@ -226,7 +227,7 @@ export function buildV2ConnectorSlots(params: {
   ports: V2CardTypePort[];
 }): V2ConnectorSlot[] {
   const savedSlots = buildV2ConnectorSlotsFromVisualStyle(params.visualStyle);
-  return savedSlots.length > 0
+  return savedSlots !== null
     ? savedSlots
     : buildV2ConnectorSlotsFromPorts(params.ports);
 }

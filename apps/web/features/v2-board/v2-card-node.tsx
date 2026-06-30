@@ -1,7 +1,20 @@
 "use client";
 
-import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  Handle,
+  NodeResizer,
+  Position,
+  useUpdateNodeInternals,
+  type NodeProps
+} from "@xyflow/react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   AlignCenter,
   AlignLeft,
@@ -18,7 +31,6 @@ import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
 import {
   buildV2ConnectorSlots,
-  buildV2ConnectorSlotsFromPorts,
   clampEditableSlotOffset,
   toPersistedV2ConnectorSlot,
   toRuntimeV2ConnectorSlot,
@@ -84,6 +96,58 @@ function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
   return { top: offset };
 }
 
+function getSlotPopoverStyle(slot: V2ConnectorSlot): CSSProperties {
+  const offset = `${slot.offset * 100}%`;
+  if (slot.side === "top") {
+    return { left: offset, top: -48, transform: "translateX(-50%)" };
+  }
+  if (slot.side === "bottom") {
+    return { left: offset, bottom: -48, transform: "translateX(-50%)" };
+  }
+  if (slot.side === "right") {
+    return { right: -92, top: offset, transform: "translateY(-50%)" };
+  }
+  return { left: -92, top: offset, transform: "translateY(-50%)" };
+}
+
+function getPerimeterSlotFromPoint(
+  rect: DOMRect,
+  clientX: number,
+  clientY: number,
+  options: { requireNearEdge: boolean }
+): { side: V2ConnectorSlotSide; offset: number } | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const distances = [
+    { side: "top" as const, value: Math.abs(clientY - rect.top) },
+    { side: "right" as const, value: Math.abs(clientX - rect.right) },
+    { side: "bottom" as const, value: Math.abs(clientY - rect.bottom) },
+    { side: "left" as const, value: Math.abs(clientX - rect.left) },
+  ].sort((a, b) => a.value - b.value);
+
+  const nearest = distances[0];
+  if (!nearest) return null;
+  if (options.requireNearEdge && nearest.value > 22) return null;
+
+  const rawOffset =
+    nearest.side === "top" || nearest.side === "bottom"
+      ? (clientX - rect.left) / rect.width
+      : (clientY - rect.top) / rect.height;
+
+  return {
+    side: nearest.side,
+    offset: clampEditableSlotOffset(rawOffset),
+  };
+}
+
+function createConnectorSlotId(existingIds: Set<string>): string {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const id = `slot-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    if (!existingIds.has(id)) return id;
+  }
+  return `slot-${Date.now().toString(36)}-${existingIds.size}`;
+}
+
 function bodyVerticalJustify(
   value?: "top" | "center" | "bottom"
 ): "flex-start" | "center" | "flex-end" {
@@ -116,7 +180,9 @@ function getCardSummary(card: V2Card): string {
 export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const articleRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const updateNodeInternals = useUpdateNodeInternals();
   const accentColor = getV2CardAccentColor(cardType.key);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
@@ -136,12 +202,34 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     connectorSlots.map(toPersistedV2ConnectorSlot)
   );
   const [slotEditorError, setSlotEditorError] = useState<string | null>(null);
-  const [isSlotEditorSaving, setIsSlotEditorSaving] = useState(false);
+  const [typeChooserSlotId, setTypeChooserSlotId] = useState<string | null>(null);
+  const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const slotDraftRef = useRef(slotDraft);
+  const dragStartRef = useRef<{
+    slotId: string;
+    x: number;
+    y: number;
+    moved: boolean;
+  } | null>(null);
+  const lastSlotDragMovedRef = useRef(false);
   const renderedConnectorSlots =
-    data.isVisualEditing && slotDraft.length > 0
+    data.isVisualEditing
       ? slotDraft.map(toRuntimeV2ConnectorSlot)
       : connectorSlots;
+  const renderedConnectorSlotKey = JSON.stringify(
+    renderedConnectorSlots.map((slot) => ({
+      id: slot.id,
+      type: slot.type,
+      side: slot.side,
+      offset: slot.offset,
+      label: slot.label,
+    }))
+  );
   const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
+  const typeChooserSlot =
+    data.isVisualEditing && typeChooserSlotId
+      ? renderedConnectorSlots.find((slot) => slot.id === typeChooserSlotId) ?? null
+      : null;
   const textStyle = {
     fontFamily: visualStyle.fontFamily,
     textAlign: visualStyle.textAlign,
@@ -159,14 +247,67 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     if (!data.isVisualEditing) return;
     setSlotDraft(connectorSlots.map(toPersistedV2ConnectorSlot));
     setSlotEditorError(null);
+    setTypeChooserSlotId(null);
   }, [card.id, connectorSlotSourceKey, data.isVisualEditing]);
+
+  useEffect(() => {
+    slotDraftRef.current = slotDraft;
+  }, [slotDraft]);
+
+  useEffect(() => {
+    updateNodeInternals(card.id);
+  }, [card.id, renderedConnectorSlotKey, updateNodeInternals]);
+
+  useEffect(() => {
+    if (!draggingSlotId) return;
+
+    function handleWindowPointerMove(event: PointerEvent) {
+      const dragStart = dragStartRef.current;
+      const rect = articleRef.current?.getBoundingClientRect();
+      if (!dragStart || !rect) return;
+
+      if (
+        !dragStart.moved &&
+        Math.hypot(event.clientX - dragStart.x, event.clientY - dragStart.y) > 3
+      ) {
+        dragStart.moved = true;
+      }
+
+      if (!dragStart.moved) return;
+      const position = getPerimeterSlotFromPoint(rect, event.clientX, event.clientY, {
+        requireNearEdge: false,
+      });
+      if (!position) return;
+      updateSlotDraft(dragStart.slotId, position);
+    }
+
+    function handleWindowPointerUp() {
+      const shouldPersist = Boolean(dragStartRef.current?.moved);
+      const nextDraft = slotDraftRef.current;
+      dragStartRef.current = null;
+      setDraggingSlotId(null);
+      lastSlotDragMovedRef.current = shouldPersist;
+      if (shouldPersist) {
+        void persistConnectorSlots(nextDraft);
+      }
+    }
+
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+    };
+  }, [draggingSlotId]);
 
   function updateSlotDraft(
     slotId: string,
-    patch: Partial<Pick<V2PersistedConnectorSlot, "side" | "offset" | "label">>
-  ) {
+    patch: Partial<Pick<V2PersistedConnectorSlot, "type" | "side" | "offset" | "label">>
+  ): V2PersistedConnectorSlot[] {
+    let nextDraft = slotDraftRef.current;
     setSlotDraft((current) =>
-      current.map((slot) =>
+      {
+        nextDraft = current.map((slot) =>
         slot.id === slotId
           ? {
               ...slot,
@@ -176,50 +317,140 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                 : {}),
             }
           : slot
-      )
+        );
+        slotDraftRef.current = nextDraft;
+        return nextDraft;
+      }
     );
     setSlotEditorError(null);
+    return nextDraft;
   }
 
-  async function saveConnectorSlots(nextDraft = slotDraft) {
+  async function persistConnectorSlots(nextDraft = slotDraftRef.current) {
     const validation = validateV2ConnectorSlots(nextDraft);
     if (!validation.ok) {
       setSlotEditorError(validation.message);
       return;
     }
 
-    setIsSlotEditorSaving(true);
     setSlotEditorError(null);
     try {
       await data.onUpdateVisualStyle?.(card.id, {
-        ...visualStyle,
         connectorSlots: validation.slots,
       } as V2CardVisualStyle);
       setSlotDraft(validation.slots);
+      slotDraftRef.current = validation.slots;
     } catch {
       setSlotEditorError("Could not save connector slots.");
-    } finally {
-      setIsSlotEditorSaving(false);
     }
   }
 
-  async function resetConnectorSlotsToFallback() {
-    const fallbackSlots = buildV2ConnectorSlotsFromPorts(cardType.ports).map(
-      toPersistedV2ConnectorSlot
-    );
-    setSlotDraft(fallbackSlots);
-    setSlotEditorError(null);
-    setIsSlotEditorSaving(true);
-    try {
-      await data.onUpdateVisualStyle?.(card.id, {
-        ...visualStyle,
-        connectorSlots: undefined,
-      } as V2CardVisualStyle);
-    } catch {
-      setSlotEditorError("Could not reset connector slots.");
-    } finally {
-      setIsSlotEditorSaving(false);
+  function addSlotAtPoint(clientX: number, clientY: number) {
+    const rect = articleRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const position = getPerimeterSlotFromPoint(rect, clientX, clientY, {
+      requireNearEdge: true,
+    });
+    if (!position) return;
+
+    const existingIds = new Set(slotDraftRef.current.map((slot) => slot.id));
+    const slot = {
+      id: createConnectorSlotId(existingIds),
+      type: "input" as const,
+      side: position.side,
+      offset: position.offset,
+    };
+    const nextDraft = [...slotDraftRef.current, slot];
+    slotDraftRef.current = nextDraft;
+    setSlotDraft(nextDraft);
+    setTypeChooserSlotId(slot.id);
+    void persistConnectorSlots(nextDraft);
+  }
+
+  function deleteSlot(slot: V2ConnectorSlot) {
+    if (connectedPortKeys.has(slot.portKey)) {
+      setSlotEditorError("Cannot delete a connected slot.");
+      return;
     }
+
+    const nextDraft = slotDraftRef.current.filter((draft) => draft.id !== slot.id);
+    slotDraftRef.current = nextDraft;
+    setSlotDraft(nextDraft);
+    setTypeChooserSlotId(null);
+    void persistConnectorSlots(nextDraft);
+  }
+
+  function changeSlotType(slot: V2ConnectorSlot, type: V2ConnectorSlotType) {
+    if (connectedPortKeys.has(slot.portKey)) {
+      setSlotEditorError("Cannot change type of a connected slot.");
+      return;
+    }
+
+    const nextDraft = updateSlotDraft(slot.id, { type });
+    setTypeChooserSlotId(null);
+    void persistConnectorSlots(nextDraft);
+  }
+
+  function handleSlotPointerDown(
+    event: ReactPointerEvent,
+    slot: V2ConnectorSlot
+  ) {
+    if (!data.isVisualEditing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setTypeChooserSlotId(null);
+    setSlotEditorError(null);
+    lastSlotDragMovedRef.current = false;
+    dragStartRef.current = {
+      slotId: slot.id,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+    };
+    setDraggingSlotId(slot.id);
+  }
+
+  function handleSlotClick(event: ReactMouseEvent, slot: V2ConnectorSlot) {
+    if (!data.isVisualEditing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (lastSlotDragMovedRef.current) {
+      lastSlotDragMovedRef.current = false;
+      return;
+    }
+
+    if (connectedPortKeys.has(slot.portKey)) {
+      setSlotEditorError("Cannot change type of a connected slot.");
+      setTypeChooserSlotId(null);
+      return;
+    }
+
+    setSlotEditorError(null);
+    setTypeChooserSlotId((current) => (current === slot.id ? null : slot.id));
+  }
+
+  function handleSlotDoubleClick(event: ReactMouseEvent, slot: V2ConnectorSlot) {
+    if (!data.isVisualEditing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    deleteSlot(slot);
+  }
+
+  function handleCardDoubleClick(event: ReactMouseEvent<HTMLElement>) {
+    if (!data.isVisualEditing) return;
+    if (
+      event.target instanceof HTMLElement &&
+      event.target.closest(
+        ".v2CardHandle, .v2CardTextToolbar, .v2CardActionMenuWrap, .v2ConnectorSlotTypePopover"
+      )
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    addSlotAtPoint(event.clientX, event.clientY);
   }
 
   useEffect(() => {
@@ -246,7 +477,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
   return (
     <article
+      ref={articleRef}
       className="v2CardNode"
+      onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -391,115 +624,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
             </button>
           </div>
 
-          <section
-            className="v2ConnectorSlotEditor nodrag"
-            aria-label="Connector slots"
-            onPointerDown={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
-          >
-            <div className="v2ConnectorSlotEditorHeader">
-              <div>
-                <strong>Connector slots</strong>
-                <span>{slotDraft.length} slots</span>
-              </div>
-              <div className="v2ConnectorSlotActions">
-                <button
-                  type="button"
-                  className="v2ConnectorSlotReset"
-                  disabled={isSlotEditorSaving}
-                  onClick={() => void resetConnectorSlotsToFallback()}
-                >
-                  Reset to fallback
-                </button>
-                <button
-                  type="button"
-                  className="v2ConnectorSlotSave"
-                  disabled={isSlotEditorSaving}
-                  onClick={() => void saveConnectorSlots()}
-                >
-                  {isSlotEditorSaving ? "Saving..." : "Save"}
-                </button>
-              </div>
-            </div>
-
-            <div className="v2ConnectorSlotList">
-              {slotDraft.map((slot) => (
-                <div className="v2ConnectorSlotRow" key={slot.id}>
-                  <div className="v2ConnectorSlotMeta">
-                    <span className="v2ConnectorSlotName">{slot.label || slot.id}</span>
-                    <span className="v2ConnectorSlotId">{slot.id}</span>
-                  </div>
-                  <div className="v2ConnectorSlotControls">
-                    <label>
-                      <span>Type</span>
-                      <input value={slot.type} readOnly />
-                    </label>
-                    <label>
-                      <span>Side</span>
-                      <select
-                        value={slot.side}
-                        onChange={(event) =>
-                          updateSlotDraft(slot.id, {
-                            side: event.target.value as V2ConnectorSlotSide,
-                          })
-                        }
-                      >
-                        <option value="top">top</option>
-                        <option value="right">right</option>
-                        <option value="bottom">bottom</option>
-                        <option value="left">left</option>
-                      </select>
-                    </label>
-                    <label className="v2ConnectorSlotOffset">
-                      <span>Offset</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={slot.offset}
-                        onChange={(event) =>
-                          updateSlotDraft(slot.id, {
-                            offset: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="v2ConnectorSlotOffsetNumber">
-                      <span>Value</span>
-                      <input
-                        type="number"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={slot.offset}
-                        onChange={(event) =>
-                          updateSlotDraft(slot.id, {
-                            offset: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label className="v2ConnectorSlotLabel">
-                      <span>Label</span>
-                      <input
-                        value={slot.label ?? ""}
-                        onChange={(event) =>
-                          updateSlotDraft(slot.id, {
-                            label: event.target.value,
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {slotEditorError ? (
-              <p className="v2ConnectorSlotError">{slotEditorError}</p>
-            ) : null}
-          </section>
+          {slotEditorError ? (
+            <p className="v2ConnectorSlotMessage nodrag">{slotEditorError}</p>
+          ) : null}
         </>
       ) : null}
 
@@ -511,17 +638,58 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
             type={getHandleType(slot.type)}
             position={getHandlePosition(slot.side)}
             id={slot.id}
+            onPointerDown={
+              data.isVisualEditing
+                ? (event) => handleSlotPointerDown(event, slot)
+                : undefined
+            }
+            onClick={
+              data.isVisualEditing
+                ? (event) => handleSlotClick(event, slot)
+                : undefined
+            }
+            onDoubleClick={
+              data.isVisualEditing
+                ? (event) => handleSlotDoubleClick(event, slot)
+                : undefined
+            }
             className={[
               "v2CardHandle",
               getSlotShapeClass(slot.type),
               getSlotSideClass(slot.side),
               isConnected ? "v2CardHandleConnected" : "v2CardHandleFree",
+              data.isVisualEditing ? "v2ConnectorSlotEditable nodrag nopan" : "",
+              data.isVisualEditing && isConnected ? "v2ConnectorSlotLocked" : "",
+              draggingSlotId === slot.id ? "v2ConnectorSlotDragging" : "",
             ].join(" ")}
             style={getSlotPositionStyle(slot)}
             title={`${slot.label ?? slot.portKey} · ${isConnected ? "connected" : "free"}`}
           />
         );
       })}
+
+      {typeChooserSlot ? (
+        <div
+          className="v2ConnectorSlotTypePopover nodrag nopan"
+          style={getSlotPopoverStyle(typeChooserSlot)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          {(["input", "output", "receiver"] as const).map((type) => (
+            <button
+              key={type}
+              type="button"
+              className={`v2ConnectorSlotTypeButton${
+                typeChooserSlot.type === type ? " v2ConnectorSlotTypeButtonActive" : ""
+              }`}
+              onClick={() => changeSlotType(typeChooserSlot, type)}
+            >
+              {type}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/* Compact header (fixed top) */}
       <div className="v2CardHeader">
