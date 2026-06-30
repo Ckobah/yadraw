@@ -37,7 +37,7 @@ export function V2CardBasicsSection({
     if (nextTitle === card.title) return;
     if (!nextTitle) {
       setDraftTitle(card.title ?? "");
-      setFieldError("Название не может быть пустым");
+      setFieldError("Title cannot be empty");
       return;
     }
 
@@ -45,7 +45,7 @@ export function V2CardBasicsSection({
     try {
       await onUpdateCardBasics(card.id, { title: nextTitle });
     } catch {
-      setFieldError("Не удалось сохранить название");
+      setFieldError("Could not save title");
     }
   }
 
@@ -57,7 +57,7 @@ export function V2CardBasicsSection({
     try {
       await onUpdateCardBasics(card.id, { description: draftDescription });
     } catch {
-      setFieldError("Не удалось сохранить описание");
+      setFieldError("Could not save description");
     }
   }
 
@@ -67,7 +67,7 @@ export function V2CardBasicsSection({
     if (nextTitle !== card.title) {
       if (!nextTitle) {
         setDraftTitle(card.title ?? "");
-        setFieldError("Название не может быть пустым");
+        setFieldError("Title cannot be empty");
         return;
       }
       input.title = nextTitle;
@@ -81,7 +81,7 @@ export function V2CardBasicsSection({
     try {
       await onUpdateCardBasics(card.id, input);
     } catch {
-      setFieldError("Не удалось сохранить изменения");
+      setFieldError("Could not save changes");
     }
   }
 
@@ -102,12 +102,12 @@ export function V2CardBasicsSection({
   return (
     <section className="v2InspectorHero v2InspectorEditor">
       <div className="v2InspectorField">
-        <label htmlFor={`v2-title-${card.id}`}>Название</label>
+        <label htmlFor={`v2-title-${card.id}`}>Title</label>
         <input
           id={`v2-title-${card.id}`}
           className="v2InspectorTextInput"
           value={draftTitle}
-          placeholder="Название карточки"
+          placeholder="Card title"
           onChange={(event) => setDraftTitle(event.target.value)}
           onBlur={() => void saveTitle()}
           onKeyDown={(event) => {
@@ -124,12 +124,12 @@ export function V2CardBasicsSection({
         />
       </div>
       <div className="v2InspectorField">
-        <label htmlFor={`v2-description-${card.id}`}>Описание</label>
+        <label htmlFor={`v2-description-${card.id}`}>Description</label>
         <textarea
           id={`v2-description-${card.id}`}
           className="v2InspectorTextarea"
           value={draftDescription}
-          placeholder="Краткое описание"
+          placeholder="Brief description"
           onChange={(event) => setDraftDescription(event.target.value)}
           onBlur={() => void saveDescription()}
           onKeyDown={(event) => {
@@ -156,7 +156,7 @@ export function V2CardBasicsSection({
             onClick={cancelDraft}
             disabled={!hasChanges || saveStatus === "saving"}
           >
-            Отменить
+            Cancel
           </button>
           <button
             type="button"
@@ -165,7 +165,7 @@ export function V2CardBasicsSection({
             onClick={() => void saveAll()}
             disabled={!hasChanges || saveStatus === "saving"}
           >
-            Сохранить
+            Save
           </button>
         </div>
       </div>

@@ -64,7 +64,7 @@ export function V2CardCreateToolbar({
       await onCreateCard(cardType, getCreatePosition());
       setIsOpen(false);
     } catch {
-      setError("Не удалось создать карточку");
+      setError("Could not create card");
     } finally {
       setIsCreating(false);
     }
@@ -95,7 +95,7 @@ export function V2CardCreateToolbar({
 
       {isOpen ? (
         <div className="v2CreateToolbarPopover" role="menu">
-          <span className="v2CreateToolbarTitle">Тип карточки</span>
+          <span className="v2CreateToolbarTitle">Card type</span>
           <div className="v2CreateTypeList">
             {cardTypes.map((cardType) => {
               const accentColor = getV2CardAccentColor(cardType.key);

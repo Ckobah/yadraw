@@ -24,7 +24,6 @@ export type V2CardNodeData = {
   pendingCardAction?: "duplicate" | "delete" | null;
   cardActionError?: string | null;
   isVisualEditing?: boolean;
-  onEditCard?: (cardId: string) => void;
   onStartVisualEditor?: (cardId: string) => void;
   onDuplicateCard?: (cardId: string) => Promise<void> | void;
   onDeleteCard?: (cardId: string) => Promise<void> | void;
@@ -319,9 +318,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => runMenuAction(() => data.onEditCard?.(card.id))}
+                onClick={() => runMenuAction(() => data.onStartVisualEditor?.(card.id))}
               >
-                Редактировать
+                Edit
               </button>
               <button
                 type="button"
@@ -329,7 +328,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                 disabled={data.isCardActionPending}
                 onClick={() => runMenuAction(() => data.onDuplicateCard?.(card.id))}
               >
-                {data.pendingCardAction === "duplicate" ? "Дублирование..." : "Дублировать"}
+                {data.pendingCardAction === "duplicate" ? "Duplicating..." : "Duplicate"}
               </button>
               <button
                 type="button"
@@ -338,7 +337,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                 disabled={data.isCardActionPending}
                 onClick={() => runMenuAction(() => data.onDeleteCard?.(card.id))}
               >
-                {data.pendingCardAction === "delete" ? "Удаление..." : "Удалить"}
+                {data.pendingCardAction === "delete" ? "Deleting..." : "Delete"}
               </button>
               {data.cardActionError ? (
                 <p className="v2CardActionMenuError">{data.cardActionError}</p>

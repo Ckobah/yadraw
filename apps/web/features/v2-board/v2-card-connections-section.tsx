@@ -18,7 +18,7 @@ function ConnectionRows({
   direction,
 }: ConnectionRowsProps) {
   if (connections.length === 0) {
-    return <p className="v2InspectorEmpty">Нет связей</p>;
+    return <p className="v2InspectorEmpty">No connections</p>;
   }
 
   return (
@@ -56,7 +56,7 @@ export function V2CardConnectionsSection({
 
   return (
     <section className="v2InspectorSection">
-      <h3>Связи · {totalConnections}</h3>
+      <h3>Connections · {totalConnections}</h3>
       <details className="v2InspectorDetails" open={totalConnections > 0}>
         <summary>Incoming {incomingConnections.length} / Outgoing {outgoingConnections.length}</summary>
         <div className="v2InspectorConnectionGroup">

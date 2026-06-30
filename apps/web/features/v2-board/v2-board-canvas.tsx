@@ -245,16 +245,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setNodes]
   );
 
-  const handleNodeDoubleClick = useCallback(
-    (_event: unknown, node: V2CardNode) => {
-      setSelectedCardId(node.id);
-      setVisualEditingCardId((current) =>
-        current === node.id ? null : node.id
-      );
-    },
-    []
-  );
-
   const handleNodeClick = useCallback(
     (_event: unknown, node: V2CardNode) => {
       setSelectedCardId(node.id);
@@ -410,14 +400,17 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   );
 
   const handleStartVisualEditor = useCallback((cardId: string) => {
-    setVisualEditingCardId(cardId);
-  }, []);
-
-  const handleEditCard = useCallback((cardId: string) => {
     setSelectedCardId(cardId);
-    setVisualEditingCardId(null);
+    setVisualEditingCardId(cardId);
     setCardActionError(null);
   }, []);
+
+  const handleNodeDoubleClick = useCallback(
+    (_event: unknown, node: V2CardNode) => {
+      handleStartVisualEditor(node.id);
+    },
+    [handleStartVisualEditor]
+  );
 
   const handleDuplicateCard = useCallback(
     async (cardId: string) => {
@@ -536,7 +529,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
           cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
           isVisualEditing: visualEditingCardId === node.id,
-          onEditCard: handleEditCard,
           onStartVisualEditor: handleStartVisualEditor,
           onDuplicateCard: handleDuplicateCard,
           onDeleteCard: handleDeleteCard,
@@ -551,7 +543,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     visualEditingCardId,
     pendingCardAction,
     cardActionError,
-    handleEditCard,
     handleStartVisualEditor,
     handleDuplicateCard,
     handleDeleteCard,

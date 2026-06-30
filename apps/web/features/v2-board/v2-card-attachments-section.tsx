@@ -53,7 +53,7 @@ export function V2CardAttachmentsSection({
       .catch(() => {
         if (!isActive) return;
         setAttachments([]);
-        setError("Не удалось загрузить список файлов");
+        setError("Could not load files");
       })
       .finally(() => {
         if (!isActive) return;
@@ -71,7 +71,7 @@ export function V2CardAttachmentsSection({
     if (!file) return;
 
     if (file.size > MAX_ATTACHMENT_BYTES) {
-      setError("Файл больше 25 MB");
+      setError("File is larger than 25 MB");
       return;
     }
 
@@ -84,14 +84,14 @@ export function V2CardAttachmentsSection({
       });
       setAttachments((current) => [attachment, ...current]);
     } catch {
-      setError("Не удалось прикрепить файл");
+      setError("Could not attach file");
     } finally {
       setIsUploading(false);
     }
   }
 
   async function handleDetach(attachment: V2CardAttachment) {
-    const shouldDetach = window.confirm("Убрать файл из карточки?");
+    const shouldDetach = window.confirm("Remove this file from the card?");
     if (!shouldDetach) return;
 
     setDetachingId(attachment.id);
@@ -102,7 +102,7 @@ export function V2CardAttachmentsSection({
         current.filter((item) => item.id !== attachment.id)
       );
     } catch {
-      setError("Не удалось убрать файл");
+      setError("Could not remove file");
     } finally {
       setDetachingId(null);
     }
@@ -111,7 +111,7 @@ export function V2CardAttachmentsSection({
   return (
     <section className="v2InspectorSection">
       <div className="v2InspectorSectionHeader">
-        <h3>Файлы</h3>
+        <h3>Files</h3>
         <button
           type="button"
           className="v2InspectorAttachButton"
@@ -119,7 +119,7 @@ export function V2CardAttachmentsSection({
           disabled={isUploading}
         >
           <Paperclip size={14} strokeWidth={2.2} />
-          <span>{isUploading ? "Загрузка" : "Прикрепить"}</span>
+          <span>{isUploading ? "Uploading..." : "Attach"}</span>
         </button>
         <input
           ref={fileInputRef}
@@ -130,9 +130,9 @@ export function V2CardAttachmentsSection({
       </div>
 
       {isLoading ? (
-        <p className="v2InspectorEmpty">Загрузка файлов...</p>
+        <p className="v2InspectorEmpty">Loading files...</p>
       ) : attachments.length === 0 ? (
-        <p className="v2InspectorEmpty">Пока нет файлов</p>
+        <p className="v2InspectorEmpty">No files yet</p>
       ) : (
         <div className="v2InspectorAttachmentList">
           {attachments.map((attachment) => (
@@ -149,13 +149,13 @@ export function V2CardAttachmentsSection({
                 <a
                   href={getV2FileDownloadUrl(attachment.fileId)}
                   download={attachment.filename}
-                  aria-label={`Скачать ${attachment.filename}`}
+                  aria-label={`Download ${attachment.filename}`}
                 >
                   <Download size={14} strokeWidth={2.2} />
                 </a>
                 <button
                   type="button"
-                  aria-label={`Убрать ${attachment.filename}`}
+                  aria-label={`Remove ${attachment.filename}`}
                   onClick={() => void handleDetach(attachment)}
                   disabled={detachingId === attachment.id}
                 >

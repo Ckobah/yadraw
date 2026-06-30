@@ -117,7 +117,7 @@ export function V2CardDataSection({
     const parsed = validateAndBuildDataRecord(dataDraftFields);
     if (!parsed.ok) {
       setDataFieldErrors(parsed.errors);
-      setDataError("Исправьте ошибки в данных");
+      setDataError("Fix data errors");
       return;
     }
 
@@ -126,15 +126,15 @@ export function V2CardDataSection({
     try {
       await onUpdateCardData(card.id, parsed.data);
     } catch {
-      setDataError("Не удалось сохранить данные");
+      setDataError("Could not save data");
     }
   }
 
   return (
     <section className="v2InspectorSection">
-      <h3>Данные</h3>
+      <h3>Data</h3>
       {dataDraftFields.length === 0 ? (
-        <p className="v2InspectorEmpty">Нет данных</p>
+        <p className="v2InspectorEmpty">No data</p>
       ) : (
         <div className="v2InspectorDataEditor">
           {dataDraftFields.map((field) => (
@@ -224,7 +224,7 @@ export function V2CardDataSection({
             onMouseDown={(event) => event.preventDefault()}
             onClick={addDataField}
           >
-            + Добавить поле
+            + Add field
           </button>
           <button
             type="button"
@@ -232,7 +232,7 @@ export function V2CardDataSection({
             onClick={cancelDataDraft}
             disabled={!hasDataChanges || saveStatus === "saving"}
           >
-            Отменить
+            Cancel
           </button>
           <button
             type="button"
@@ -241,7 +241,7 @@ export function V2CardDataSection({
             onClick={() => void saveDataDraft()}
             disabled={!hasDataChanges || saveStatus === "saving"}
           >
-            Сохранить
+            Save
           </button>
         </div>
       </div>
