@@ -17,7 +17,7 @@ import {
 import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
 import {
-  buildV2ConnectorSlotsFromPorts,
+  buildV2ConnectorSlots,
   type V2ConnectorSlot,
   type V2ConnectorSlotSide,
   type V2ConnectorSlotType,
@@ -112,9 +112,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const accentColor = getV2CardAccentColor(cardType.key);
-  const connectorSlots = buildV2ConnectorSlotsFromPorts(cardType.ports);
-  const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
   const visualStyle = card.visualStyle ?? {};
+  const connectorSlots = buildV2ConnectorSlots({
+    visualStyle,
+    ports: cardType.ports,
+  });
+  const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
   const textStyle = {
     fontFamily: visualStyle.fontFamily,
     textAlign: visualStyle.textAlign,

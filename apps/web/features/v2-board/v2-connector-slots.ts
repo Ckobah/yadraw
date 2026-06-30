@@ -20,6 +20,8 @@ type LoosePort = V2CardTypePort & {
 
 const MIN_SLOT_OFFSET = 0.15;
 const MAX_SLOT_OFFSET = 0.85;
+const VALID_SLOT_TYPES = new Set<V2ConnectorSlotType>(["input", "output", "receiver"]);
+const VALID_SLOT_SIDES = new Set<V2ConnectorSlotSide>(["top", "right", "bottom", "left"]);
 
 function clampSlotOffset(offset: number): number {
   return Math.min(MAX_SLOT_OFFSET, Math.max(MIN_SLOT_OFFSET, offset));
@@ -89,4 +91,66 @@ export function buildV2ConnectorSlotsFromPorts(
   }
 
   return slots;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readVisualStyleConnectorSlots(
+  visualStyle: unknown
+): unknown[] | null {
+  if (!isRecord(visualStyle)) return null;
+  return Array.isArray(visualStyle.connectorSlots)
+    ? visualStyle.connectorSlots
+    : null;
+}
+
+function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.id !== "string") return null;
+  if (typeof value.type !== "string") return null;
+  if (typeof value.side !== "string") return null;
+  if (typeof value.offset !== "number") return null;
+
+  const id = value.id.trim();
+  if (!id) return null;
+
+  const type = value.type as V2ConnectorSlotType;
+  const side = value.side as V2ConnectorSlotSide;
+  if (!VALID_SLOT_TYPES.has(type) || !VALID_SLOT_SIDES.has(side)) return null;
+
+  const label = typeof value.label === "string" ? value.label : undefined;
+
+  return {
+    id,
+    portKey: id,
+    type,
+    side,
+    offset: clampSlotOffset(value.offset),
+    ...(label !== undefined ? { label } : {})
+  };
+}
+
+function buildV2ConnectorSlotsFromVisualStyle(
+  visualStyle: unknown
+): V2ConnectorSlot[] {
+  const rawSlots = readVisualStyleConnectorSlots(visualStyle);
+  if (!rawSlots || rawSlots.length === 0) return [];
+
+  const slots = rawSlots
+    .map((rawSlot) => sanitizeSavedConnectorSlot(rawSlot))
+    .filter((slot): slot is V2ConnectorSlot => slot !== null);
+
+  return slots.length === rawSlots.length ? slots : [];
+}
+
+export function buildV2ConnectorSlots(params: {
+  visualStyle?: unknown;
+  ports: V2CardTypePort[];
+}): V2ConnectorSlot[] {
+  const savedSlots = buildV2ConnectorSlotsFromVisualStyle(params.visualStyle);
+  return savedSlots.length > 0
+    ? savedSlots
+    : buildV2ConnectorSlotsFromPorts(params.ports);
 }

@@ -36,6 +36,16 @@ export const v2FileProcessingStatusSchema = z.enum([
   "failed"
 ]);
 
+export const v2ConnectorSlotTypeSchema = z.enum(["input", "output", "receiver"]);
+export const v2ConnectorSlotSideSchema = z.enum(["top", "right", "bottom", "left"]);
+export const v2ConnectorSlotSchema = z.object({
+  id: z.string().trim().min(1),
+  type: v2ConnectorSlotTypeSchema,
+  side: v2ConnectorSlotSideSchema,
+  offset: z.number().min(0).max(1),
+  label: z.string().optional()
+});
+
 export const v2CardVisualStyleSchema = z.object({
   fontFamily: z.string().min(1).max(80).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
@@ -44,6 +54,7 @@ export const v2CardVisualStyleSchema = z.object({
   fontStyle: z.enum(["normal", "italic"]).optional(),
   textDecoration: z.enum(["none", "underline"]).optional(),
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
+  connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
 
 export const v2WorkspaceSchema = z.object({
@@ -322,6 +333,9 @@ export type V2PortDirection = z.infer<typeof v2PortDirectionSchema>;
 export type V2ConnectionStatus = z.infer<typeof v2ConnectionStatusSchema>;
 export type V2WorkspaceRole = z.infer<typeof v2WorkspaceRoleSchema>;
 export type V2FileProcessingStatus = z.infer<typeof v2FileProcessingStatusSchema>;
+export type V2ConnectorSlotType = z.infer<typeof v2ConnectorSlotTypeSchema>;
+export type V2ConnectorSlotSide = z.infer<typeof v2ConnectorSlotSideSchema>;
+export type V2ConnectorSlot = z.infer<typeof v2ConnectorSlotSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
