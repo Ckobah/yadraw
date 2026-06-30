@@ -18,9 +18,15 @@ import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
 import {
   buildV2ConnectorSlots,
+  buildV2ConnectorSlotsFromPorts,
+  clampEditableSlotOffset,
+  toPersistedV2ConnectorSlot,
+  toRuntimeV2ConnectorSlot,
+  validateV2ConnectorSlots,
   type V2ConnectorSlot,
   type V2ConnectorSlotSide,
   type V2ConnectorSlotType,
+  type V2PersistedConnectorSlot,
 } from "./v2-connector-slots";
 
 export type V2CardNodeData = {
@@ -35,7 +41,7 @@ export type V2CardNodeData = {
   onDuplicateCard?: (cardId: string) => Promise<void> | void;
   onDeleteCard?: (cardId: string) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
-  onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => void;
+  onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
   onCloseVisualEditor?: () => void;
 };
 
@@ -117,6 +123,24 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     visualStyle,
     ports: cardType.ports,
   });
+  const connectorSlotSourceKey = JSON.stringify(
+    connectorSlots.map((slot) => ({
+      id: slot.id,
+      type: slot.type,
+      side: slot.side,
+      offset: slot.offset,
+      label: slot.label,
+    }))
+  );
+  const [slotDraft, setSlotDraft] = useState<V2PersistedConnectorSlot[]>(() =>
+    connectorSlots.map(toPersistedV2ConnectorSlot)
+  );
+  const [slotEditorError, setSlotEditorError] = useState<string | null>(null);
+  const [isSlotEditorSaving, setIsSlotEditorSaving] = useState(false);
+  const renderedConnectorSlots =
+    data.isVisualEditing && slotDraft.length > 0
+      ? slotDraft.map(toRuntimeV2ConnectorSlot)
+      : connectorSlots;
   const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
   const textStyle = {
     fontFamily: visualStyle.fontFamily,
@@ -128,7 +152,74 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   };
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
-    data.onUpdateVisualStyle?.(card.id, patch);
+    void Promise.resolve(data.onUpdateVisualStyle?.(card.id, patch)).catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!data.isVisualEditing) return;
+    setSlotDraft(connectorSlots.map(toPersistedV2ConnectorSlot));
+    setSlotEditorError(null);
+  }, [card.id, connectorSlotSourceKey, data.isVisualEditing]);
+
+  function updateSlotDraft(
+    slotId: string,
+    patch: Partial<Pick<V2PersistedConnectorSlot, "side" | "offset" | "label">>
+  ) {
+    setSlotDraft((current) =>
+      current.map((slot) =>
+        slot.id === slotId
+          ? {
+              ...slot,
+              ...patch,
+              ...(patch.offset !== undefined
+                ? { offset: clampEditableSlotOffset(patch.offset) }
+                : {}),
+            }
+          : slot
+      )
+    );
+    setSlotEditorError(null);
+  }
+
+  async function saveConnectorSlots(nextDraft = slotDraft) {
+    const validation = validateV2ConnectorSlots(nextDraft);
+    if (!validation.ok) {
+      setSlotEditorError(validation.message);
+      return;
+    }
+
+    setIsSlotEditorSaving(true);
+    setSlotEditorError(null);
+    try {
+      await data.onUpdateVisualStyle?.(card.id, {
+        ...visualStyle,
+        connectorSlots: validation.slots,
+      } as V2CardVisualStyle);
+      setSlotDraft(validation.slots);
+    } catch {
+      setSlotEditorError("Could not save connector slots.");
+    } finally {
+      setIsSlotEditorSaving(false);
+    }
+  }
+
+  async function resetConnectorSlotsToFallback() {
+    const fallbackSlots = buildV2ConnectorSlotsFromPorts(cardType.ports).map(
+      toPersistedV2ConnectorSlot
+    );
+    setSlotDraft(fallbackSlots);
+    setSlotEditorError(null);
+    setIsSlotEditorSaving(true);
+    try {
+      await data.onUpdateVisualStyle?.(card.id, {
+        ...visualStyle,
+        connectorSlots: undefined,
+      } as V2CardVisualStyle);
+    } catch {
+      setSlotEditorError("Could not reset connector slots.");
+    } finally {
+      setIsSlotEditorSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -191,11 +282,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         }}
       />
       {data.isVisualEditing ? (
-        <div
-          className="v2CardTextToolbar nodrag"
-          onPointerDown={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
-        >
+        <>
+          <div
+            className="v2CardTextToolbar nodrag"
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
           <div className="v2ToolbarGroup v2ToolbarGroupAlign" aria-label="Alignment">
             <span className="v2ToolbarLabel">Alignment</span>
             <div className="v2ToolbarButtonRow">
@@ -289,18 +381,129 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
             />
           </div>
 
-          <button
-            type="button"
-            className="v2ToolbarCloseButton"
-            aria-label="Close text editor"
-            onClick={() => data.onCloseVisualEditor?.()}
+            <button
+              type="button"
+              className="v2ToolbarCloseButton"
+              aria-label="Close text editor"
+              onClick={() => data.onCloseVisualEditor?.()}
+            >
+              <X size={15} strokeWidth={2.2} />
+            </button>
+          </div>
+
+          <section
+            className="v2ConnectorSlotEditor nodrag"
+            aria-label="Connector slots"
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
           >
-            <X size={15} strokeWidth={2.2} />
-          </button>
-        </div>
+            <div className="v2ConnectorSlotEditorHeader">
+              <div>
+                <strong>Connector slots</strong>
+                <span>{slotDraft.length} slots</span>
+              </div>
+              <div className="v2ConnectorSlotActions">
+                <button
+                  type="button"
+                  className="v2ConnectorSlotReset"
+                  disabled={isSlotEditorSaving}
+                  onClick={() => void resetConnectorSlotsToFallback()}
+                >
+                  Reset to fallback
+                </button>
+                <button
+                  type="button"
+                  className="v2ConnectorSlotSave"
+                  disabled={isSlotEditorSaving}
+                  onClick={() => void saveConnectorSlots()}
+                >
+                  {isSlotEditorSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+
+            <div className="v2ConnectorSlotList">
+              {slotDraft.map((slot) => (
+                <div className="v2ConnectorSlotRow" key={slot.id}>
+                  <div className="v2ConnectorSlotMeta">
+                    <span className="v2ConnectorSlotName">{slot.label || slot.id}</span>
+                    <span className="v2ConnectorSlotId">{slot.id}</span>
+                  </div>
+                  <div className="v2ConnectorSlotControls">
+                    <label>
+                      <span>Type</span>
+                      <input value={slot.type} readOnly />
+                    </label>
+                    <label>
+                      <span>Side</span>
+                      <select
+                        value={slot.side}
+                        onChange={(event) =>
+                          updateSlotDraft(slot.id, {
+                            side: event.target.value as V2ConnectorSlotSide,
+                          })
+                        }
+                      >
+                        <option value="top">top</option>
+                        <option value="right">right</option>
+                        <option value="bottom">bottom</option>
+                        <option value="left">left</option>
+                      </select>
+                    </label>
+                    <label className="v2ConnectorSlotOffset">
+                      <span>Offset</span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={slot.offset}
+                        onChange={(event) =>
+                          updateSlotDraft(slot.id, {
+                            offset: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="v2ConnectorSlotOffsetNumber">
+                      <span>Value</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={slot.offset}
+                        onChange={(event) =>
+                          updateSlotDraft(slot.id, {
+                            offset: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="v2ConnectorSlotLabel">
+                      <span>Label</span>
+                      <input
+                        value={slot.label ?? ""}
+                        onChange={(event) =>
+                          updateSlotDraft(slot.id, {
+                            label: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {slotEditorError ? (
+              <p className="v2ConnectorSlotError">{slotEditorError}</p>
+            ) : null}
+          </section>
+        </>
       ) : null}
 
-      {connectorSlots.map((slot) => {
+      {renderedConnectorSlots.map((slot) => {
         const isConnected = connectedPortKeys.has(slot.portKey);
         return (
           <Handle

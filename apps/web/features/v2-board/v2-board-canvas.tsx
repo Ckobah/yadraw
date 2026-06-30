@@ -273,8 +273,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       cardId: string,
       patch: V2CardVisualStyle
     ) => {
+      const touchesConnectorSlots = Object.prototype.hasOwnProperty.call(
+        patch,
+        "connectorSlots"
+      );
       const node = nodesRef.current.find((n) => n.id === cardId);
       const current = (node?.data as { card?: { visualStyle?: V2CardVisualStyle } })?.card?.visualStyle ?? {};
+      const previousConnectorSlots = current.connectorSlots;
       const nextVisualStyle = Object.fromEntries(
         Object.entries({ ...current, ...patch }).filter(([, value]) => value !== undefined && value !== "")
       ) as V2CardVisualStyle;
@@ -299,7 +304,29 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to save visual style:", err);
+        if (touchesConnectorSlots) {
+          setNodes((nds) =>
+            nds.map((n) => {
+              if (n.id !== cardId) return n;
+              const currentVisualStyle = n.data.card.visualStyle ?? {};
+              const restoredVisualStyle = { ...currentVisualStyle } as V2CardVisualStyle;
+              if (previousConnectorSlots === undefined) {
+                delete restoredVisualStyle.connectorSlots;
+              } else {
+                restoredVisualStyle.connectorSlots = previousConnectorSlots;
+              }
+              return {
+                ...n,
+                data: {
+                  ...n.data,
+                  card: { ...n.data.card, visualStyle: restoredVisualStyle },
+                },
+              };
+            })
+          );
+        }
         setSaveStatus("error");
+        throw err;
       }
     },
     [setNodes]

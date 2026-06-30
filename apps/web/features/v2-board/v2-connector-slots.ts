@@ -13,6 +13,12 @@ export type V2ConnectorSlot = {
   label?: string;
 };
 
+export type V2PersistedConnectorSlot = Omit<V2ConnectorSlot, "portKey">;
+
+export type V2ConnectorSlotValidationResult =
+  | { ok: true; slots: V2PersistedConnectorSlot[] }
+  | { ok: false; message: string };
+
 type LoosePort = V2CardTypePort & {
   type?: unknown;
   direction?: unknown;
@@ -25,6 +31,11 @@ const VALID_SLOT_SIDES = new Set<V2ConnectorSlotSide>(["top", "right", "bottom",
 
 function clampSlotOffset(offset: number): number {
   return Math.min(MAX_SLOT_OFFSET, Math.max(MIN_SLOT_OFFSET, offset));
+}
+
+export function clampEditableSlotOffset(offset: number): number {
+  if (!Number.isFinite(offset)) return 0.5;
+  return Math.min(1, Math.max(0, offset));
 }
 
 function readPortKind(port: V2CardTypePort): string {
@@ -93,6 +104,70 @@ export function buildV2ConnectorSlotsFromPorts(
   return slots;
 }
 
+export function toPersistedV2ConnectorSlot(
+  slot: V2ConnectorSlot
+): V2PersistedConnectorSlot {
+  return {
+    id: slot.id,
+    type: slot.type,
+    side: slot.side,
+    offset: clampEditableSlotOffset(slot.offset),
+    ...(slot.label !== undefined ? { label: slot.label } : {}),
+  };
+}
+
+export function toRuntimeV2ConnectorSlot(
+  slot: V2PersistedConnectorSlot
+): V2ConnectorSlot {
+  return {
+    ...slot,
+    portKey: slot.id,
+    offset: clampEditableSlotOffset(slot.offset),
+  };
+}
+
+export function validateV2ConnectorSlots(
+  slots: V2PersistedConnectorSlot[]
+): V2ConnectorSlotValidationResult {
+  const seenIds = new Set<string>();
+
+  for (const slot of slots) {
+    const id = typeof slot.id === "string" ? slot.id.trim() : "";
+    if (!id) return { ok: false, message: "Every connector slot needs an id." };
+    if (seenIds.has(id)) {
+      return { ok: false, message: `Connector slot id "${id}" is duplicated.` };
+    }
+    seenIds.add(id);
+
+    if (!VALID_SLOT_TYPES.has(slot.type)) {
+      return { ok: false, message: `Connector slot "${id}" has an invalid type.` };
+    }
+    if (!VALID_SLOT_SIDES.has(slot.side)) {
+      return { ok: false, message: `Connector slot "${id}" has an invalid side.` };
+    }
+    if (!Number.isFinite(slot.offset) || slot.offset < 0 || slot.offset > 1) {
+      return { ok: false, message: `Connector slot "${id}" offset must be between 0 and 1.` };
+    }
+    if (slot.label !== undefined && typeof slot.label !== "string") {
+      return { ok: false, message: `Connector slot "${id}" has an invalid label.` };
+    }
+  }
+
+  return {
+    ok: true,
+    slots: slots.map((slot) => {
+      const label = slot.label?.trim();
+      return {
+        id: slot.id.trim(),
+        type: slot.type,
+        side: slot.side,
+        offset: clampEditableSlotOffset(slot.offset),
+        ...(label ? { label } : {}),
+      };
+    }),
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -112,6 +187,7 @@ function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
   if (typeof value.type !== "string") return null;
   if (typeof value.side !== "string") return null;
   if (typeof value.offset !== "number") return null;
+  if (!Number.isFinite(value.offset) || value.offset < 0 || value.offset > 1) return null;
 
   const id = value.id.trim();
   if (!id) return null;
@@ -127,7 +203,7 @@ function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
     portKey: id,
     type,
     side,
-    offset: clampSlotOffset(value.offset),
+    offset: clampEditableSlotOffset(value.offset),
     ...(label !== undefined ? { label } : {})
   };
 }

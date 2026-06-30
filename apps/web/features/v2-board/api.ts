@@ -6,6 +6,7 @@ import type {
   V2BoardDetail,
   V2Card,
   V2CardAttachment,
+  V2CardVisualStyle,
   V2Connection,
   V2CreateCardRequest,
 } from "@yadraw/shared";
@@ -145,15 +146,7 @@ export async function updateV2CardSize(
 
 export async function updateV2CardVisualStyle(
   cardId: string,
-  visualStyle: {
-    fontFamily?: string;
-    textAlign?: "left" | "center" | "right";
-    textColor?: string;
-    fontWeight?: "400" | "600" | "700";
-    fontStyle?: "normal" | "italic";
-    textDecoration?: "none" | "underline";
-    bodyVerticalAlign?: "top" | "center" | "bottom";
-  }
+  visualStyle: V2CardVisualStyle
 ): Promise<void> {
   const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
     method: "PATCH",

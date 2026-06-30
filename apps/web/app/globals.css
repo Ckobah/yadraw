@@ -2623,6 +2623,193 @@ button:disabled {
   outline-offset: 1px;
 }
 
+.v2ConnectorSlotEditor {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 0;
+  z-index: 32;
+  display: grid;
+  gap: 10px;
+  width: min(520px, calc(100vw - 48px));
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(31, 45, 73, 0.16);
+  color: #111827;
+  pointer-events: auto;
+}
+
+.v2ConnectorSlotEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2ConnectorSlotEditorHeader strong {
+  display: block;
+  color: #111827;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.1;
+}
+
+.v2ConnectorSlotEditorHeader span {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 10.5px;
+  font-weight: 650;
+}
+
+.v2ConnectorSlotActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.v2ConnectorSlotReset,
+.v2ConnectorSlotSave {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #d7deea;
+  border-radius: 7px;
+  background: #fff;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.v2ConnectorSlotSave {
+  border-color: rgba(47, 140, 255, 0.36);
+  background: #edf5ff;
+  color: #1f7df2;
+}
+
+.v2ConnectorSlotReset:hover:not(:disabled),
+.v2ConnectorSlotSave:hover:not(:disabled),
+.v2ConnectorSlotReset:focus-visible,
+.v2ConnectorSlotSave:focus-visible {
+  border-color: #2f8cff;
+  outline: 0;
+}
+
+.v2ConnectorSlotReset:disabled,
+.v2ConnectorSlotSave:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.v2ConnectorSlotList {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.v2ConnectorSlotRow {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #e4e7f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.v2ConnectorSlotMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v2ConnectorSlotName {
+  min-width: 0;
+  overflow: hidden;
+  color: #111827;
+  font-size: 11.5px;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ConnectorSlotId {
+  max-width: 180px;
+  overflow: hidden;
+  color: #667085;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ConnectorSlotControls {
+  display: grid;
+  grid-template-columns: 76px 92px minmax(110px, 1fr) 64px minmax(92px, 1fr);
+  gap: 7px;
+  align-items: end;
+}
+
+.v2ConnectorSlotControls label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v2ConnectorSlotControls label span {
+  color: #667085;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.v2ConnectorSlotControls input,
+.v2ConnectorSlotControls select {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  border: 1px solid #d7deea;
+  border-radius: 6px;
+  background: #fff;
+  color: #273142;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.v2ConnectorSlotControls input {
+  padding: 0 7px;
+}
+
+.v2ConnectorSlotControls input[readonly] {
+  background: #f2f5f9;
+  color: #667085;
+}
+
+.v2ConnectorSlotControls select {
+  padding: 0 6px;
+}
+
+.v2ConnectorSlotOffset input[type="range"] {
+  padding: 0;
+  accent-color: #2f8cff;
+}
+
+.v2ConnectorSlotOffsetNumber input {
+  text-align: center;
+}
+
+.v2ConnectorSlotError {
+  margin: 0;
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
 @media (max-width: 760px) {
   .v2CardTextToolbar {
     top: -112px;
@@ -2634,6 +2821,19 @@ button:disabled {
   .v2ToolbarGroup {
     border-right: 0;
     padding-right: 0;
+  }
+
+  .v2ConnectorSlotEditor {
+    width: min(360px, calc(100vw - 28px));
+  }
+
+  .v2ConnectorSlotControls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .v2ConnectorSlotOffset,
+  .v2ConnectorSlotLabel {
+    grid-column: 1 / -1;
   }
 }
 
