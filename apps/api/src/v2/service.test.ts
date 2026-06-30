@@ -320,7 +320,8 @@ describe("v2 board service", () => {
 
   it("soft-deletes cards and removes their active connections from the board detail", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
-    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
     const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
     const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
 
@@ -339,6 +340,11 @@ describe("v2 board service", () => {
     const board = await service.getBoard(ownerContext, seed.board.id);
     expect(board.cards).toEqual(expect.arrayContaining([expect.objectContaining({ id: task.id })]));
     expect(board.connections.map((item) => item.id)).not.toContain(connection.id);
+    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({
+      id: connection.id,
+      sourceCardId: source.id,
+      targetCardId: task.id
+    });
   });
 });
 

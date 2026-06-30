@@ -235,9 +235,47 @@ describe("v2 card API", () => {
     await server.close();
   });
 
-  it("soft-deletes a card and its incident connections", async () => {
+  it("soft-deletes a card and hides its incident connections from board detail", async () => {
     const { server, seed, repository } = createCardServer();
     const source = seed.cards[0]!;
+    const originalConnection = seed.connections[0]!;
+    const sourceType = seed.cardTypes.find((cardType) => cardType.key === "source")!;
+    const taskType = seed.cardTypes.find((cardType) => cardType.key === "task")!;
+    const unrelatedSource = await repository.createCard({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      cardTypeId: sourceType.id,
+      title: "Unrelated source",
+      description: "",
+      data: {},
+      position: { x: 400, y: 100 },
+      size: sourceType.defaultSize,
+      status: "active",
+      visualStyle: {}
+    });
+    const unrelatedTarget = await repository.createCard({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      cardTypeId: taskType.id,
+      title: "Unrelated target",
+      description: "",
+      data: {},
+      position: { x: 640, y: 100 },
+      size: taskType.defaultSize,
+      status: "active",
+      visualStyle: {}
+    });
+    const unrelatedConnection = await repository.createConnection({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      sourceCardId: unrelatedSource.id,
+      targetCardId: unrelatedTarget.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      type: "data",
+      label: "payload",
+      status: "active"
+    });
 
     const response = await server.inject({
       method: "DELETE",
@@ -250,8 +288,13 @@ describe("v2 card API", () => {
 
     const board = await repository.getBoardDetail(seed.board.id);
     expect(board?.cards.some((card) => card.id === source.id)).toBe(false);
-    expect(board?.connections).toEqual([]);
-    await expect(repository.getConnection(seed.connections[0]!.id)).resolves.toBeNull();
+    expect(board?.connections.map((connection) => connection.id)).not.toContain(originalConnection.id);
+    expect(board?.connections.map((connection) => connection.id)).toContain(unrelatedConnection.id);
+    await expect(repository.getConnection(originalConnection.id)).resolves.toMatchObject({
+      id: originalConnection.id,
+      sourceCardId: originalConnection.sourceCardId,
+      targetCardId: originalConnection.targetCardId
+    });
 
     await server.close();
   });

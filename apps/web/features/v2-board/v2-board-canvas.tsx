@@ -492,7 +492,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleDeleteCard = useCallback(
     async (cardId: string) => {
       if (cardActionLockRef.current) return;
-      if (!window.confirm("Delete this card?")) return;
+      if (
+        !window.confirm(
+          "Delete this card? Connections to this card will disappear from the board. Files will stay stored separately."
+        )
+      ) {
+        return;
+      }
       const pending = { cardId, action: "delete" as const };
       cardActionLockRef.current = pending;
       setPendingCardAction(pending);
