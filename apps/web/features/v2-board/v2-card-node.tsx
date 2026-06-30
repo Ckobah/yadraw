@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   AlignCenter,
   AlignLeft,
@@ -14,8 +14,14 @@ import {
   Underline,
   X,
 } from "lucide-react";
-import type { V2Card, V2CardType, V2CardTypePort, V2CardVisualStyle } from "@yadraw/shared";
+import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
+import {
+  buildV2ConnectorSlotsFromPorts,
+  type V2ConnectorSlot,
+  type V2ConnectorSlotSide,
+  type V2ConnectorSlotType,
+} from "./v2-connector-slots";
 
 export type V2CardNodeData = {
   card: V2Card;
@@ -40,45 +46,36 @@ export const V2_CARD_MIN_SIZE = {
   height: 122,
 } as const;
 
-type V2PortVisualShape = "input" | "output" | "receiver";
-
-function readPortKind(port: V2CardTypePort): string {
-  const loosePort = port as V2CardTypePort & {
-    type?: unknown;
-    direction?: unknown;
-  };
-  const rawKind = loosePort.type ?? loosePort.direction;
-  return typeof rawKind === "string" ? rawKind.toLowerCase() : "";
+function getHandleType(slotType: V2ConnectorSlotType): "source" | "target" {
+  return slotType === "output" ? "source" : "target";
 }
 
-function getPortVisualShape(port: V2CardTypePort): V2PortVisualShape {
-  const kind = readPortKind(port);
-  if (kind === "output") return "output";
-  if (
-    kind === "receiver" ||
-    kind === "bidirectional" ||
-    kind === "io" ||
-    kind === "input_output"
-  ) {
-    return "receiver";
-  }
-  return "input";
-}
-
-function getHandleType(shape: V2PortVisualShape): "source" | "target" {
-  return shape === "output" ? "source" : "target";
-}
-
-function getHandlePosition(shape: V2PortVisualShape): Position {
-  if (shape === "output") return Position.Right;
-  if (shape === "receiver") return Position.Bottom;
+function getHandlePosition(side: V2ConnectorSlotSide): Position {
+  if (side === "right") return Position.Right;
+  if (side === "top") return Position.Top;
+  if (side === "bottom") return Position.Bottom;
   return Position.Left;
 }
 
-function getPortShapeClass(shape: V2PortVisualShape): string {
-  if (shape === "output") return "v2CardHandleOutput";
-  if (shape === "receiver") return "v2CardHandleReceiver";
+function getSlotShapeClass(slotType: V2ConnectorSlotType): string {
+  if (slotType === "output") return "v2CardHandleOutput";
+  if (slotType === "receiver") return "v2CardHandleReceiver";
   return "v2CardHandleInput";
+}
+
+function getSlotSideClass(side: V2ConnectorSlotSide): string {
+  if (side === "right") return "v2CardHandleSideRight";
+  if (side === "top") return "v2CardHandleSideTop";
+  if (side === "bottom") return "v2CardHandleSideBottom";
+  return "v2CardHandleSideLeft";
+}
+
+function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
+  const offset = `${slot.offset * 100}%`;
+  if (slot.side === "top" || slot.side === "bottom") {
+    return { left: offset };
+  }
+  return { top: offset };
 }
 
 function bodyVerticalJustify(
@@ -115,6 +112,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const accentColor = getV2CardAccentColor(cardType.key);
+  const connectorSlots = buildV2ConnectorSlotsFromPorts(cardType.ports);
   const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
   const visualStyle = card.visualStyle ?? {};
   const textStyle = {
@@ -299,21 +297,22 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </div>
       ) : null}
 
-      {cardType.ports.map((port) => {
-        const shape = getPortVisualShape(port);
-        const isConnected = connectedPortKeys.has(port.key);
+      {connectorSlots.map((slot) => {
+        const isConnected = connectedPortKeys.has(slot.portKey);
         return (
           <Handle
-            key={port.key}
-            type={getHandleType(shape)}
-            position={getHandlePosition(shape)}
-            id={port.key}
+            key={slot.id}
+            type={getHandleType(slot.type)}
+            position={getHandlePosition(slot.side)}
+            id={slot.id}
             className={[
               "v2CardHandle",
-              getPortShapeClass(shape),
+              getSlotShapeClass(slot.type),
+              getSlotSideClass(slot.side),
               isConnected ? "v2CardHandleConnected" : "v2CardHandleFree",
             ].join(" ")}
-            title={`${port.label} · ${isConnected ? "connected" : "free"}`}
+            style={getSlotPositionStyle(slot)}
+            title={`${slot.label ?? slot.portKey} · ${isConnected ? "connected" : "free"}`}
           />
         );
       })}

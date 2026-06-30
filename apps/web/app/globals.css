@@ -2650,17 +2650,14 @@ button:disabled {
 }
 
 .v2CardHandleInput {
-  left: -10px !important;
   background: #fff !important;
 }
 
 .v2CardHandleOutput {
-  right: -10px !important;
   background: var(--v2-port-color) !important;
 }
 
 .v2CardHandleReceiver {
-  bottom: -10px !important;
   background: #fff !important;
 }
 
@@ -2683,6 +2680,22 @@ button:disabled {
 .v2CardHandleConnected {
   --v2-port-color: #2f8cff;
   box-shadow: 0 2px 6px rgba(47, 140, 255, 0.24) !important;
+}
+
+.v2CardHandleSideLeft {
+  left: -10px !important;
+}
+
+.v2CardHandleSideRight {
+  right: -10px !important;
+}
+
+.v2CardHandleSideTop {
+  top: -10px !important;
+}
+
+.v2CardHandleSideBottom {
+  bottom: -10px !important;
 }
 
 /* ── V2 card inspector ─────────────────── */
