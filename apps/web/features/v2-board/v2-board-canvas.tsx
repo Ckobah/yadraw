@@ -444,6 +444,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       } catch (err) {
         console.error("Failed to delete card:", err);
         setSaveStatus("error");
+        throw err;
       }
     },
     [setEdges, setNodes]

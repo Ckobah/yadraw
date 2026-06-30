@@ -1,6 +1,7 @@
 "use client";
 
 import { Copy, Database, Trash2, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
@@ -9,6 +10,8 @@ import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
+
+type PendingCardAction = "duplicate" | "delete" | null;
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -44,10 +47,38 @@ export function V2CardInspector({
   onClose,
 }: V2CardInspectorProps) {
   const accentColor = getV2CardAccentColor(cardType?.key);
+  const [pendingAction, setPendingAction] = useState<PendingCardAction>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const actionsDisabled = pendingAction !== null;
 
-  function handleDeleteClick() {
+  useEffect(() => {
+    setPendingAction(null);
+    setActionError(null);
+  }, [card.id]);
+
+  async function handleDuplicateClick() {
+    if (actionsDisabled) return;
+    setPendingAction("duplicate");
+    setActionError(null);
+    try {
+      await onDuplicateCard(card.id);
+    } catch {
+      setActionError("Could not duplicate this card.");
+      setPendingAction(null);
+    }
+  }
+
+  async function handleDeleteClick() {
+    if (actionsDisabled) return;
     if (!window.confirm("Delete this card?")) return;
-    void onDeleteCard(card.id);
+    setPendingAction("delete");
+    setActionError(null);
+    try {
+      await onDeleteCard(card.id);
+    } catch {
+      setActionError("Could not delete this card.");
+      setPendingAction(null);
+    }
   }
 
   return (
@@ -66,22 +97,31 @@ export function V2CardInspector({
           <span>{cardType?.name ?? "Unknown type"}</span>
           <strong>{cardType?.key ?? "unknown"}</strong>
         </div>
-        <button
-          type="button"
-          className="v2InspectorDuplicateButton"
-          onClick={() => void onDuplicateCard(card.id)}
-        >
-          <Copy size={14} strokeWidth={2.2} />
-          <span>Duplicate</span>
-        </button>
-        <button
-          type="button"
-          className="v2InspectorDeleteButton"
-          onClick={handleDeleteClick}
-        >
-          <Trash2 size={14} strokeWidth={2.2} />
-          <span>Delete</span>
-        </button>
+        <div className="v2InspectorActions" aria-live="polite">
+          <div className="v2InspectorActionRow">
+            <button
+              type="button"
+              className="v2InspectorDuplicateButton"
+              disabled={actionsDisabled}
+              onClick={() => void handleDuplicateClick()}
+            >
+              <Copy size={14} strokeWidth={2.2} />
+              <span>{pendingAction === "duplicate" ? "Duplicating..." : "Duplicate"}</span>
+            </button>
+            <button
+              type="button"
+              className="v2InspectorDeleteButton"
+              disabled={actionsDisabled}
+              onClick={() => void handleDeleteClick()}
+            >
+              <Trash2 size={14} strokeWidth={2.2} />
+              <span>{pendingAction === "delete" ? "Deleting..." : "Delete"}</span>
+            </button>
+          </div>
+          {actionError ? (
+            <p className="v2InspectorActionError">{actionError}</p>
+          ) : null}
+        </div>
         <button
           type="button"
           className="v2InspectorCloseButton"
