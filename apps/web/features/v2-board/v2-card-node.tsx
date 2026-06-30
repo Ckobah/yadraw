@@ -20,6 +20,7 @@ import type { Node } from "@xyflow/react";
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
+  connectedPortKeys?: string[];
   isCardActionPending?: boolean;
   pendingCardAction?: "duplicate" | "delete" | null;
   cardActionError?: string | null;
@@ -39,12 +40,45 @@ export const V2_CARD_MIN_SIZE = {
   height: 122,
 } as const;
 
-function getInputPort(ports: V2CardTypePort[]): V2CardTypePort | undefined {
-  return ports.find((p) => p.direction === "input");
+type V2PortVisualShape = "input" | "output" | "receiver";
+
+function readPortKind(port: V2CardTypePort): string {
+  const loosePort = port as V2CardTypePort & {
+    type?: unknown;
+    direction?: unknown;
+  };
+  const rawKind = loosePort.type ?? loosePort.direction;
+  return typeof rawKind === "string" ? rawKind.toLowerCase() : "";
 }
 
-function getOutputPort(ports: V2CardTypePort[]): V2CardTypePort | undefined {
-  return ports.find((p) => p.direction === "output");
+function getPortVisualShape(port: V2CardTypePort): V2PortVisualShape {
+  const kind = readPortKind(port);
+  if (kind === "output") return "output";
+  if (
+    kind === "receiver" ||
+    kind === "bidirectional" ||
+    kind === "io" ||
+    kind === "input_output"
+  ) {
+    return "receiver";
+  }
+  return "input";
+}
+
+function getHandleType(shape: V2PortVisualShape): "source" | "target" {
+  return shape === "output" ? "source" : "target";
+}
+
+function getHandlePosition(shape: V2PortVisualShape): Position {
+  if (shape === "output") return Position.Right;
+  if (shape === "receiver") return Position.Bottom;
+  return Position.Left;
+}
+
+function getPortShapeClass(shape: V2PortVisualShape): string {
+  if (shape === "output") return "v2CardHandleOutput";
+  if (shape === "receiver") return "v2CardHandleReceiver";
+  return "v2CardHandleInput";
 }
 
 function bodyVerticalJustify(
@@ -81,8 +115,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const accentColor = getV2CardAccentColor(cardType.key);
-  const inputPort = getInputPort(cardType.ports);
-  const outputPort = getOutputPort(cardType.ports);
+  const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
   const visualStyle = card.visualStyle ?? {};
   const textStyle = {
     fontFamily: visualStyle.fontFamily,
@@ -266,27 +299,24 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </div>
       ) : null}
 
-      {/* Input handle — only if card type has an input port */}
-      {inputPort && (
-        <Handle
-          type="target"
-          position={Position.Left}
-          id={inputPort.key}
-          className="v2CardHandle v2CardHandleInput"
-          title={inputPort.label}
-        />
-      )}
-
-      {/* Output handle — only if card type has an output port */}
-      {outputPort && (
-        <Handle
-          type="source"
-          position={Position.Right}
-          id={outputPort.key}
-          className="v2CardHandle v2CardHandleOutput"
-          title={outputPort.label}
-        />
-      )}
+      {cardType.ports.map((port) => {
+        const shape = getPortVisualShape(port);
+        const isConnected = connectedPortKeys.has(port.key);
+        return (
+          <Handle
+            key={port.key}
+            type={getHandleType(shape)}
+            position={getHandlePosition(shape)}
+            id={port.key}
+            className={[
+              "v2CardHandle",
+              getPortShapeClass(shape),
+              isConnected ? "v2CardHandleConnected" : "v2CardHandleFree",
+            ].join(" ")}
+            title={`${port.label} · ${isConnected ? "connected" : "free"}`}
+          />
+        );
+      })}
 
       {/* Compact header (fixed top) */}
       <div className="v2CardHeader">

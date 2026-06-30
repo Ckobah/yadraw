@@ -182,6 +182,22 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const connectedPortKeyMap = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    function addPort(cardId: string, portKey: string) {
+      const keys = map.get(cardId) ?? new Set<string>();
+      keys.add(portKey);
+      map.set(cardId, keys);
+    }
+
+    for (const connection of connectionRecords) {
+      addPort(connection.sourceCardId, connection.sourcePortKey);
+      addPort(connection.targetCardId, connection.targetPortKey);
+    }
+
+    return map;
+  }, [connectionRecords]);
+
   const cardById = useMemo(
     () => new Map(nodes.map((node) => [node.id, node.data.card])),
     [nodes]
@@ -528,6 +544,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           isCardActionPending: pendingCardAction?.cardId === node.id,
           pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
           cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
+          connectedPortKeys: Array.from(connectedPortKeyMap.get(node.id) ?? []),
           isVisualEditing: visualEditingCardId === node.id,
           onStartVisualEditor: handleStartVisualEditor,
           onDuplicateCard: handleDuplicateCard,
@@ -543,6 +560,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     visualEditingCardId,
     pendingCardAction,
     cardActionError,
+    connectedPortKeyMap,
     handleStartVisualEditor,
     handleDuplicateCard,
     handleDeleteCard,
