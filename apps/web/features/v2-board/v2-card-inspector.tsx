@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, X } from "lucide-react";
+import { Copy, Database, X } from "lucide-react";
 import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
@@ -25,6 +25,7 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
+  onDuplicateCard: (cardId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -37,6 +38,7 @@ export function V2CardInspector({
   saveStatus,
   onUpdateCardBasics,
   onUpdateCardData,
+  onDuplicateCard,
   onClose,
 }: V2CardInspectorProps) {
   const accentColor = getV2CardAccentColor(cardType?.key);
@@ -57,6 +59,14 @@ export function V2CardInspector({
           <span>{cardType?.name ?? "Unknown type"}</span>
           <strong>{cardType?.key ?? "unknown"}</strong>
         </div>
+        <button
+          type="button"
+          className="v2InspectorDuplicateButton"
+          onClick={() => void onDuplicateCard(card.id)}
+        >
+          <Copy size={14} strokeWidth={2.2} />
+          <span>Duplicate</span>
+        </button>
         <button
           type="button"
           className="v2InspectorCloseButton"

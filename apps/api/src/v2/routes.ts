@@ -49,6 +49,16 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.post("/v2/cards/:cardId/duplicate", async (request, reply) => {
+    try {
+      const { cardId } = request.params as { cardId: string };
+      const card = await service.duplicateCard(request.requestContext, cardId);
+      return reply.code(201).send(card);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.delete("/v2/cards/:cardId", async (request, reply) => {
     try {
       const { cardId } = request.params as { cardId: string };

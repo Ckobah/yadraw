@@ -44,6 +44,7 @@ export type V2BoardService = {
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
   createCard(context: RequestContext, boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
+  duplicateCard(context: RequestContext, cardId: string): Promise<V2Card>;
   updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
   deleteCard(context: RequestContext, cardId: string): Promise<{ deleted: true; id: string }>;
   createConnection(context: RequestContext, boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
@@ -208,6 +209,25 @@ export function createV2BoardService(
         visualStyle: cloneJson(input.visualStyle ?? {}),
         status: input.status ?? "active"
       });
+    },
+
+    async duplicateCard(context, cardId) {
+      const existing = await repository.getCard(cardId);
+      if (!existing) {
+        notFound("Card not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "write");
+
+      if (!repository.duplicateCard) {
+        throw new V2ServiceError("conflict", "V2 duplicate repository is not available");
+      }
+
+      const duplicated = await repository.duplicateCard(cardId);
+      if (!duplicated) {
+        notFound("Card not found");
+      }
+
+      return duplicated;
     },
 
     async updateCard(context, cardId, rawInput) {

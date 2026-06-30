@@ -36,6 +36,7 @@ import {
   createV2Connection,
   deleteV2Connection,
   deleteV2Card,
+  duplicateV2Card,
 } from "./api";
 
 type Props = {
@@ -402,41 +403,24 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const handleDuplicateCard = useCallback(
     async (cardId: string) => {
-      const sourceNode = nodesRef.current.find((node) => node.id === cardId);
-      if (!sourceNode) return;
-
-      const sourceCard = sourceNode.data.card;
-      const nextPosition = {
-        x: sourceNode.position.x + 32,
-        y: sourceNode.position.y + 32,
-      };
-
       setSaveStatus("saving");
       try {
-        const created = await createV2Card(board.id, {
-          cardTypeId: sourceCard.cardTypeId,
-          title: `${sourceCard.title} Copy`,
-          description: sourceCard.description,
-          data: sourceCard.data,
-          position: nextPosition,
-          size: clampCardSize(sourceCard.size),
-          visualStyle: sourceCard.visualStyle ?? {},
-          status: sourceCard.status,
-        });
+        const created = await duplicateV2Card(cardId);
 
         setNodes((current) => [
           ...current,
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
         setSelectedCardId(created.id);
-        setVisualEditingCardId(created.id);
+        setVisualEditingCardId(null);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to duplicate card:", err);
         setSaveStatus("error");
+        throw err;
       }
     },
-    [board.id, board.workspaceId, cardTypeMap, setNodes]
+    [board.workspaceId, cardTypeMap, setNodes]
   );
 
   const handleDeleteCard = useCallback(
@@ -680,6 +664,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           saveStatus={saveStatus}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
+          onDuplicateCard={handleDuplicateCard}
           onClose={() => setSelectedCardId(null)}
         />
       ) : null}

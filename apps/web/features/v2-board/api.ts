@@ -267,6 +267,23 @@ export async function deleteV2Card(cardId: string): Promise<void> {
   }
 }
 
+export async function duplicateV2Card(cardId: string): Promise<V2Card> {
+  const response = await fetch(
+    `/v2/actions/cards/${encodeURIComponent(cardId)}/duplicate`,
+    { method: "POST", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card duplication failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2Card>;
+}
+
 export async function createV2Connection(
   boardId: string,
   input: {

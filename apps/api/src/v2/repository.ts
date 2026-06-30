@@ -81,6 +81,7 @@ export type V2Repository = {
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
   getCard(cardId: string): Promise<V2Card | null>;
   createCard(input: V2CreateCardRecordInput): Promise<V2Card>;
+  duplicateCard?(cardId: string): Promise<V2Card | null>;
   updateCard(cardId: string, input: V2UpdateCardInput): Promise<V2Card | null>;
   deleteCard(cardId: string): Promise<boolean>;
   getConnection(connectionId: string): Promise<V2Connection | null>;
@@ -578,6 +579,30 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       return cloneJson(card);
     },
 
+    async duplicateCard(cardId) {
+      const source = state.cards.find((card) => card.id === cardId && !deletedCardIds.has(card.id));
+      if (!source) return null;
+
+      const timestamp = nowIso();
+      const card = v2CardSchema.parse({
+        ...source,
+        id: randomUUID(),
+        data: cloneJson(source.data),
+        position: {
+          x: source.position.x + 40,
+          y: source.position.y + 40
+        },
+        size: cloneJson(source.size),
+        visualStyle: cloneJson(source.visualStyle ?? {}),
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+
+      state.cards.push(card);
+      return cloneJson(card);
+    },
+
     async updateCard(cardId, input) {
       const index = state.cards.findIndex((card) => card.id === cardId && !deletedCardIds.has(card.id));
       const existing = state.cards[index];
@@ -1038,6 +1063,48 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       );
 
       return cardFromRow(result.rows[0] as QueryResultRow);
+    },
+
+    async duplicateCard(cardId) {
+      const result = await pool.query(
+        `
+          insert into cards (
+            workspace_id,
+            board_id,
+            card_type_id,
+            title,
+            description,
+            data,
+            position_x,
+            position_y,
+            width,
+            height,
+            visual_style,
+            status
+          )
+          select
+            workspace_id,
+            board_id,
+            card_type_id,
+            title,
+            description,
+            data,
+            position_x + 40,
+            position_y + 40,
+            width,
+            height,
+            visual_style,
+            'active'
+          from cards
+          where id = $1
+            and deleted_at is null
+          returning *
+        `,
+        [cardId]
+      );
+
+      const row = result.rows[0];
+      return row ? cardFromRow(row) : null;
     },
 
     async updateCard(cardId, input) {

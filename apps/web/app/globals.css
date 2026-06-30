@@ -2716,11 +2716,33 @@ button:disabled {
   white-space: nowrap;
 }
 
+.v2InspectorDuplicateButton {
+  display: inline-flex;
+  height: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 22%, #e4e7f0);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  color: var(--v2-inspector-accent);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v2InspectorDuplicateButton:hover,
+.v2InspectorDuplicateButton:focus-visible {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 44%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 13%, #fff);
+  outline: 0;
+}
+
 .v2InspectorCloseButton {
   display: grid;
   width: 30px;
   height: 30px;
-  margin-left: auto;
   place-items: center;
   border: 0;
   border-radius: 9px;
