@@ -313,6 +313,68 @@ describe("v2 board service", () => {
     expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
   });
 
+  it("updates connection visual style without changing connection or card data", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const source = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { sourceBusiness: true }
+    });
+    const task = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { targetBusiness: true }
+    });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    const styled = await service.updateConnection(ownerContext, connection.id, {
+      visualStyle: {
+        strokeColor: "#2563eb",
+        strokeWidth: 3,
+        markerEnd: "arrow"
+      }
+    });
+    expect(styled).toMatchObject({
+      id: connection.id,
+      data: {},
+      visualStyle: {
+        strokeColor: "#2563eb",
+        strokeWidth: 3,
+        markerEnd: "arrow"
+      }
+    });
+
+    const partiallyStyled = await service.updateConnection(ownerContext, connection.id, {
+      visualStyle: {
+        cornerRadius: 12
+      }
+    });
+    expect(partiallyStyled.visualStyle).toEqual({
+      strokeColor: "#2563eb",
+      strokeWidth: 3,
+      markerEnd: "arrow",
+      cornerRadius: 12
+    });
+
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.connections.find((item) => item.id === connection.id)).toMatchObject({
+      data: {},
+      visualStyle: {
+        strokeColor: "#2563eb",
+        strokeWidth: 3,
+        cornerRadius: 12,
+        markerEnd: "arrow"
+      }
+    });
+    expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ sourceBusiness: true });
+    expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
+  });
+
   it("rejects invalid or inaccessible connection metadata updates", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const repository = createV2MemoryRepository(seed);
@@ -452,6 +514,7 @@ describe("v2 board service", () => {
       title: null,
       description: null,
       data: {},
+      visualStyle: {},
       type: "data" as const,
       label: "orphan",
       status: "active" as const,
@@ -487,6 +550,7 @@ describe("v2 board service", () => {
       title: null,
       description: null,
       data: {},
+      visualStyle: {},
       type: "data" as const,
       label: "double-orphan",
       status: "active" as const,

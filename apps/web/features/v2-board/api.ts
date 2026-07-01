@@ -9,6 +9,7 @@ import type {
   V2CardVisualStyle,
   V2Connection,
   V2ConnectionAttachment,
+  V2ConnectionVisualStyle,
   V2CreateCardRequest,
 } from "@yadraw/shared";
 import type { V2CardType } from "@yadraw/shared";
@@ -340,6 +341,7 @@ export async function updateV2Connection(
     title?: string | null;
     description?: string | null;
     data?: Record<string, unknown>;
+    visualStyle?: V2ConnectionVisualStyle;
   }
 ): Promise<V2Connection> {
   const response = await fetch(

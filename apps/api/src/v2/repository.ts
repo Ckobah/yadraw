@@ -296,6 +296,7 @@ function connectionFromRow(row: QueryResultRow): V2Connection {
     title: row.title === null || row.title === undefined ? null : String(row.title),
     description: row.description === null || row.description === undefined ? null : String(row.description),
     data: asObject(row.data),
+    visualStyle: asObject(row.visual_style),
     type: String(row.type),
     label: String(row.label ?? ""),
     status: row.status,
@@ -452,6 +453,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       title: null,
       description: null,
       data: {},
+      visualStyle: {},
       type: "data",
       label: "payload",
       status: "active",
@@ -711,6 +713,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         title: null,
         description: null,
         data: {},
+        visualStyle: {},
         status: input.status,
         createdAt: timestamp,
         updatedAt: timestamp
@@ -732,6 +735,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...(input.title !== undefined ? { title: input.title?.trim() || null } : {}),
         ...(input.description !== undefined ? { description: input.description ?? null } : {}),
         ...(input.data !== undefined ? { data: cloneJson(input.data) } : {}),
+        ...(input.visualStyle !== undefined
+          ? { visualStyle: { ...existing.visualStyle, ...cloneJson(input.visualStyle) } }
+          : {}),
         updatedAt: nowIso()
       });
       state.connections[index] = updated;
@@ -1435,7 +1441,11 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       const next = {
         title: input.title !== undefined ? input.title?.trim() || null : existing.title,
         description: input.description !== undefined ? input.description ?? null : existing.description,
-        data: input.data !== undefined ? input.data : existing.data
+        data: input.data !== undefined ? input.data : existing.data,
+        visualStyle:
+          input.visualStyle !== undefined
+            ? { ...existing.visualStyle, ...input.visualStyle }
+            : existing.visualStyle
       };
 
       const result = await pool.query(
@@ -1444,6 +1454,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           set title = $2,
               description = $3,
               data = $4::jsonb,
+              visual_style = $5::jsonb,
               updated_at = now()
           where id = $1
             and deleted_at is null
@@ -1453,7 +1464,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           connectionId,
           next.title,
           next.description,
-          JSON.stringify(next.data)
+          JSON.stringify(next.data),
+          JSON.stringify(next.visualStyle)
         ]
       );
 

@@ -8,6 +8,7 @@ import {
   v2CardVisualStyleSchema,
   v2ConnectionAttachmentSchema,
   v2ConnectionFileSchema,
+  v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
@@ -152,6 +153,13 @@ describe("v2 API contracts", () => {
         title: "Payload route",
         description: "Transfers normalized payloads",
         data: { payload: "json", priority: 2 },
+        visualStyle: {
+          strokeColor: "#2563eb",
+          strokeWidth: 3,
+          cornerRadius: 12,
+          markerStart: "none",
+          markerEnd: "arrow"
+        },
         type: "data",
         label: "payload",
         status: "active",
@@ -161,7 +169,14 @@ describe("v2 API contracts", () => {
     ).toMatchObject({
       title: "Payload route",
       description: "Transfers normalized payloads",
-      data: { payload: "json", priority: 2 }
+      data: { payload: "json", priority: 2 },
+      visualStyle: {
+        strokeColor: "#2563eb",
+        strokeWidth: 3,
+        cornerRadius: 12,
+        markerStart: "none",
+        markerEnd: "arrow"
+      }
     });
   });
 
@@ -184,7 +199,30 @@ describe("v2 API contracts", () => {
     ).toMatchObject({
       title: null,
       description: null,
-      data: {}
+      data: {},
+      visualStyle: {}
+    });
+  });
+
+  it("accepts connection visual style updates", () => {
+    expect(
+      v2UpdateConnectionBodySchema.parse({
+        visualStyle: {
+          strokeColor: "#2563eb",
+          strokeWidth: 4,
+          cornerRadius: 16,
+          markerStart: "circle",
+          markerEnd: "arrow"
+        }
+      })
+    ).toEqual({
+      visualStyle: {
+        strokeColor: "#2563eb",
+        strokeWidth: 4,
+        cornerRadius: 16,
+        markerStart: "circle",
+        markerEnd: "arrow"
+      }
     });
   });
 
@@ -204,6 +242,57 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
     expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
+  });
+});
+
+describe("v2ConnectionVisualStyleSchema", () => {
+  it("accepts empty visual style", () => {
+    expect(v2ConnectionVisualStyleSchema.parse({})).toEqual({});
+  });
+
+  it("accepts valid color, width, radius, and markers", () => {
+    expect(
+      v2ConnectionVisualStyleSchema.parse({
+        strokeColor: "#2563eb",
+        strokeWidth: 3,
+        cornerRadius: 12,
+        markerStart: "none",
+        markerEnd: "arrow"
+      })
+    ).toEqual({
+      strokeColor: "#2563eb",
+      strokeWidth: 3,
+      cornerRadius: 12,
+      markerStart: "none",
+      markerEnd: "arrow"
+    });
+  });
+
+  it("rejects invalid marker values", () => {
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ markerEnd: "diamond" })
+    ).toThrow();
+  });
+
+  it("rejects invalid width and radius", () => {
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ strokeWidth: 0 })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ strokeWidth: 13 })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ cornerRadius: -1 })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ cornerRadius: 49 })
+    ).toThrow();
+  });
+
+  it("rejects non-hex stroke colors", () => {
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ strokeColor: "red" })
+    ).toThrow();
   });
 });
 

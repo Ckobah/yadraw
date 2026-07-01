@@ -8,7 +8,6 @@ import {
   ConnectionMode,
   useNodesState,
   useEdgesState,
-  MarkerType,
   type Edge,
   type Connection,
   type Viewport,
@@ -25,6 +24,7 @@ import type {
   V2BoardDetail,
   V2Card,
   V2Connection,
+  V2ConnectionVisualStyle,
   V2CardType,
   V2CardVisualStyle,
 } from "@yadraw/shared";
@@ -35,6 +35,7 @@ import {
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
 import { V2ConnectorInspector } from "./v2-connector-inspector";
+import { V2ConnectorVisualEditPanel } from "./v2-connector-visual-edit-panel";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
@@ -153,6 +154,75 @@ function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
   return connection.title?.trim() || connection.label || undefined;
 }
 
+type V2StyledEdge = Edge & {
+  pathOptions?: {
+    borderRadius?: number;
+  };
+};
+
+const V2_CONNECTOR_MARKER_IDS = {
+  arrow: "v2ConnectorMarkerArrow",
+  reverseArrow: "v2ConnectorMarkerReverseArrow",
+  triangle: "v2ConnectorMarkerTriangle",
+  circle: "v2ConnectorMarkerCircle",
+  square: "v2ConnectorMarkerSquare",
+} as const;
+
+function getConnectionMarkerId(
+  marker: V2ConnectionVisualStyle["markerEnd"] | V2ConnectionVisualStyle["markerStart"]
+): string | undefined {
+  if (!marker || marker === "none") return undefined;
+  return V2_CONNECTOR_MARKER_IDS[marker];
+}
+
+function getConnectionStrokeColor(visualStyle: V2ConnectionVisualStyle | undefined): string {
+  return visualStyle?.strokeColor ?? "var(--line-strong)";
+}
+
+function getConnectionStrokeWidth(visualStyle: V2ConnectionVisualStyle | undefined): number {
+  return visualStyle?.strokeWidth ?? 1.5;
+}
+
+function getConnectionCornerRadius(visualStyle: V2ConnectionVisualStyle | undefined): number {
+  return visualStyle?.cornerRadius ?? 12;
+}
+
+function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
+  const visualStyle = connection.visualStyle ?? {};
+  return {
+    id: connection.id,
+    source: connection.sourceCardId,
+    target: connection.targetCardId,
+    sourceHandle: connection.sourcePortKey,
+    targetHandle: connection.targetPortKey,
+    label: getConnectionEdgeLabel(connection),
+    type: "smoothstep",
+    animated: false,
+    markerStart: getConnectionMarkerId(visualStyle.markerStart),
+    markerEnd: getConnectionMarkerId(visualStyle.markerEnd ?? "arrow"),
+    pathOptions: {
+      borderRadius: getConnectionCornerRadius(visualStyle),
+    },
+    style: {
+      stroke: getConnectionStrokeColor(visualStyle),
+      strokeWidth: getConnectionStrokeWidth(visualStyle),
+    },
+    labelStyle: {
+      fontSize: 11,
+      fill: "var(--muted)",
+      fontWeight: 500,
+    },
+  };
+}
+
+function applyConnectionToEdge(edge: Edge, connection: V2Connection): V2StyledEdge {
+  return {
+    ...edge,
+    ...buildConnectionEdge(connection),
+    selected: edge.selected,
+  };
+}
+
 function isSameConnectionEndpoint(
   connection: V2Connection,
   input: {
@@ -249,6 +319,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
+  const [visualEditingConnectionId, setVisualEditingConnectionId] = useState<string | null>(null);
   const ignoreNextPaneClickRef = useRef(false);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
@@ -256,30 +327,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       buildCardNode(card, cardTypeMap, board.workspaceId)
     );
 
-    const edges: Edge[] = connections.map((conn: V2Connection) => ({
-      id: conn.id,
-      source: conn.sourceCardId,
-      target: conn.targetCardId,
-      sourceHandle: conn.sourcePortKey,
-      targetHandle: conn.targetPortKey,
-      label: getConnectionEdgeLabel(conn),
-      type: "smoothstep",
-      animated: false,
-      markerEnd: {
-        type: MarkerType.ArrowClosed,
-        width: 18,
-        height: 18,
-      },
-      style: {
-        stroke: "var(--line-strong)",
-        strokeWidth: 1.5,
-      },
-      labelStyle: {
-        fontSize: 11,
-        fill: "var(--muted)",
-        fontWeight: 500,
-      },
-    }));
+    const edges: Edge[] = connections.map((conn: V2Connection) => buildConnectionEdge(conn));
 
     return { nodes, edges };
   }, [cards, connections, cardTypeMap, board.workspaceId]);
@@ -359,13 +407,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     () =>
       edges.map((edge) => {
         const isSelected = edge.id === selectedConnectionId;
+        const baseStrokeWidth =
+          typeof edge.style?.strokeWidth === "number" ? edge.style.strokeWidth : 1.5;
         return {
           ...edge,
           selected: isSelected,
           style: {
             ...(edge.style ?? {}),
-            stroke: isSelected ? "var(--blue)" : "var(--line-strong)",
-            strokeWidth: isSelected ? 2.75 : 1.5,
+            strokeWidth: isSelected ? baseStrokeWidth + 1.25 : baseStrokeWidth,
           },
           labelStyle: {
             ...(edge.labelStyle ?? {}),
@@ -383,6 +432,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       !connectionRecords.some((connection) => connection.id === selectedConnectionId)
     ) {
       setSelectedConnectionId(null);
+      setVisualEditingConnectionId(null);
     }
   }, [connectionRecords, selectedConnectionId]);
 
@@ -426,6 +476,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     (_event: unknown, node: V2CardNode) => {
       setSelectedCardId(node.id);
       setSelectedConnectionId(null);
+      setVisualEditingConnectionId(null);
       setConnectionCreateError(null);
     },
     []
@@ -607,7 +658,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const handleStartVisualEditor = useCallback((cardId: string) => {
     setSelectedCardId(cardId);
+    setSelectedConnectionId(null);
     setVisualEditingCardId(cardId);
+    setVisualEditingConnectionId(null);
     setCardActionError(null);
     setConnectionCreateError(null);
   }, []);
@@ -652,6 +705,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSelectedCardId(created.id);
         setSelectedConnectionId(null);
         setVisualEditingCardId(null);
+        setVisualEditingConnectionId(null);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to duplicate card:", err);
@@ -700,6 +754,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSelectedCardId((current) => (current === cardId ? null : current));
         setSelectedConnectionId(null);
         setVisualEditingCardId((current) => (current === cardId ? null : current));
+        setVisualEditingConnectionId(null);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to delete card:", err);
@@ -741,6 +796,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSelectedCardId(created.id);
         setSelectedConnectionId(null);
         setVisualEditingCardId(null);
+        setVisualEditingConnectionId(null);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to create card:", err);
@@ -806,7 +862,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleUpdateConnection = useCallback(
     async (
       connectionId: string,
-      patch: { title?: string | null; description?: string | null; data?: Record<string, unknown> }
+      patch: {
+        title?: string | null;
+        description?: string | null;
+        data?: Record<string, unknown>;
+        visualStyle?: V2ConnectionVisualStyle;
+      }
     ) => {
       const previous = connectionRecords.find((connection) => connection.id === connectionId);
       if (!previous) return;
@@ -815,6 +876,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
         ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
         ...(patch.data !== undefined ? { data: patch.data } : {}),
+        ...(patch.visualStyle !== undefined
+          ? { visualStyle: { ...previous.visualStyle, ...patch.visualStyle } }
+          : {}),
       };
 
       setConnectionRecords((current) =>
@@ -823,7 +887,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setEdges((current) =>
         current.map((edge) =>
           edge.id === connectionId
-            ? { ...edge, label: getConnectionEdgeLabel(optimistic) }
+            ? applyConnectionToEdge(edge, optimistic)
             : edge
         )
       );
@@ -837,7 +901,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setEdges((current) =>
           current.map((edge) =>
             edge.id === connectionId
-              ? { ...edge, label: getConnectionEdgeLabel(updated) }
+              ? applyConnectionToEdge(edge, updated)
               : edge
           )
         );
@@ -850,7 +914,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setEdges((current) =>
           current.map((edge) =>
             edge.id === connectionId
-              ? { ...edge, label: getConnectionEdgeLabel(previous) }
+              ? applyConnectionToEdge(edge, previous)
               : edge
           )
         );
@@ -861,11 +925,40 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [connectionRecords, setEdges]
   );
 
+  const handlePreviewConnectionVisualStyle = useCallback(
+    (connectionId: string, visualStyle: V2ConnectionVisualStyle) => {
+      const current = connectionRecordsRef.current.find((connection) => connection.id === connectionId);
+      if (!current) return;
+      const previewConnection: V2Connection = {
+        ...current,
+        visualStyle: { ...current.visualStyle, ...visualStyle },
+      };
+
+      setEdges((existingEdges) =>
+        existingEdges.map((edge) =>
+          edge.id === connectionId ? applyConnectionToEdge(edge, previewConnection) : edge
+        )
+      );
+    },
+    [setEdges]
+  );
+
   const handleEdgeClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
     event.stopPropagation();
     setSelectedConnectionId(edge.id);
     setSelectedCardId(null);
     setVisualEditingCardId(null);
+    setVisualEditingConnectionId(null);
+    setCardActionError(null);
+    setConnectionCreateError(null);
+  }, []);
+
+  const handleEdgeDoubleClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
+    event.stopPropagation();
+    setSelectedConnectionId(edge.id);
+    setSelectedCardId(null);
+    setVisualEditingCardId(null);
+    setVisualEditingConnectionId(edge.id);
     setCardActionError(null);
     setConnectionCreateError(null);
   }, []);
@@ -940,30 +1033,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         const created = await createV2Connection(board.id, createInput);
 
         // Add the new edge from the API response
-        const newEdge: Edge = {
-          id: created.id,
-          source: created.sourceCardId,
-          target: created.targetCardId,
-          sourceHandle: created.sourcePortKey,
-          targetHandle: created.targetPortKey,
-          label: getConnectionEdgeLabel(created),
-          type: "smoothstep",
-          animated: false,
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 18,
-            height: 18,
-          },
-          style: {
-            stroke: "var(--line-strong)",
-            strokeWidth: 1.5,
-          },
-          labelStyle: {
-            fontSize: 11,
-            fill: "var(--muted)",
-            fontWeight: 500,
-          },
-        };
+        const newEdge: Edge = buildConnectionEdge(created);
         setEdges((prev) => [...prev, newEdge]);
         setConnectionRecords((prev) => [...prev, created]);
         setSaveStatus("saved");
@@ -997,6 +1067,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         current.filter((connection) => !deletedIds.has(connection.id))
       );
       setSelectedConnectionId((current) => (current && deletedIds.has(current) ? null : current));
+      setVisualEditingConnectionId((current) => (current && deletedIds.has(current) ? null : current));
       setConnectionCreateError(null);
     },
     []
@@ -1013,6 +1084,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         onNodeDragStop={handleNodeDragStop}
         onNodeDoubleClick={handleNodeDoubleClick}
         onEdgeClick={handleEdgeClick}
+        onEdgeDoubleClick={handleEdgeDoubleClick}
         onConnect={handleConnect}
         onEdgesDelete={handleEdgesDelete}
         onPaneClick={() => {
@@ -1023,6 +1095,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           setSelectedCardId(null);
           setSelectedConnectionId(null);
           setVisualEditingCardId(null);
+          setVisualEditingConnectionId(null);
           setConnectionCreateError(null);
         }}
         nodeTypes={nodeTypes}
@@ -1041,6 +1114,65 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         panOnDrag={true}
         zoomOnScroll={true}
       >
+        <svg className="v2ConnectorMarkerDefs" aria-hidden="true" focusable="false">
+          <defs>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.arrow}
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="8"
+              markerHeight="8"
+              orient="auto-start-reverse"
+            >
+              <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
+            </marker>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.reverseArrow}
+              viewBox="0 0 10 10"
+              refX="2"
+              refY="5"
+              markerWidth="8"
+              markerHeight="8"
+              orient="auto-start-reverse"
+            >
+              <path d="M 9 1 L 1 5 L 9 9 z" fill="context-stroke" />
+            </marker>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.triangle}
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="8"
+              markerHeight="8"
+              orient="auto-start-reverse"
+            >
+              <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
+            </marker>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.circle}
+              viewBox="0 0 10 10"
+              refX="5"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto"
+            >
+              <circle cx="5" cy="5" r="3" fill="context-stroke" />
+            </marker>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.square}
+              viewBox="0 0 10 10"
+              refX="5"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto"
+            >
+              <rect x="2" y="2" width="6" height="6" rx="1" fill="context-stroke" />
+            </marker>
+          </defs>
+        </svg>
         <V2CardCreateToolbar
           cardTypes={cardTypes}
           onCreateCard={handleCreateCard}
@@ -1060,6 +1192,23 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           <div className="v2CanvasConnectionError" role="status">
             {connectionCreateError}
           </div>
+        ) : null}
+        {selectedConnection && visualEditingConnectionId === selectedConnection.id ? (
+          <V2ConnectorVisualEditPanel
+            connection={selectedConnection}
+            saveStatus={saveStatus}
+            onPreview={handlePreviewConnectionVisualStyle}
+            onSave={async (connectionId, visualStyle) => {
+              await handleUpdateConnection(connectionId, { visualStyle });
+            }}
+            onCancel={() => {
+              handlePreviewConnectionVisualStyle(
+                selectedConnection.id,
+                selectedConnection.visualStyle
+              );
+              setVisualEditingConnectionId(null);
+            }}
+          />
         ) : null}
       </ReactFlow>
       {selectedCard ? (

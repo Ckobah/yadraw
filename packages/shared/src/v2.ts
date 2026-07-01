@@ -57,6 +57,23 @@ export const v2CardVisualStyleSchema = z.object({
   connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
 
+export const v2ConnectionMarkerSchema = z.enum([
+  "none",
+  "arrow",
+  "reverseArrow",
+  "triangle",
+  "circle",
+  "square"
+]);
+
+export const v2ConnectionVisualStyleSchema = z.object({
+  strokeColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
+  strokeWidth: z.number().min(1).max(12).optional(),
+  cornerRadius: z.number().min(0).max(48).optional(),
+  markerStart: v2ConnectionMarkerSchema.optional(),
+  markerEnd: v2ConnectionMarkerSchema.optional()
+});
+
 export const v2WorkspaceSchema = z.object({
   id: v2UuidSchema,
   name: z.string().min(1),
@@ -137,6 +154,7 @@ export const v2ConnectionSchema = z.object({
   title: z.string().nullable().default(null),
   description: z.string().nullable().default(null),
   data: v2JsonObjectSchema.default({}),
+  visualStyle: v2ConnectionVisualStyleSchema.default({}),
   type: z.string().min(1),
   label: z.string(),
   status: v2ConnectionStatusSchema,
@@ -291,7 +309,8 @@ export const v2UpdateConnectionBodySchema = z
   .object({
     title: z.string().trim().nullable().optional(),
     description: z.string().nullable().optional(),
-    data: v2JsonObjectSchema.optional()
+    data: v2JsonObjectSchema.optional(),
+    visualStyle: v2ConnectionVisualStyleSchema.optional()
   })
   .strict();
 
@@ -371,6 +390,7 @@ export const V2CardFileSchema = v2CardFileSchema;
 export const V2CardAttachmentSchema = v2CardAttachmentSchema;
 export const V2ConnectionFileSchema = v2ConnectionFileSchema;
 export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
+export const V2ConnectionVisualStyleSchema = v2ConnectionVisualStyleSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -392,6 +412,8 @@ export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
+export type V2ConnectionMarker = z.infer<typeof v2ConnectionMarkerSchema>;
+export type V2ConnectionVisualStyle = z.infer<typeof v2ConnectionVisualStyleSchema>;
 export type V2File = z.infer<typeof v2FileSchema>;
 export type V2CardFile = z.infer<typeof v2CardFileSchema>;
 export type V2CardAttachment = z.infer<typeof v2CardAttachmentSchema>;
