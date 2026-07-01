@@ -290,11 +290,7 @@ describe("v2 card API", () => {
     expect(board?.cards.some((card) => card.id === source.id)).toBe(false);
     expect(board?.connections.map((connection) => connection.id)).not.toContain(originalConnection.id);
     expect(board?.connections.map((connection) => connection.id)).toContain(unrelatedConnection.id);
-    await expect(repository.getConnection(originalConnection.id)).resolves.toMatchObject({
-      id: originalConnection.id,
-      sourceCardId: originalConnection.sourceCardId,
-      targetCardId: originalConnection.targetCardId
-    });
+    await expect(repository.getConnection(originalConnection.id)).resolves.toBeNull();
 
     await server.close();
   });

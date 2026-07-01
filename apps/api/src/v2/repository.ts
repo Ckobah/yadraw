@@ -622,6 +622,11 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       if (!exists) return false;
 
       deletedCardIds.add(cardId);
+      for (const connection of state.connections) {
+        if (connection.sourceCardId === cardId || connection.targetCardId === cardId) {
+          deletedConnectionIds.add(connection.id);
+        }
+      }
       return true;
     },
 
@@ -1151,18 +1156,44 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     },
 
     async deleteCard(cardId) {
-      const result = await pool.query(
-        `
-          update cards
-          set deleted_at = now(),
-              updated_at = now()
-          where id = $1
-            and deleted_at is null
-        `,
-        [cardId]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const result = await client.query(
+          `
+            update cards
+            set deleted_at = now(),
+                updated_at = now()
+            where id = $1
+              and deleted_at is null
+          `,
+          [cardId]
+        );
 
-      return (result.rowCount ?? 0) > 0;
+        if ((result.rowCount ?? 0) === 0) {
+          await client.query("rollback");
+          return false;
+        }
+
+        await client.query(
+          `
+            update connections
+            set deleted_at = now(),
+                updated_at = now()
+            where deleted_at is null
+              and (source_card_id = $1 or target_card_id = $1)
+          `,
+          [cardId]
+        );
+
+        await client.query("commit");
+        return true;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async getConnection(connectionId) {

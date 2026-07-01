@@ -174,6 +174,7 @@ describePostgres("v2 Postgres repository", () => {
     const afterDelete = await service.getBoard(ownerContext, seedIds.board);
     expect(afterDelete.cards.map((card) => card.id)).not.toContain(source.id);
     expect(afterDelete.connections.map((item) => item.id)).not.toContain(connection.id);
+    await expect(repository.getConnection(connection.id)).resolves.toBeNull();
 
     await service.deleteCard(ownerContext, task.id);
   });

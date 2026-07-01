@@ -563,7 +563,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       if (cardActionLockRef.current) return;
       if (
         !window.confirm(
-          "Delete this card? Connections to this card will disappear from the board. Files will stay stored separately."
+          "Удалить карточку? Связи с ней будут удалены с доски. Файлы останутся в хранилище."
         )
       ) {
         return;

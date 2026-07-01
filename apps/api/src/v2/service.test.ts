@@ -340,11 +340,7 @@ describe("v2 board service", () => {
     const board = await service.getBoard(ownerContext, seed.board.id);
     expect(board.cards).toEqual(expect.arrayContaining([expect.objectContaining({ id: task.id })]));
     expect(board.connections.map((item) => item.id)).not.toContain(connection.id);
-    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({
-      id: connection.id,
-      sourceCardId: source.id,
-      targetCardId: task.id
-    });
+    await expect(repository.getConnection(connection.id)).resolves.toBeNull();
   });
 });
 
