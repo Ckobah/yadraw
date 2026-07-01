@@ -3,6 +3,7 @@ import {
   type V2CardAttachment,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
+  v2ConnectorSlotSchema,
   v2UpdateCardBodySchema,
   type V2BoardDetail,
   type V2Card,
@@ -113,6 +114,43 @@ function safeFilename(filename: string): string {
 
 function buildStoragePath(workspaceId: string, cardId: string, fileId: string, filename: string): string {
   return `workspaces/${workspaceId}/cards/${cardId}/${fileId}-${safeFilename(filename)}`;
+}
+
+type ConnectionSlotRole = "source" | "target";
+
+function isValidVisualConnectorSlot(
+  card: V2Card,
+  portKey: string,
+  role: ConnectionSlotRole
+): boolean {
+  const rawSlots = card.visualStyle.connectorSlots;
+  if (!Array.isArray(rawSlots)) return false;
+
+  return rawSlots.some((rawSlot) => {
+    const parsed = v2ConnectorSlotSchema.safeParse(rawSlot);
+    if (!parsed.success) return false;
+
+    const slot = parsed.data;
+    if (slot.id !== portKey) return false;
+
+    return role === "source"
+      ? slot.type === "output" || slot.type === "receiver"
+      : slot.type === "input" || slot.type === "receiver";
+  });
+}
+
+function isValidConnectionPort(
+  card: V2Card,
+  cardType: V2CardType,
+  portKey: string,
+  role: ConnectionSlotRole
+): boolean {
+  const semanticDirection = role === "source" ? "output" : "input";
+  const semanticPort = cardType.ports.find(
+    (port) => port.direction === semanticDirection && port.key === portKey
+  );
+
+  return Boolean(semanticPort) || isValidVisualConnectorSlot(card, portKey, role);
 }
 
 function sha256Hex(body: Buffer): string {
@@ -297,18 +335,12 @@ export function createV2BoardService(
         notFound("Target card type not found");
       }
 
-      const sourcePort = sourceType.ports.find(
-        (port) => port.direction === "output" && port.key === input.sourcePortKey
-      );
-      if (!sourcePort) {
-        validationFailed("Source port is not an output port on the source card type");
+      if (!isValidConnectionPort(sourceCard, sourceType, input.sourcePortKey, "source")) {
+        validationFailed("Source port is not a valid output connector on the source card");
       }
 
-      const targetPort = targetType.ports.find(
-        (port) => port.direction === "input" && port.key === input.targetPortKey
-      );
-      if (!targetPort) {
-        validationFailed("Target port is not an input port on the target card type");
+      if (!isValidConnectionPort(targetCard, targetType, input.targetPortKey, "target")) {
+        validationFailed("Target port is not a valid input connector on the target card");
       }
 
       const detail = await repository.getBoardDetail(board.id);

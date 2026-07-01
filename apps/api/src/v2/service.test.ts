@@ -195,6 +195,71 @@ describe("v2 board service", () => {
     });
   });
 
+  it("creates connections through persisted visual connector slots", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const source = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { business: "source" },
+      visualStyle: {
+        connectorSlots: [
+          {
+            id: "slot-output-1",
+            type: "output",
+            side: "right",
+            offset: 0.5,
+            label: "Visual output"
+          }
+        ]
+      }
+    });
+    const task = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { business: "target" },
+      visualStyle: {
+        connectorSlots: [
+          {
+            id: "slot-input-1",
+            type: "input",
+            side: "left",
+            offset: 0.5,
+            label: "Visual input"
+          }
+        ]
+      }
+    });
+
+    const visualToVisual = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "slot-output-1",
+      targetPortKey: "slot-input-1"
+    });
+    const semanticToVisual = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "slot-input-1",
+      label: "semantic-to-visual"
+    });
+
+    expect(visualToVisual).toMatchObject({
+      sourcePortKey: "slot-output-1",
+      targetPortKey: "slot-input-1"
+    });
+    expect(semanticToVisual).toMatchObject({
+      sourcePortKey: "payload",
+      targetPortKey: "slot-input-1"
+    });
+
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.connections.map((item) => item.id)).toEqual(
+      expect.arrayContaining([visualToVisual.id, semanticToVisual.id])
+    );
+    expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ business: "source" });
+    expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ business: "target" });
+  });
+
   it("rejects invalid ports and duplicate connections", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
@@ -207,6 +272,31 @@ describe("v2 board service", () => {
         targetCardId: task.id,
         sourcePortKey: "missing",
         targetPortKey: "input"
+      })
+    ).rejects.toMatchObject({
+      code: "validation_failed"
+    });
+
+    const visualTarget = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      visualStyle: {
+        connectorSlots: [
+          {
+            id: "slot-input-1",
+            type: "input",
+            side: "left",
+            offset: 0.5
+          }
+        ]
+      }
+    });
+
+    await expect(
+      service.createConnection(ownerContext, seed.board.id, {
+        sourceCardId: source.id,
+        targetCardId: visualTarget.id,
+        sourcePortKey: "payload",
+        targetPortKey: "missing-visual-slot"
       })
     ).rejects.toMatchObject({
       code: "validation_failed"

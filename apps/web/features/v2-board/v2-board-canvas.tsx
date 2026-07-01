@@ -5,6 +5,7 @@ import {
   Background,
   Controls,
   MiniMap,
+  ConnectionMode,
   useNodesState,
   useEdgesState,
   MarkerType,
@@ -27,6 +28,7 @@ import {
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
+import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
   createV2Card,
   updateV2CardPosition,
@@ -119,13 +121,21 @@ function buildCardTypeMap(
 
 /** Check if a handle is valid for a given port direction */
 function isValidHandle(
+  card: V2Card | undefined,
   cardType: V2CardType | undefined,
   handleId: string,
   direction: "input" | "output"
 ): boolean {
-  if (!cardType) return false;
-  return cardType.ports.some(
-    (p) => p.key === handleId && p.direction === direction
+  if (!card || !cardType) return false;
+  return buildV2ConnectorSlots({
+    visualStyle: card.visualStyle,
+    ports: cardType.ports,
+  }).some(
+    (slot) =>
+      slot.portKey === handleId &&
+      (direction === "output"
+        ? slot.type === "output" || slot.type === "receiver"
+        : slot.type === "input" || slot.type === "receiver")
   );
 }
 
@@ -695,33 +705,46 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       if (!source || !target || !sourceHandle || !targetHandle) return;
 
       // Basic client-side validation via card types
-      const sourceType = cardTypeMap.get(
-        nodesRef.current.find((node) => node.id === source)?.data.card.cardTypeId ?? ""
-      );
-      const targetType = cardTypeMap.get(
-        nodesRef.current.find((node) => node.id === target)?.data.card.cardTypeId ?? ""
-      );
-      if (
-        !isValidHandle(sourceType, sourceHandle, "output") ||
-        !isValidHandle(targetType, targetHandle, "input")
-      ) {
+      const sourceCard = nodesRef.current.find((node) => node.id === source)?.data.card;
+      const targetCard = nodesRef.current.find((node) => node.id === target)?.data.card;
+      const sourceType = sourceCard ? cardTypeMap.get(sourceCard.cardTypeId) : undefined;
+      const targetType = targetCard ? cardTypeMap.get(targetCard.cardTypeId) : undefined;
+      const canConnectAsDrawn =
+        isValidHandle(sourceCard, sourceType, sourceHandle, "output") &&
+        isValidHandle(targetCard, targetType, targetHandle, "input");
+      const canConnectReversed =
+        isValidHandle(targetCard, targetType, targetHandle, "output") &&
+        isValidHandle(sourceCard, sourceType, sourceHandle, "input");
+
+      if (!canConnectAsDrawn && !canConnectReversed) {
         console.error(
           "Invalid connection: source handle must be output, target handle must be input"
         );
         return;
       }
 
+      const connectionInput = canConnectAsDrawn
+        ? {
+            sourceCardId: source,
+            targetCardId: target,
+            sourcePortKey: sourceHandle,
+            targetPortKey: targetHandle,
+          }
+        : {
+            sourceCardId: target,
+            targetCardId: source,
+            sourcePortKey: targetHandle,
+            targetPortKey: sourceHandle,
+          };
+
       setSaveStatus("saving");
       try {
         const created = await createV2Connection(
           board.id,
           {
-            sourceCardId: source,
-            targetCardId: target,
-            sourcePortKey: sourceHandle,
-            targetPortKey: targetHandle,
+            ...connectionInput,
             type: "data",
-            label: sourceHandle,
+            label: connectionInput.sourcePortKey,
           }
         );
 
@@ -806,6 +829,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         }}
         minZoom={0.2}
         maxZoom={2.5}
+        connectionMode={ConnectionMode.Loose}
         proOptions={{ hideAttribution: true }}
         nodesConnectable={true}
         elementsSelectable={true}

@@ -235,6 +235,80 @@ describe("v2 card API", () => {
     await server.close();
   });
 
+  it("creates connections through visual connector slots", async () => {
+    const { server, seed, repository } = createCardServer();
+    const sourceType = seed.cardTypes.find((cardType) => cardType.key === "source")!;
+    const taskType = seed.cardTypes.find((cardType) => cardType.key === "task")!;
+    const source = await repository.createCard({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      cardTypeId: sourceType.id,
+      title: "Visual slot source",
+      description: "",
+      data: { business: "source" },
+      position: { x: 400, y: 260 },
+      size: sourceType.defaultSize,
+      status: "active",
+      visualStyle: {
+        connectorSlots: [
+          {
+            id: "slot-output-1",
+            type: "output",
+            side: "right",
+            offset: 0.5
+          }
+        ]
+      }
+    });
+    const target = await repository.createCard({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      cardTypeId: taskType.id,
+      title: "Visual slot target",
+      description: "",
+      data: { business: "target" },
+      position: { x: 680, y: 260 },
+      size: taskType.defaultSize,
+      status: "active",
+      visualStyle: {
+        connectorSlots: [
+          {
+            id: "slot-input-1",
+            type: "input",
+            side: "left",
+            offset: 0.5
+          }
+        ]
+      }
+    });
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/connections`,
+      payload: {
+        sourceCardId: source.id,
+        targetCardId: target.id,
+        sourcePortKey: "slot-output-1",
+        targetPortKey: "slot-input-1"
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "slot-output-1",
+      targetPortKey: "slot-input-1"
+    });
+
+    const detail = await repository.getBoardDetail(seed.board.id);
+    expect(detail?.connections.map((connection) => connection.id)).toContain(response.json().id);
+    expect(detail?.cards.find((card) => card.id === source.id)?.data).toEqual({ business: "source" });
+    expect(detail?.cards.find((card) => card.id === target.id)?.data).toEqual({ business: "target" });
+
+    await server.close();
+  });
+
   it("soft-deletes a card and hides its incident connections from board detail", async () => {
     const { server, seed, repository } = createCardServer();
     const source = seed.cards[0]!;
