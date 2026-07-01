@@ -90,6 +90,13 @@ function getSlotSideClass(side: V2ConnectorSlotSide): string {
   return "v2CardHandleSideLeft";
 }
 
+function getSlotAddZoneSideClass(side: V2ConnectorSlotSide): string {
+  if (side === "right") return "v2ConnectorSlotAddZoneRight";
+  if (side === "bottom") return "v2ConnectorSlotAddZoneBottom";
+  if (side === "left") return "v2ConnectorSlotAddZoneLeft";
+  return "v2ConnectorSlotAddZoneTop";
+}
+
 function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
   const offset = `${slot.offset * 100}%`;
   if (slot.side === "top" || slot.side === "bottom") {
@@ -98,18 +105,75 @@ function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
   return { top: offset };
 }
 
-function getSlotPopoverStyle(slot: V2ConnectorSlot): CSSProperties {
+const CONNECTOR_SLOT_DIAMETER_PX = 20;
+const CONNECTOR_SLOT_GAP_PX = 14;
+const SLOT_POPOVER_WIDTH_PX = 150;
+const SLOT_POPOVER_HEIGHT_PX = 38;
+
+function getSlotPopoverStyle(
+  slot: V2ConnectorSlot,
+  cardRect?: DOMRect
+): CSSProperties {
   const offset = `${slot.offset * 100}%`;
+  const hasTopSpace = !cardRect || cardRect.top >= SLOT_POPOVER_HEIGHT_PX + CONNECTOR_SLOT_GAP_PX;
+  const hasBottomSpace =
+    !cardRect ||
+    window.innerHeight - cardRect.bottom >= SLOT_POPOVER_HEIGHT_PX + CONNECTOR_SLOT_GAP_PX;
+  const hasLeftSpace = !cardRect || cardRect.left >= SLOT_POPOVER_WIDTH_PX + CONNECTOR_SLOT_GAP_PX;
+  const hasRightSpace =
+    !cardRect ||
+    window.innerWidth - cardRect.right >= SLOT_POPOVER_WIDTH_PX + CONNECTOR_SLOT_GAP_PX;
+
   if (slot.side === "top") {
-    return { left: offset, top: -70, transform: "translateX(-50%)" };
+    return hasTopSpace
+      ? {
+          left: offset,
+          bottom: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          transform: "translateX(-50%)",
+        }
+      : {
+          left: offset,
+          top: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          transform: "translateX(-50%)",
+        };
   }
   if (slot.side === "bottom") {
-    return { left: offset, bottom: -70, transform: "translateX(-50%)" };
+    return hasBottomSpace
+      ? {
+          left: offset,
+          top: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          transform: "translateX(-50%)",
+        }
+      : {
+          left: offset,
+          bottom: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          transform: "translateX(-50%)",
+        };
   }
   if (slot.side === "right") {
-    return { right: -120, top: offset, transform: "translateY(-50%)" };
+    return hasRightSpace
+      ? {
+          left: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          top: offset,
+          transform: "translateY(-50%)",
+        }
+      : {
+          right: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+          top: offset,
+          transform: "translateY(-50%)",
+        };
   }
-  return { left: -120, top: offset, transform: "translateY(-50%)" };
+  return hasLeftSpace
+    ? {
+        right: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+        top: offset,
+        transform: "translateY(-50%)",
+      }
+    : {
+        left: `calc(100% + ${CONNECTOR_SLOT_GAP_PX}px)`,
+        top: offset,
+        transform: "translateY(-50%)",
+      };
 }
 
 function getPerimeterSlotFromPoint(
@@ -139,6 +203,80 @@ function getPerimeterSlotFromPoint(
   return {
     side: nearest.side,
     offset: clampEditableSlotOffset(rawOffset),
+  };
+}
+
+function getOutsidePerimeterSlotFromPoint(
+  rect: DOMRect,
+  clientX: number,
+  clientY: number
+): { side: V2ConnectorSlotSide; offset: number } | null {
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const diameter = CONNECTOR_SLOT_DIAMETER_PX;
+  const candidates: Array<{
+    side: V2ConnectorSlotSide;
+    distance: number;
+    offset: number;
+  }> = [];
+
+  if (
+    clientY >= rect.top - diameter &&
+    clientY <= rect.top &&
+    clientX >= rect.left - diameter &&
+    clientX <= rect.right + diameter
+  ) {
+    candidates.push({
+      side: "top",
+      distance: Math.abs(clientY - rect.top),
+      offset: (clientX - rect.left) / rect.width,
+    });
+  }
+
+  if (
+    clientY >= rect.bottom &&
+    clientY <= rect.bottom + diameter &&
+    clientX >= rect.left - diameter &&
+    clientX <= rect.right + diameter
+  ) {
+    candidates.push({
+      side: "bottom",
+      distance: Math.abs(clientY - rect.bottom),
+      offset: (clientX - rect.left) / rect.width,
+    });
+  }
+
+  if (
+    clientX >= rect.left - diameter &&
+    clientX <= rect.left &&
+    clientY >= rect.top - diameter &&
+    clientY <= rect.bottom + diameter
+  ) {
+    candidates.push({
+      side: "left",
+      distance: Math.abs(clientX - rect.left),
+      offset: (clientY - rect.top) / rect.height,
+    });
+  }
+
+  if (
+    clientX >= rect.right &&
+    clientX <= rect.right + diameter &&
+    clientY >= rect.top - diameter &&
+    clientY <= rect.bottom + diameter
+  ) {
+    candidates.push({
+      side: "right",
+      distance: Math.abs(clientX - rect.right),
+      offset: (clientY - rect.top) / rect.height,
+    });
+  }
+
+  const nearest = candidates.sort((a, b) => a.distance - b.distance)[0];
+  if (!nearest) return null;
+  return {
+    side: nearest.side,
+    offset: clampEditableSlotOffset(nearest.offset),
   };
 }
 
@@ -405,9 +543,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     const rect = articleRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const position = getPerimeterSlotFromPoint(rect, clientX, clientY, {
-      requireNearEdge: true,
-    });
+    const position = getOutsidePerimeterSlotFromPoint(rect, clientX, clientY);
     if (!position) return;
 
     const existingIds = new Set(slotDraftRef.current.map((slot) => slot.id));
@@ -428,6 +564,15 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     setSlotDraft(nextDraft);
     setTypeChooserSlotId(slot.id);
     void persistConnectorSlots(nextDraft);
+  }
+
+  function handleOuterPerimeterDoubleClick(event: ReactMouseEvent<HTMLDivElement>) {
+    if (!data.isVisualEditing) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setTypeChooserSlotId(null);
+    setSlotEditorError(null);
+    addSlotAtPoint(event.clientX, event.clientY);
   }
 
   function deleteSlot(slot: V2ConnectorSlot) {
@@ -527,7 +672,6 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
     event.preventDefault();
     event.stopPropagation();
-    addSlotAtPoint(event.clientX, event.clientY);
   }
 
   useEffect(() => {
@@ -709,6 +853,24 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </>
       ) : null}
 
+      {data.isVisualEditing ? (
+        <>
+          {(["top", "right", "bottom", "left"] as const).map((side) => (
+            <div
+              key={side}
+              className={`v2ConnectorSlotAddZone ${getSlotAddZoneSideClass(side)} nodrag nopan`}
+              aria-hidden="true"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={handleOuterPerimeterDoubleClick}
+            />
+          ))}
+        </>
+      ) : null}
+
       {renderedConnectorSlots.map((slot) => {
         const isConnected = connectedPortKeys.has(slot.portKey);
         return (
@@ -750,7 +912,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       {typeChooserSlot ? (
         <div
           className="v2ConnectorSlotTypePopover nodrag nopan"
-          style={getSlotPopoverStyle(typeChooserSlot)}
+          style={getSlotPopoverStyle(
+            typeChooserSlot,
+            articleRef.current?.getBoundingClientRect()
+          )}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}

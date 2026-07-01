@@ -2881,8 +2881,8 @@ button:disabled {
 }
 
 .v2ConnectorSlotEditable {
-  width: 19px !important;
-  height: 19px !important;
+  width: 20px !important;
+  height: 20px !important;
   cursor: grab !important;
   outline: 2px solid rgba(47, 140, 255, 0.16) !important;
   outline-offset: 2px !important;
@@ -2900,6 +2900,40 @@ button:disabled {
 
 .v2ConnectorSlotLocked {
   cursor: grab !important;
+}
+
+.v2ConnectorSlotAddZone {
+  position: absolute;
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.v2ConnectorSlotAddZoneTop {
+  top: -20px;
+  left: -20px;
+  width: calc(100% + 40px);
+  height: 20px;
+}
+
+.v2ConnectorSlotAddZoneRight {
+  top: -20px;
+  right: -20px;
+  width: 20px;
+  height: calc(100% + 40px);
+}
+
+.v2ConnectorSlotAddZoneBottom {
+  bottom: -20px;
+  left: -20px;
+  width: calc(100% + 40px);
+  height: 20px;
+}
+
+.v2ConnectorSlotAddZoneLeft {
+  top: -20px;
+  left: -20px;
+  width: 20px;
+  height: calc(100% + 40px);
 }
 
 .v2ConnectorSlotTypePopover {
@@ -2968,6 +3002,7 @@ button:disabled {
 
 .v2CardHandle {
   --v2-port-color: #98a2b3;
+  z-index: 14 !important;
   width: 16px !important;
   height: 16px !important;
   border: 2px solid var(--v2-port-color) !important;
