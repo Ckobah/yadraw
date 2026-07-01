@@ -351,14 +351,24 @@ describe("v2 board service", () => {
 
     const partiallyStyled = await service.updateConnection(ownerContext, connection.id, {
       visualStyle: {
-        cornerRadius: 12
+        cornerRadius: 12,
+        routeMode: "manual",
+        waypoints: [
+          { x: 320, y: 220 },
+          { x: 380, y: 260 }
+        ]
       }
     });
     expect(partiallyStyled.visualStyle).toEqual({
       strokeColor: "#2563eb",
       strokeWidth: 3,
       markerEnd: "arrow",
-      cornerRadius: 12
+      cornerRadius: 12,
+      routeMode: "manual",
+      waypoints: [
+        { x: 320, y: 220 },
+        { x: 380, y: 260 }
+      ]
     });
 
     const detail = await service.getBoard(ownerContext, seed.board.id);
@@ -368,7 +378,12 @@ describe("v2 board service", () => {
         strokeColor: "#2563eb",
         strokeWidth: 3,
         cornerRadius: 12,
-        markerEnd: "arrow"
+        markerEnd: "arrow",
+        routeMode: "manual",
+        waypoints: [
+          { x: 320, y: 220 },
+          { x: 380, y: 260 }
+        ]
       }
     });
     expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ sourceBusiness: true });

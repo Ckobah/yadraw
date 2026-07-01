@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import type { V2Connection, V2ConnectionMarker, V2ConnectionVisualStyle } from "@yadraw/shared";
+import type {
+  V2Connection,
+  V2ConnectionMarker,
+  V2ConnectionRouteMode,
+  V2ConnectionVisualStyle,
+} from "@yadraw/shared";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 
 type Props = {
@@ -22,6 +27,11 @@ const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "square", label: "Square" },
 ];
 
+const routeModeOptions: Array<{ value: V2ConnectionRouteMode; label: string }> = [
+  { value: "auto", label: "Auto" },
+  { value: "manual", label: "Manual" },
+];
+
 function normalizeStyle(style: V2ConnectionVisualStyle | undefined): Required<V2ConnectionVisualStyle> {
   return {
     strokeColor: style?.strokeColor ?? "#475467",
@@ -29,6 +39,8 @@ function normalizeStyle(style: V2ConnectionVisualStyle | undefined): Required<V2
     cornerRadius: style?.cornerRadius ?? 12,
     markerStart: style?.markerStart ?? "none",
     markerEnd: style?.markerEnd ?? "arrow",
+    routeMode: style?.routeMode ?? "auto",
+    waypoints: Array.isArray(style?.waypoints) ? style.waypoints : [],
   };
 }
 
@@ -75,6 +87,18 @@ export function V2ConnectorVisualEditPanel({
       await onSave(connection.id, draft);
     } catch {
       setError("Could not save connector style.");
+    }
+  }
+
+  async function resetRoute() {
+    const next = { ...draft, routeMode: "auto" as const, waypoints: [] };
+    setDraft(next);
+    setError(null);
+    onPreview(connection.id, next);
+    try {
+      await onSave(connection.id, next);
+    } catch {
+      setError("Could not reset connector route.");
     }
   }
 
@@ -165,6 +189,41 @@ export function V2ConnectorVisualEditPanel({
             ))}
           </select>
         </label>
+      </div>
+
+      <div className="v2ConnectorVisualEditGeometry">
+        <div className="v2ConnectorVisualEditGeometryHeader">
+          <div>
+            <strong>Geometry</strong>
+            <span>{draft.waypoints.length} bend point{draft.waypoints.length === 1 ? "" : "s"}</span>
+          </div>
+          <button
+            type="button"
+            className="v2ConnectorVisualEditReset"
+            disabled={saveStatus === "saving" || (draft.routeMode === "auto" && draft.waypoints.length === 0)}
+            onClick={() => void resetRoute()}
+          >
+            Reset route
+          </button>
+        </div>
+        <label>
+          <span>Route</span>
+          <select
+            value={draft.routeMode}
+            onChange={(event) =>
+              updateDraft({ routeMode: event.target.value as V2ConnectionRouteMode })
+            }
+          >
+            {routeModeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p>
+          Double-click a connector segment to add a bend point. Drag points to reshape the route.
+        </p>
       </div>
 
       <footer className="v2ConnectorVisualEditFooter">

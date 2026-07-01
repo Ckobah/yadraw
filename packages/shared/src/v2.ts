@@ -66,12 +66,21 @@ export const v2ConnectionMarkerSchema = z.enum([
   "square"
 ]);
 
+export const v2ConnectionRouteModeSchema = z.enum(["auto", "manual"]);
+
+export const v2ConnectionWaypointSchema = z.object({
+  x: z.number().finite(),
+  y: z.number().finite()
+});
+
 export const v2ConnectionVisualStyleSchema = z.object({
   strokeColor: z.string().regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
   strokeWidth: z.number().min(1).max(12).optional(),
   cornerRadius: z.number().min(0).max(48).optional(),
   markerStart: v2ConnectionMarkerSchema.optional(),
-  markerEnd: v2ConnectionMarkerSchema.optional()
+  markerEnd: v2ConnectionMarkerSchema.optional(),
+  routeMode: v2ConnectionRouteModeSchema.optional(),
+  waypoints: z.array(v2ConnectionWaypointSchema).max(20).optional()
 });
 
 export const v2WorkspaceSchema = z.object({
@@ -413,6 +422,8 @@ export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
 export type V2ConnectionMarker = z.infer<typeof v2ConnectionMarkerSchema>;
+export type V2ConnectionRouteMode = z.infer<typeof v2ConnectionRouteModeSchema>;
+export type V2ConnectionWaypoint = z.infer<typeof v2ConnectionWaypointSchema>;
 export type V2ConnectionVisualStyle = z.infer<typeof v2ConnectionVisualStyleSchema>;
 export type V2File = z.infer<typeof v2FileSchema>;
 export type V2CardFile = z.infer<typeof v2CardFileSchema>;

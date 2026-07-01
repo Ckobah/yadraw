@@ -2321,6 +2321,144 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.12);
 }
 
+.v2ConnectorVisualEditGeometry {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #edf1f7;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 8px;
+}
+
+.v2ConnectorVisualEditGeometryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v2ConnectorVisualEditGeometryHeader div,
+.v2ConnectorVisualEditGeometry label {
+  display: grid;
+  gap: 4px;
+}
+
+.v2ConnectorVisualEditGeometryHeader strong {
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v2ConnectorVisualEditGeometryHeader span,
+.v2ConnectorVisualEditGeometry label span,
+.v2ConnectorVisualEditGeometry p {
+  margin: 0;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.v2ConnectorVisualEditGeometry select {
+  width: min(180px, 100%);
+  height: 30px;
+  border: 1px solid #d9e0eb;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 8px;
+  color: #182230;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.v2ConnectorVisualEditGeometry select:focus {
+  border-color: var(--blue);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.12);
+}
+
+.v2ConnectorVisualEditReset {
+  height: 28px;
+  border: 1px solid #d9e0eb;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 9px;
+  color: #273142;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.v2ConnectorVisualEditReset:hover:not(:disabled),
+.v2ConnectorVisualEditReset:focus-visible:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+  outline: 0;
+}
+
+.v2ConnectorVisualEditReset:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.v2ConnectorEdgeInteraction,
+.v2ConnectorEdgeInteractionHidden {
+  stroke: transparent;
+  stroke-width: 18;
+  pointer-events: stroke;
+}
+
+.v2ConnectorEdgeInteraction {
+  cursor: grab;
+}
+
+.v2ConnectorEdgeInteraction:active {
+  cursor: grabbing;
+}
+
+.v2ConnectorEdgeInteractionHidden {
+  pointer-events: none;
+}
+
+.v2ConnectorEdgeLabel {
+  position: absolute;
+  z-index: 6;
+  border: 1px solid #e4e7f0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 2px 7px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.v2ConnectorWaypointHandle {
+  position: absolute;
+  z-index: 8;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #2563eb;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
+  cursor: grab;
+  pointer-events: all;
+}
+
+.v2ConnectorWaypointHandle:hover,
+.v2ConnectorWaypointHandle:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 4px rgba(37, 99, 235, 0.14),
+    0 4px 12px rgba(37, 99, 235, 0.22);
+}
+
+.v2ConnectorWaypointHandle:active {
+  cursor: grabbing;
+}
+
 .v2ConnectorVisualEditFooter div {
   display: flex;
   gap: 6px;

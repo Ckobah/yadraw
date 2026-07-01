@@ -268,9 +268,61 @@ describe("v2ConnectionVisualStyleSchema", () => {
     });
   });
 
+  it("accepts automatic and manual connector routes", () => {
+    expect(
+      v2ConnectionVisualStyleSchema.parse({
+        routeMode: "auto",
+        waypoints: []
+      })
+    ).toEqual({
+      routeMode: "auto",
+      waypoints: []
+    });
+
+    expect(
+      v2ConnectionVisualStyleSchema.parse({
+        routeMode: "manual",
+        waypoints: [
+          { x: 120, y: 80 },
+          { x: 180, y: 160 }
+        ]
+      })
+    ).toEqual({
+      routeMode: "manual",
+      waypoints: [
+        { x: 120, y: 80 },
+        { x: 180, y: 160 }
+      ]
+    });
+  });
+
   it("rejects invalid marker values", () => {
     expect(() =>
       v2ConnectionVisualStyleSchema.parse({ markerEnd: "diamond" })
+    ).toThrow();
+  });
+
+  it("rejects invalid route geometry", () => {
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({ routeMode: "curved" })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({
+        routeMode: "manual",
+        waypoints: [{ x: Number.NaN, y: 10 }]
+      })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({
+        routeMode: "manual",
+        waypoints: [{ x: Number.POSITIVE_INFINITY, y: 10 }]
+      })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({
+        routeMode: "manual",
+        waypoints: Array.from({ length: 21 }, (_, index) => ({ x: index, y: index }))
+      })
     ).toThrow();
   });
 

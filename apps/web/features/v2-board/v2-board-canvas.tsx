@@ -36,6 +36,7 @@ import {
 import { V2CardInspector } from "./v2-card-inspector";
 import { V2ConnectorInspector } from "./v2-connector-inspector";
 import { V2ConnectorVisualEditPanel } from "./v2-connector-visual-edit-panel";
+import { V2ConnectorEdge, type V2ConnectorEdgeData } from "./v2-connector-edge";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
@@ -154,7 +155,7 @@ function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
   return connection.title?.trim() || connection.label || undefined;
 }
 
-type V2StyledEdge = Edge & {
+type V2StyledEdge = Edge<V2ConnectorEdgeData> & {
   pathOptions?: {
     borderRadius?: number;
   };
@@ -196,7 +197,10 @@ function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
     sourceHandle: connection.sourcePortKey,
     targetHandle: connection.targetPortKey,
     label: getConnectionEdgeLabel(connection),
-    type: "smoothstep",
+    type: "v2Connector",
+    data: {
+      connection,
+    },
     animated: false,
     markerStart: getConnectionMarkerId(visualStyle.markerStart),
     markerEnd: getConnectionMarkerId(visualStyle.markerEnd ?? "arrow"),
@@ -219,6 +223,10 @@ function applyConnectionToEdge(edge: Edge, connection: V2Connection): V2StyledEd
   return {
     ...edge,
     ...buildConnectionEdge(connection),
+    data: {
+      ...(edge.data ?? {}),
+      connection,
+    },
     selected: edge.selected,
   };
 }
@@ -402,28 +410,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const selectedConnection = useMemo(
     () => connectionRecords.find((connection) => connection.id === selectedConnectionId) ?? null,
     [connectionRecords, selectedConnectionId]
-  );
-  const displayedEdges = useMemo(
-    () =>
-      edges.map((edge) => {
-        const isSelected = edge.id === selectedConnectionId;
-        const baseStrokeWidth =
-          typeof edge.style?.strokeWidth === "number" ? edge.style.strokeWidth : 1.5;
-        return {
-          ...edge,
-          selected: isSelected,
-          style: {
-            ...(edge.style ?? {}),
-            strokeWidth: isSelected ? baseStrokeWidth + 1.25 : baseStrokeWidth,
-          },
-          labelStyle: {
-            ...(edge.labelStyle ?? {}),
-            fill: isSelected ? "var(--blue)" : "var(--muted)",
-            fontWeight: isSelected ? 700 : 500,
-          },
-        };
-      }),
-    [edges, selectedConnectionId]
   );
 
   useEffect(() => {
@@ -1073,6 +1059,58 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const edgeTypes = useMemo(
+    () => ({
+      v2Connector: V2ConnectorEdge,
+    }),
+    []
+  );
+
+  const displayedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const isSelected = edge.id === selectedConnectionId;
+        const currentConnection =
+          (edge.data as V2ConnectorEdgeData | undefined)?.connection ??
+          connectionRecords.find((connection) => connection.id === edge.id);
+        const baseStrokeWidth =
+          typeof edge.style?.strokeWidth === "number" ? edge.style.strokeWidth : 1.5;
+        return {
+          ...edge,
+          selected: isSelected,
+          data: {
+            ...(edge.data ?? {}),
+            ...(currentConnection ? { connection: currentConnection } : {}),
+            isVisualEditing: visualEditingConnectionId === edge.id,
+            onPreviewVisualStyle: handlePreviewConnectionVisualStyle,
+            onSaveVisualStyle: async (
+              connectionId: string,
+              visualStyle: V2ConnectionVisualStyle
+            ) => {
+              await handleUpdateConnection(connectionId, { visualStyle });
+            },
+          },
+          style: {
+            ...(edge.style ?? {}),
+            strokeWidth: isSelected ? baseStrokeWidth + 1.25 : baseStrokeWidth,
+          },
+          labelStyle: {
+            ...(edge.labelStyle ?? {}),
+            fill: isSelected ? "var(--blue)" : "var(--muted)",
+            fontWeight: isSelected ? 700 : 500,
+          },
+        };
+      }),
+    [
+      connectionRecords,
+      edges,
+      handlePreviewConnectionVisualStyle,
+      handleUpdateConnection,
+      selectedConnectionId,
+      visualEditingConnectionId,
+    ]
+  );
+
   return (
     <>
       <ReactFlow
@@ -1099,6 +1137,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           setConnectionCreateError(null);
         }}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultViewport={storedViewport ?? undefined}
         fitView={!storedViewport}
         fitViewOptions={{ padding: 0.3 }}
