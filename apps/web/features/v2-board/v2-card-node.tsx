@@ -55,6 +55,8 @@ export type V2CardNodeData = {
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
   onCloseVisualEditor?: () => void;
+  onConnectorSlotDragStart?: () => void;
+  onConnectorSlotDragEnd?: (moved: boolean) => void;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
@@ -99,15 +101,15 @@ function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
 function getSlotPopoverStyle(slot: V2ConnectorSlot): CSSProperties {
   const offset = `${slot.offset * 100}%`;
   if (slot.side === "top") {
-    return { left: offset, top: -48, transform: "translateX(-50%)" };
+    return { left: offset, top: -70, transform: "translateX(-50%)" };
   }
   if (slot.side === "bottom") {
-    return { left: offset, bottom: -48, transform: "translateX(-50%)" };
+    return { left: offset, bottom: -70, transform: "translateX(-50%)" };
   }
   if (slot.side === "right") {
-    return { right: -92, top: offset, transform: "translateY(-50%)" };
+    return { right: -120, top: offset, transform: "translateY(-50%)" };
   }
-  return { left: -92, top: offset, transform: "translateY(-50%)" };
+  return { left: -120, top: offset, transform: "translateY(-50%)" };
 }
 
 function getPerimeterSlotFromPoint(
@@ -146,6 +148,51 @@ function createConnectorSlotId(existingIds: Set<string>): string {
     if (!existingIds.has(id)) return id;
   }
   return `slot-${Date.now().toString(36)}-${existingIds.size}`;
+}
+
+const SLOT_MIN_OFFSET_GAP = 0.12;
+
+function hasSlotConflict(
+  slots: V2PersistedConnectorSlot[],
+  slotId: string,
+  side: V2ConnectorSlotSide,
+  offset: number
+): boolean {
+  return slots.some(
+    (slot) =>
+      slot.id !== slotId &&
+      slot.side === side &&
+      Math.abs(slot.offset - offset) < SLOT_MIN_OFFSET_GAP
+  );
+}
+
+function resolveFreeSlotPosition(
+  slots: V2PersistedConnectorSlot[],
+  slotId: string,
+  position: { side: V2ConnectorSlotSide; offset: number }
+): { side: V2ConnectorSlotSide; offset: number } {
+  const desiredOffset = clampEditableSlotOffset(position.offset);
+  if (!hasSlotConflict(slots, slotId, position.side, desiredOffset)) {
+    return { side: position.side, offset: desiredOffset };
+  }
+
+  let bestOffset = desiredOffset;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let step = 0; step <= 25; step += 1) {
+    for (const direction of [-1, 1]) {
+      const offset = clampEditableSlotOffset(desiredOffset + direction * step * 0.04);
+      const distance = Math.abs(offset - desiredOffset);
+      if (
+        distance < bestDistance &&
+        !hasSlotConflict(slots, slotId, position.side, offset)
+      ) {
+        bestOffset = offset;
+        bestDistance = distance;
+      }
+    }
+  }
+
+  return { side: position.side, offset: bestOffset };
 }
 
 function bodyVerticalJustify(
@@ -212,6 +259,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     moved: boolean;
   } | null>(null);
   const lastSlotDragMovedRef = useRef(false);
+  const typeChooserTimerRef = useRef<number | null>(null);
   const renderedConnectorSlots =
     data.isVisualEditing
       ? slotDraft.map(toRuntimeV2ConnectorSlot)
@@ -230,6 +278,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     data.isVisualEditing && typeChooserSlotId
       ? renderedConnectorSlots.find((slot) => slot.id === typeChooserSlotId) ?? null
       : null;
+  const hasTopConnectorSlot = renderedConnectorSlots.some((slot) => slot.side === "top");
   const textStyle = {
     fontFamily: visualStyle.fontFamily,
     textAlign: visualStyle.textAlign,
@@ -249,6 +298,14 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     setSlotEditorError(null);
     setTypeChooserSlotId(null);
   }, [card.id, connectorSlotSourceKey, data.isVisualEditing]);
+
+  useEffect(() => {
+    return () => {
+      if (typeChooserTimerRef.current !== null) {
+        window.clearTimeout(typeChooserTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     slotDraftRef.current = slotDraft;
@@ -278,7 +335,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         requireNearEdge: false,
       });
       if (!position) return;
-      updateSlotDraft(dragStart.slotId, position);
+      updateSlotDraft(
+        dragStart.slotId,
+        resolveFreeSlotPosition(slotDraftRef.current, dragStart.slotId, position)
+      );
     }
 
     function handleWindowPointerUp() {
@@ -287,6 +347,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       dragStartRef.current = null;
       setDraggingSlotId(null);
       lastSlotDragMovedRef.current = shouldPersist;
+      data.onConnectorSlotDragEnd?.(shouldPersist);
       if (shouldPersist) {
         void persistConnectorSlots(nextDraft);
       }
@@ -304,10 +365,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     slotId: string,
     patch: Partial<Pick<V2PersistedConnectorSlot, "type" | "side" | "offset" | "label">>
   ): V2PersistedConnectorSlot[] {
-    let nextDraft = slotDraftRef.current;
-    setSlotDraft((current) =>
-      {
-        nextDraft = current.map((slot) =>
+    const nextDraft = slotDraftRef.current.map((slot) =>
         slot.id === slotId
           ? {
               ...slot,
@@ -317,11 +375,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                 : {}),
             }
           : slot
-        );
-        slotDraftRef.current = nextDraft;
-        return nextDraft;
-      }
     );
+    slotDraftRef.current = nextDraft;
+    setSlotDraft(nextDraft);
     setSlotEditorError(null);
     return nextDraft;
   }
@@ -355,11 +411,17 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     if (!position) return;
 
     const existingIds = new Set(slotDraftRef.current.map((slot) => slot.id));
+    const slotId = createConnectorSlotId(existingIds);
+    const resolvedPosition = resolveFreeSlotPosition(
+      slotDraftRef.current,
+      slotId,
+      position
+    );
     const slot = {
-      id: createConnectorSlotId(existingIds),
+      id: slotId,
       type: "input" as const,
-      side: position.side,
-      offset: position.offset,
+      side: resolvedPosition.side,
+      offset: resolvedPosition.offset,
     };
     const nextDraft = [...slotDraftRef.current, slot];
     slotDraftRef.current = nextDraft;
@@ -399,6 +461,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     if (!data.isVisualEditing) return;
     event.preventDefault();
     event.stopPropagation();
+    if (typeChooserTimerRef.current !== null) {
+      window.clearTimeout(typeChooserTimerRef.current);
+      typeChooserTimerRef.current = null;
+    }
     setTypeChooserSlotId(null);
     setSlotEditorError(null);
     lastSlotDragMovedRef.current = false;
@@ -409,6 +475,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       moved: false,
     };
     setDraggingSlotId(slot.id);
+    data.onConnectorSlotDragStart?.();
   }
 
   function handleSlotClick(event: ReactMouseEvent, slot: V2ConnectorSlot) {
@@ -421,19 +488,29 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     }
 
     if (connectedPortKeys.has(slot.portKey)) {
-      setSlotEditorError("Cannot change type of a connected slot.");
       setTypeChooserSlotId(null);
       return;
     }
 
     setSlotEditorError(null);
-    setTypeChooserSlotId((current) => (current === slot.id ? null : slot.id));
+    if (typeChooserTimerRef.current !== null) {
+      window.clearTimeout(typeChooserTimerRef.current);
+    }
+    typeChooserTimerRef.current = window.setTimeout(() => {
+      typeChooserTimerRef.current = null;
+      setTypeChooserSlotId((current) => (current === slot.id ? null : slot.id));
+    }, 180);
   }
 
   function handleSlotDoubleClick(event: ReactMouseEvent, slot: V2ConnectorSlot) {
     if (!data.isVisualEditing) return;
     event.preventDefault();
     event.stopPropagation();
+    if (typeChooserTimerRef.current !== null) {
+      window.clearTimeout(typeChooserTimerRef.current);
+      typeChooserTimerRef.current = null;
+    }
+    setTypeChooserSlotId(null);
     deleteSlot(slot);
   }
 
@@ -517,7 +594,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       {data.isVisualEditing ? (
         <>
           <div
-            className="v2CardTextToolbar nodrag"
+            className={`v2CardTextToolbar nodrag${
+              hasTopConnectorSlot ? " v2CardTextToolbarClearTopSlots" : ""
+            }`}
             onPointerDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >

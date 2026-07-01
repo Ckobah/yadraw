@@ -134,6 +134,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
+  const ignoreNextPaneClickRef = useRef(false);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const nodes: V2CardNode[] = cards.map((card: V2Card) =>
@@ -448,6 +449,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setCardActionError(null);
   }, []);
 
+  const handleConnectorSlotDragStart = useCallback(() => {
+    ignoreNextPaneClickRef.current = true;
+  }, []);
+
+  const handleConnectorSlotDragEnd = useCallback((moved: boolean) => {
+    if (!moved) {
+      ignoreNextPaneClickRef.current = false;
+      return;
+    }
+    window.setTimeout(() => {
+      ignoreNextPaneClickRef.current = false;
+    }, 250);
+  }, []);
+
   const handleNodeDoubleClick = useCallback(
     (_event: unknown, node: V2CardNode) => {
       handleStartVisualEditor(node.id);
@@ -585,6 +600,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onResizeCard: handleResizeCard,
           onUpdateVisualStyle: handleUpdateVisualStyle,
           onCloseVisualEditor: () => setVisualEditingCardId(null),
+          onConnectorSlotDragStart: handleConnectorSlotDragStart,
+          onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
         },
       }))
     );
@@ -599,6 +616,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     handleDeleteCard,
     handleResizeCard,
     handleUpdateVisualStyle,
+    handleConnectorSlotDragStart,
+    handleConnectorSlotDragEnd,
   ]);
 
   // ── Drag save ────────────────────────────────────────────────────
@@ -717,6 +736,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         onConnect={handleConnect}
         onEdgesDelete={handleEdgesDelete}
         onPaneClick={() => {
+          if (ignoreNextPaneClickRef.current) {
+            ignoreNextPaneClickRef.current = false;
+            return;
+          }
           setSelectedCardId(null);
           setVisualEditingCardId(null);
         }}

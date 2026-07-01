@@ -2734,6 +2734,10 @@ button:disabled {
   white-space: nowrap;
 }
 
+.v2CardTextToolbarClearTopSlots {
+  top: -116px;
+}
+
 .v2CardTextToolbar::after {
   content: "";
   position: absolute;
@@ -2939,6 +2943,10 @@ button:disabled {
     flex-wrap: wrap;
     justify-content: center;
     width: min(360px, calc(100vw - 28px));
+  }
+
+  .v2CardTextToolbarClearTopSlots {
+    top: -148px;
   }
 
   .v2ToolbarGroup {
