@@ -1,5 +1,7 @@
 import { proxyGetBinary } from "../../../helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ fileId: string }> }

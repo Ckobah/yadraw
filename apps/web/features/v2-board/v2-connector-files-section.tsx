@@ -38,6 +38,7 @@ export function V2ConnectorFilesSection({
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -108,6 +109,32 @@ export function V2ConnectorFilesSection({
     }
   }
 
+  async function handleDownload(attachment: V2ConnectionAttachment) {
+    setDownloadingId(attachment.id);
+    setError(null);
+    try {
+      const response = await fetch(getV2FileDownloadUrl(attachment.fileId), {
+        method: "GET",
+      });
+      if (!response.ok) {
+        throw new Error(`Download failed with ${response.status}`);
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.filename || "download";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError("Download failed.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <section className="v2InspectorSection">
       <div className="v2InspectorSectionHeader">
@@ -146,13 +173,14 @@ export function V2ConnectorFilesSection({
                 <em>{attachment.processingStatus}</em>
               </div>
               <div className="v2InspectorAttachmentActions">
-                <a
-                  href={getV2FileDownloadUrl(attachment.fileId)}
-                  download={attachment.filename}
+                <button
+                  type="button"
                   aria-label={`Download ${attachment.filename}`}
+                  onClick={() => void handleDownload(attachment)}
+                  disabled={downloadingId === attachment.id}
                 >
                   <Download size={14} strokeWidth={2.2} />
-                </a>
+                </button>
                 <button
                   type="button"
                   aria-label={`Remove ${attachment.filename}`}

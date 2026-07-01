@@ -45,6 +45,18 @@ function formatSaveStatus(saveStatus: SaveStatus, fallback = "Unsaved changes"):
   return fallback;
 }
 
+function formatDataValue(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value === null) return "null";
+
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "Unsupported value";
+  }
+}
+
 export function V2ConnectorInspector({
   connection,
   sourceCard,
@@ -59,6 +71,7 @@ export function V2ConnectorInspector({
   const [dataDraft, setDataDraft] = useState<DataFieldDraft[]>(() =>
     createDataDraftFromRecord(connection.data)
   );
+  const [isDataEditing, setIsDataEditing] = useState(false);
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
 
@@ -70,6 +83,10 @@ export function V2ConnectorInspector({
     () => normalizeDataDraftForCompare(dataDraft),
     [dataDraft]
   );
+  const connectionDataEntries = useMemo(
+    () => Object.entries(connection.data ?? {}),
+    [connection.data]
+  );
   const basicDirty =
     titleDraft !== (connection.title ?? "") ||
     descriptionDraft !== (connection.description ?? "");
@@ -80,6 +97,7 @@ export function V2ConnectorInspector({
     setDescriptionDraft(connection.description ?? "");
     setBasicError(null);
     setDataDraft(createDataDraftFromRecord(connection.data));
+    setIsDataEditing(false);
     setDataFieldErrors({});
     setDataError(null);
   }, [connection.id, connection.title, connection.description, connection.data]);
@@ -126,6 +144,7 @@ export function V2ConnectorInspector({
   }
 
   function addDataField() {
+    setIsDataEditing(true);
     setDataDraft((current) => [
       ...current,
       {
@@ -159,6 +178,7 @@ export function V2ConnectorInspector({
     setDataError(null);
     try {
       await onUpdateConnection(connection.id, { data: result.data });
+      setIsDataEditing(false);
     } catch {
       setDataError("Could not save connector data.");
     }
@@ -166,7 +186,13 @@ export function V2ConnectorInspector({
 
   function cancelData() {
     setDataDraft(createDataDraftFromRecord(connection.data));
+    setIsDataEditing(false);
     setDataFieldErrors({});
+    setDataError(null);
+  }
+
+  function startDataEditing() {
+    setIsDataEditing(true);
     setDataError(null);
   }
 
@@ -313,12 +339,36 @@ export function V2ConnectorInspector({
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
             <h3>Custom data</h3>
-            <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
-              <Plus size={14} strokeWidth={2.2} />
-              Add field
-            </button>
+            {isDataEditing ? (
+              <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
+                <Plus size={14} strokeWidth={2.2} />
+                Add field
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="v2InspectorAttachButton"
+                onClick={connectionDataEntries.length === 0 ? addDataField : startDataEditing}
+              >
+                <Plus size={14} strokeWidth={2.2} />
+                {connectionDataEntries.length === 0 ? "Add field" : "Edit"}
+              </button>
+            )}
           </div>
-          {dataDraft.length === 0 ? (
+          {!isDataEditing ? (
+            connectionDataEntries.length === 0 ? (
+              <p className="v2InspectorEmpty">No connector data</p>
+            ) : (
+              <div className="v2InspectorDataReadList">
+                {connectionDataEntries.map(([key, value]) => (
+                  <div key={key} className="v2InspectorDataReadRow">
+                    <strong>{key}</strong>
+                    <span>{formatDataValue(value)}</span>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : dataDraft.length === 0 ? (
             <p className="v2InspectorEmpty">No connector data</p>
           ) : (
             <div className="v2InspectorDataEditor">
@@ -360,24 +410,26 @@ export function V2ConnectorInspector({
               ))}
             </div>
           )}
-          <div className="v2InspectorDataFooter">
-            <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-              {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
-            </span>
-            <div className="v2InspectorEditActions">
-              <button type="button" disabled={!dataDirty} onClick={cancelData}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="v2InspectorPrimaryAction"
-                disabled={!dataDirty || saveStatus === "saving"}
-                onClick={() => void saveData()}
-              >
-                Save
-              </button>
+          {isDataEditing ? (
+            <div className="v2InspectorDataFooter">
+              <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
+                {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
+              </span>
+              <div className="v2InspectorEditActions">
+                <button type="button" disabled={!dataDirty} onClick={cancelData}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="v2InspectorPrimaryAction"
+                  disabled={!dataDirty || saveStatus === "saving"}
+                  onClick={() => void saveData()}
+                >
+                  Save
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
         </section>
 
         <V2ConnectorFilesSection connectionId={connection.id} />
