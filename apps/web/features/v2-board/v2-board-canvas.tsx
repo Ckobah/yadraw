@@ -10,6 +10,7 @@ import {
   MarkerType,
   type Edge,
   type Connection,
+  type Viewport,
 } from "@xyflow/react";
 import { useMemo, useCallback, useEffect, useRef, useState } from "react";
 import type {
@@ -53,6 +54,58 @@ type CardActionError = {
   cardId: string;
   message: string;
 } | null;
+
+function getBoardViewportStorageKey(boardId: string): string {
+  return `yadraw:v2-board:${boardId}:viewport`;
+}
+
+function readStoredBoardViewport(boardId: string): Viewport | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(getBoardViewportStorageKey(boardId));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as Partial<Viewport>;
+    if (
+      typeof parsed.x !== "number" ||
+      typeof parsed.y !== "number" ||
+      typeof parsed.zoom !== "number" ||
+      !Number.isFinite(parsed.x) ||
+      !Number.isFinite(parsed.y) ||
+      !Number.isFinite(parsed.zoom) ||
+      parsed.zoom < 0.2 ||
+      parsed.zoom > 2.5
+    ) {
+      return null;
+    }
+
+    return {
+      x: parsed.x,
+      y: parsed.y,
+      zoom: parsed.zoom,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function storeBoardViewport(boardId: string, viewport: Viewport): void {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(
+      getBoardViewportStorageKey(boardId),
+      JSON.stringify({
+        x: viewport.x,
+        y: viewport.y,
+        zoom: viewport.zoom,
+      })
+    );
+  } catch {
+    // localStorage can be unavailable in private or restricted browser contexts.
+  }
+}
 
 function buildCardTypeMap(
   cardTypes: V2CardType[]
@@ -126,6 +179,7 @@ function buildCardNode(
 export function V2BoardCanvas({ boardDetail }: Props) {
   const { board, cards, connections, cardTypes } = boardDetail;
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
+  const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
@@ -744,8 +798,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           setVisualEditingCardId(null);
         }}
         nodeTypes={nodeTypes}
-        fitView
+        defaultViewport={storedViewport ?? undefined}
+        fitView={!storedViewport}
         fitViewOptions={{ padding: 0.3 }}
+        onMoveEnd={(_event, viewport) => {
+          storeBoardViewport(board.id, viewport);
+        }}
         minZoom={0.2}
         maxZoom={2.5}
         proOptions={{ hideAttribution: true }}

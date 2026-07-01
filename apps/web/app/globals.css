@@ -2880,6 +2880,16 @@ button:disabled {
   transform: translateX(-50%);
 }
 
+.v2CardResizeLine {
+  border-color: transparent !important;
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+.v2CardResizeHandle {
+  z-index: 18 !important;
+}
+
 .v2ConnectorSlotEditable {
   width: 20px !important;
   height: 20px !important;

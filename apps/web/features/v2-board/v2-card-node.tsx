@@ -107,6 +107,7 @@ function getSlotPositionStyle(slot: V2ConnectorSlot): CSSProperties {
 
 const CONNECTOR_SLOT_DIAMETER_PX = 20;
 const CONNECTOR_SLOT_GAP_PX = 14;
+const CONNECTOR_SLOT_MIN_CENTER_GAP_PX = CONNECTOR_SLOT_DIAMETER_PX + 4;
 const SLOT_POPOVER_WIDTH_PX = 150;
 const SLOT_POPOVER_HEIGHT_PX = 38;
 
@@ -288,49 +289,55 @@ function createConnectorSlotId(existingIds: Set<string>): string {
   return `slot-${Date.now().toString(36)}-${existingIds.size}`;
 }
 
-const SLOT_MIN_OFFSET_GAP = 0.12;
+function getSlotSideLength(rect: DOMRect, side: V2ConnectorSlotSide): number {
+  return Math.max(1, side === "top" || side === "bottom" ? rect.width : rect.height);
+}
 
 function hasSlotConflict(
   slots: V2PersistedConnectorSlot[],
   slotId: string,
   side: V2ConnectorSlotSide,
-  offset: number
+  offset: number,
+  sideLength: number
 ): boolean {
+  const pixelPosition = clampEditableSlotOffset(offset) * sideLength;
   return slots.some(
     (slot) =>
       slot.id !== slotId &&
       slot.side === side &&
-      Math.abs(slot.offset - offset) < SLOT_MIN_OFFSET_GAP
+      Math.abs(clampEditableSlotOffset(slot.offset) * sideLength - pixelPosition) <
+        CONNECTOR_SLOT_MIN_CENTER_GAP_PX
   );
 }
 
 function resolveFreeSlotPosition(
   slots: V2PersistedConnectorSlot[],
   slotId: string,
-  position: { side: V2ConnectorSlotSide; offset: number }
+  position: { side: V2ConnectorSlotSide; offset: number },
+  sideLength: number
 ): { side: V2ConnectorSlotSide; offset: number } {
+  const safeSideLength = Math.max(1, sideLength);
   const desiredOffset = clampEditableSlotOffset(position.offset);
-  if (!hasSlotConflict(slots, slotId, position.side, desiredOffset)) {
+  if (!hasSlotConflict(slots, slotId, position.side, desiredOffset, safeSideLength)) {
     return { side: position.side, offset: desiredOffset };
   }
 
-  let bestOffset = desiredOffset;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (let step = 0; step <= 25; step += 1) {
+  const desiredPixel = desiredOffset * safeSideLength;
+  const maxPixel = safeSideLength;
+
+  for (let distance = 1; distance <= maxPixel; distance += 1) {
     for (const direction of [-1, 1]) {
-      const offset = clampEditableSlotOffset(desiredOffset + direction * step * 0.04);
-      const distance = Math.abs(offset - desiredOffset);
-      if (
-        distance < bestDistance &&
-        !hasSlotConflict(slots, slotId, position.side, offset)
-      ) {
-        bestOffset = offset;
-        bestDistance = distance;
+      const pixel = desiredPixel + direction * distance;
+      if (pixel < 0 || pixel > maxPixel) continue;
+
+      const offset = clampEditableSlotOffset(pixel / safeSideLength);
+      if (!hasSlotConflict(slots, slotId, position.side, offset, safeSideLength)) {
+        return { side: position.side, offset };
       }
     }
   }
 
-  return { side: position.side, offset: bestOffset };
+  return { side: position.side, offset: desiredOffset };
 }
 
 function bodyVerticalJustify(
@@ -473,9 +480,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         requireNearEdge: false,
       });
       if (!position) return;
+      const sideLength = getSlotSideLength(rect, position.side);
       updateSlotDraft(
         dragStart.slotId,
-        resolveFreeSlotPosition(slotDraftRef.current, dragStart.slotId, position)
+        resolveFreeSlotPosition(slotDraftRef.current, dragStart.slotId, position, sideLength)
       );
     }
 
@@ -548,10 +556,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
     const existingIds = new Set(slotDraftRef.current.map((slot) => slot.id));
     const slotId = createConnectorSlotId(existingIds);
+    const sideLength = getSlotSideLength(rect, position.side);
     const resolvedPosition = resolveFreeSlotPosition(
       slotDraftRef.current,
       slotId,
-      position
+      position,
+      sideLength
     );
     const slot = {
       id: slotId,
@@ -718,6 +728,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         isVisible={Boolean(data.isVisualEditing)}
         minWidth={V2_CARD_MIN_SIZE.width}
         minHeight={V2_CARD_MIN_SIZE.height}
+        handleClassName="v2CardResizeHandle"
+        lineClassName="v2CardResizeLine"
         handleStyle={{
           width: 10,
           height: 10,
@@ -726,7 +738,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           borderRadius: 1,
         }}
         lineStyle={{
-          borderColor: "#000",
+          borderColor: "transparent",
+          backgroundColor: "transparent",
         }}
         onResizeEnd={(_event, params) => {
           data.onResizeCard?.(card.id, {
