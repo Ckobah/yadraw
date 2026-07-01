@@ -530,7 +530,7 @@ export function createV2BoardService(
       return {
         filename: file.filename,
         mimeType: file.mimeType ?? object.contentType ?? "application/octet-stream",
-        sizeBytes: file.sizeBytes ?? object.contentLength ?? null,
+        sizeBytes: object.contentLength ?? file.sizeBytes ?? null,
         object
       };
     },

@@ -192,6 +192,44 @@ describe("v2 attachment API", () => {
     await server.close();
   });
 
+  it("downloads files with non-ASCII filenames using safe Content-Disposition headers", async () => {
+    const { server, seed } = await createAttachmentServer();
+    const card = seed.cards[0]!;
+    const fileBody = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    const multipartBody = createMultipartBody([
+      {
+        name: "file",
+        file: {
+          filename: "Рисунок1.png",
+          contentType: "image/png",
+          body: fileBody
+        }
+      }
+    ]);
+
+    const upload = await server.inject({
+      method: "POST",
+      url: `/v2/cards/${card.id}/attachments`,
+      headers: { "content-type": multipartBody.contentType },
+      payload: multipartBody.body
+    });
+    expect(upload.statusCode).toBe(201);
+    const attachment = upload.json();
+
+    const download = await server.inject({
+      method: "GET",
+      url: `/v2/files/${attachment.fileId}/download`
+    });
+
+    expect(download.statusCode).toBe(200);
+    expect(download.headers["content-type"]).toContain("image/png");
+    expect(download.headers["content-disposition"]).toBe(
+      "attachment; filename=\"download.png\"; filename*=UTF-8''%D0%A0%D0%B8%D1%81%D1%83%D0%BD%D0%BE%D0%BA1.png"
+    );
+    expect(download.rawPayload).toEqual(fileBody);
+    await server.close();
+  });
+
   it("rejects upload without file", async () => {
     const { server, seed } = await createAttachmentServer();
     const multipartBody = createMultipartBody([{ name: "role", value: "attachment" }]);

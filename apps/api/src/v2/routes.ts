@@ -169,7 +169,7 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
       if (result.sizeBytes !== null && result.sizeBytes !== undefined) {
         reply.header("Content-Length", String(result.sizeBytes));
       }
-      reply.header("Content-Disposition", `attachment; filename="${escapeHeaderFilename(result.filename)}"`);
+      reply.header("Content-Disposition", buildAttachmentContentDisposition(result.filename));
       return reply.send(result.object.body);
     } catch (error) {
       return handleV2ServiceError(reply, error);
@@ -301,6 +301,33 @@ function parseMetadataField(value: unknown): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-function escapeHeaderFilename(filename: string): string {
-  return filename.replace(/["\\\r\n]/g, "_");
+function buildAttachmentContentDisposition(filename: string): string {
+  const cleanFilename = filename.replace(/[\r\n]/g, " ").trim() || "download";
+  const fallbackFilename = buildAsciiFallbackFilename(cleanFilename);
+  return `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodeRfc5987Value(cleanFilename)}`;
+}
+
+function buildAsciiFallbackFilename(filename: string): string {
+  const extensionMatch = filename.match(/\.([A-Za-z0-9]{1,12})$/);
+  const extension = extensionMatch ? `.${extensionMatch[1]}` : "";
+
+  if (/[^\x20-\x7E]/.test(filename)) {
+    return `download${extension}`;
+  }
+
+  const fallback = filename
+    .replace(/["\\]/g, "_")
+    .replace(/[^A-Za-z0-9._ -]+/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._ -]+|[._ -]+$/g, "")
+    .slice(0, 120);
+
+  return fallback || `download${extension}`;
+}
+
+function encodeRfc5987Value(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/\*/g, "%2A");
 }
