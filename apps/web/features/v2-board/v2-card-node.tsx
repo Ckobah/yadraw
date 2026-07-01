@@ -70,6 +70,10 @@ function getHandleType(slotType: V2ConnectorSlotType): "source" | "target" {
   return slotType === "output" ? "source" : "target";
 }
 
+function getHandleTypes(slotType: V2ConnectorSlotType): readonly ("source" | "target")[] {
+  return slotType === "receiver" ? ["target", "source"] : [getHandleType(slotType)];
+}
+
 function getHandlePosition(side: V2ConnectorSlotSide): Position {
   if (side === "right") return Position.Right;
   if (side === "top") return Position.Top;
@@ -884,12 +888,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </>
       ) : null}
 
-      {renderedConnectorSlots.map((slot) => {
+      {renderedConnectorSlots.flatMap((slot) => {
         const isConnected = connectedPortKeys.has(slot.portKey);
-        return (
+        return getHandleTypes(slot.type).map((handleType) => (
           <Handle
-            key={slot.id}
-            type={getHandleType(slot.type)}
+            key={`${slot.id}-${handleType}`}
+            type={handleType}
             position={getHandlePosition(slot.side)}
             id={slot.id}
             onPointerDown={
@@ -915,11 +919,14 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
               data.isVisualEditing ? "v2ConnectorSlotEditable nodrag nopan" : "",
               data.isVisualEditing && isConnected ? "v2ConnectorSlotLocked" : "",
               draggingSlotId === slot.id ? "v2ConnectorSlotDragging" : "",
+              slot.type === "receiver" && handleType === "source"
+                ? "v2CardHandleReceiverSourceLayer"
+                : "",
             ].join(" ")}
             style={getSlotPositionStyle(slot)}
             title={`${slot.label ?? slot.portKey} · ${isConnected ? "connected" : "free"}`}
           />
-        );
+        ));
       })}
 
       {typeChooserSlot ? (

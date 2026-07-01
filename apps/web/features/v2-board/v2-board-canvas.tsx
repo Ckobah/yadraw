@@ -172,6 +172,22 @@ function isSameConnectionEndpoint(
   );
 }
 
+function getConnectionEndpointKey(input: {
+  sourceCardId: string;
+  targetCardId: string;
+  sourcePortKey: string;
+  targetPortKey: string;
+  type?: string;
+}): string {
+  return [
+    input.sourceCardId,
+    input.sourcePortKey,
+    input.targetCardId,
+    input.targetPortKey,
+    input.type ?? "data",
+  ].join("::");
+}
+
 function clampCardSize(size: V2Card["size"]): V2Card["size"] {
   return {
     width: Math.max(size.width, V2_CARD_MIN_SIZE.width),
@@ -274,6 +290,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const connectionRecordsRef = useRef(connectionRecords);
+  const pendingConnectionKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -908,6 +925,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("error");
         return;
       }
+      const endpointKey = getConnectionEndpointKey(createInput);
+      if (pendingConnectionKeysRef.current.has(endpointKey)) {
+        return;
+      }
+      pendingConnectionKeysRef.current.add(endpointKey);
 
       const previousEdges = edgesRef.current;
       const previousConnectionRecords = connectionRecordsRef.current;
@@ -955,6 +977,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             : "Connection could not be created."
         );
         setSaveStatus("error");
+      } finally {
+        pendingConnectionKeysRef.current.delete(endpointKey);
       }
     },
     [board.id, cardTypeMap, setEdges]
