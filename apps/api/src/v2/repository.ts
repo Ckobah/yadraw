@@ -20,6 +20,7 @@ import {
   type V2Project,
   type V2Size,
   type V2UpdateCardInput,
+  type V2UpdateConnectionInput,
   type V2Viewport,
   type V2Workspace,
   type V2WorkspaceRole
@@ -86,6 +87,7 @@ export type V2Repository = {
   deleteCard(cardId: string): Promise<boolean>;
   getConnection(connectionId: string): Promise<V2Connection | null>;
   createConnection(input: V2CreateConnectionRecordInput): Promise<V2Connection>;
+  updateConnection?(connectionId: string, input: V2UpdateConnectionInput): Promise<V2Connection | null>;
   deleteConnection(connectionId: string): Promise<boolean>;
   listCardAttachments?(cardId: string): Promise<V2CardAttachment[]>;
   createCardAttachment?(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
@@ -260,6 +262,9 @@ function connectionFromRow(row: QueryResultRow): V2Connection {
     targetCardId: String(row.target_card_id),
     sourcePortKey: String(row.source_port_key),
     targetPortKey: String(row.target_port_key),
+    title: row.title === null || row.title === undefined ? null : String(row.title),
+    description: row.description === null || row.description === undefined ? null : String(row.description),
+    data: asObject(row.data),
     type: String(row.type),
     label: String(row.label ?? ""),
     status: row.status,
@@ -413,6 +418,9 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       targetCardId: cards[1]!.id,
       sourcePortKey: "payload",
       targetPortKey: "input",
+      title: null,
+      description: null,
+      data: {},
       type: "data",
       label: "payload",
       status: "active",
@@ -647,6 +655,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         targetPortKey: input.targetPortKey,
         type: input.type,
         label: input.label,
+        title: null,
+        description: null,
+        data: {},
         status: input.status,
         createdAt: timestamp,
         updatedAt: timestamp
@@ -654,6 +665,24 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
       state.connections.push(connection);
       return cloneJson(connection);
+    },
+
+    async updateConnection(connectionId, input) {
+      const index = state.connections.findIndex(
+        (connection) => connection.id === connectionId && !deletedConnectionIds.has(connection.id)
+      );
+      const existing = state.connections[index];
+      if (index === -1 || !existing) return null;
+
+      const updated = v2ConnectionSchema.parse({
+        ...existing,
+        ...(input.title !== undefined ? { title: input.title?.trim() || null } : {}),
+        ...(input.description !== undefined ? { description: input.description ?? null } : {}),
+        ...(input.data !== undefined ? { data: cloneJson(input.data) } : {}),
+        updatedAt: nowIso()
+      });
+      state.connections[index] = updated;
+      return cloneJson(updated);
     },
 
     async deleteConnection(connectionId) {
@@ -1242,6 +1271,39 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       );
 
       return connectionFromRow(result.rows[0] as QueryResultRow);
+    },
+
+    async updateConnection(connectionId, input) {
+      const existing = await this.getConnection(connectionId);
+      if (!existing) return null;
+
+      const next = {
+        title: input.title !== undefined ? input.title?.trim() || null : existing.title,
+        description: input.description !== undefined ? input.description ?? null : existing.description,
+        data: input.data !== undefined ? input.data : existing.data
+      };
+
+      const result = await pool.query(
+        `
+          update connections
+          set title = $2,
+              description = $3,
+              data = $4::jsonb,
+              updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning *
+        `,
+        [
+          connectionId,
+          next.title,
+          next.description,
+          JSON.stringify(next.data)
+        ]
+      );
+
+      const row = result.rows[0];
+      return row ? connectionFromRow(row) : null;
     },
 
     async deleteConnection(connectionId) {

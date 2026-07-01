@@ -333,6 +333,37 @@ export async function deleteV2Connection(
   }
 }
 
+export async function updateV2Connection(
+  connectionId: string,
+  patch: {
+    title?: string | null;
+    description?: string | null;
+    data?: Record<string, unknown>;
+  }
+): Promise<V2Connection> {
+  const response = await fetch(
+    `/v2/actions/connections/${encodeURIComponent(connectionId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(patch),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection update failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2Connection>;
+}
+
 export async function listV2CardAttachments(
   cardId: string
 ): Promise<V2CardAttachment[]> {

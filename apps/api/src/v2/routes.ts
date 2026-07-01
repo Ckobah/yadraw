@@ -87,6 +87,15 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.patch("/v2/connections/:connectionId", async (request, reply) => {
+    try {
+      const { connectionId } = request.params as { connectionId: string };
+      return await service.updateConnection(request.requestContext, connectionId, request.body as any);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/cards/:cardId/attachments", async (request, reply) => {
     try {
       const { cardId } = request.params as { cardId: string };

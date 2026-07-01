@@ -8,8 +8,10 @@ import {
   v2CardVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
+  v2ConnectionSchema,
   v2FileProcessingStatusSchema,
   v2FileSchema,
+  v2UpdateConnectionBodySchema,
   v2UpdateCardBodySchema
 } from "./v2.js";
 
@@ -20,6 +22,8 @@ const boardId = "33333333-3333-4333-8333-333333333333";
 const cardTypeId = "44444444-4444-4444-8444-444444444444";
 const portId = "55555555-5555-4555-8555-555555555555";
 const cardId = "66666666-6666-4666-8666-666666666666";
+const targetCardId = "99999999-9999-4999-8999-999999999999";
+const connectionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const fileId = "77777777-7777-4777-8777-777777777777";
 const cardFileId = "88888888-8888-4888-8888-888888888888";
 
@@ -132,6 +136,63 @@ describe("v2 API contracts", () => {
     });
   });
 
+  it("accepts connection metadata fields", () => {
+    expect(
+      v2ConnectionSchema.parse({
+        id: connectionId,
+        workspaceId,
+        boardId,
+        sourceCardId: cardId,
+        targetCardId,
+        sourcePortKey: "payload",
+        targetPortKey: "input",
+        title: "Payload route",
+        description: "Transfers normalized payloads",
+        data: { payload: "json", priority: 2 },
+        type: "data",
+        label: "payload",
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+    ).toMatchObject({
+      title: "Payload route",
+      description: "Transfers normalized payloads",
+      data: { payload: "json", priority: 2 }
+    });
+  });
+
+  it("defaults nullable connection metadata", () => {
+    expect(
+      v2ConnectionSchema.parse({
+        id: connectionId,
+        workspaceId,
+        boardId,
+        sourceCardId: cardId,
+        targetCardId,
+        sourcePortKey: "payload",
+        targetPortKey: "input",
+        type: "data",
+        label: "",
+        status: "active",
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+    ).toMatchObject({
+      title: null,
+      description: null,
+      data: {}
+    });
+  });
+
+  it("rejects non-object connection data", () => {
+    expect(() =>
+      v2UpdateConnectionBodySchema.parse({
+        data: ["not", "object"]
+      })
+    ).toThrow();
+  });
+
   it("keeps route contracts in an OpenAPI-style registry", () => {
     expect(v2ApiContracts.getBoard).toMatchObject({
       method: "GET",
@@ -139,6 +200,7 @@ describe("v2 API contracts", () => {
     });
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
+    expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
   });
 });
 
@@ -249,6 +311,8 @@ describe("v2CardSchema with visualStyle", () => {
   it("defaults visualStyle to {} when omitted", () => {
     const card = v2CardSchema.parse(baseCard);
     expect(card.visualStyle).toEqual({});
+    expect(card).not.toHaveProperty("connection");
+    expect(card.data).toEqual({ key: "value" });
   });
 
   it("accepts card with visualStyle", () => {

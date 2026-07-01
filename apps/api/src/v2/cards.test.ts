@@ -309,6 +309,91 @@ describe("v2 card API", () => {
     await server.close();
   });
 
+  it("updates connector metadata through the API", async () => {
+    const { server, seed, repository } = createCardServer();
+    const source = seed.cards[0]!;
+    const target = seed.cards[1]!;
+    const connection = await repository.createConnection({
+      workspaceId: seed.workspace.id,
+      boardId: seed.board.id,
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      type: "data",
+      label: "payload",
+      status: "active"
+    });
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/connections/${connection.id}`,
+      payload: {
+        title: "Reviewed payload",
+        description: "Transfers reviewed data",
+        data: {
+          payload: "json",
+          reviewed: true
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: connection.id,
+      title: "Reviewed payload",
+      description: "Transfers reviewed data",
+      data: {
+        payload: "json",
+        reviewed: true
+      },
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    const board = await repository.getBoardDetail(seed.board.id);
+    expect(board?.connections.find((item) => item.id === connection.id)).toMatchObject({
+      title: "Reviewed payload",
+      description: "Transfers reviewed data",
+      data: {
+        payload: "json",
+        reviewed: true
+      }
+    });
+    expect(board?.cards.find((card) => card.id === source.id)?.data).toEqual(source.data);
+
+    await server.close();
+  });
+
+  it("rejects invalid connector metadata through the API", async () => {
+    const { server, seed, repository } = createCardServer();
+    const connection = seed.connections[0]!;
+
+    const invalidDataResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/connections/${connection.id}`,
+      payload: {
+        data: ["not", "object"]
+      }
+    });
+    expect(invalidDataResponse.statusCode).toBe(400);
+    expect(invalidDataResponse.json()).toMatchObject({ error: { code: "invalid_payload" } });
+
+    await repository.deleteConnection(connection.id);
+    const deletedResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/connections/${connection.id}`,
+      payload: {
+        title: "Deleted"
+      }
+    });
+    expect(deletedResponse.statusCode).toBe(404);
+
+    await server.close();
+  });
+
   it("soft-deletes a card and hides its incident connections from board detail", async () => {
     const { server, seed, repository } = createCardServer();
     const source = seed.cards[0]!;

@@ -134,6 +134,9 @@ export const v2ConnectionSchema = z.object({
   targetCardId: v2UuidSchema,
   sourcePortKey: z.string().min(1),
   targetPortKey: z.string().min(1),
+  title: z.string().nullable().default(null),
+  description: z.string().nullable().default(null),
+  data: v2JsonObjectSchema.default({}),
   type: z.string().min(1),
   label: z.string(),
   status: v2ConnectionStatusSchema,
@@ -253,6 +256,18 @@ export const v2DeleteConnectionParamsSchema = z.object({
   connectionId: v2UuidSchema
 });
 
+export const v2UpdateConnectionParamsSchema = z.object({
+  connectionId: v2UuidSchema
+});
+
+export const v2UpdateConnectionBodySchema = z
+  .object({
+    title: z.string().trim().nullable().optional(),
+    description: z.string().nullable().optional(),
+    data: v2JsonObjectSchema.optional()
+  })
+  .strict();
+
 export const v2DeleteResultSchema = z.object({
   deleted: z.literal(true),
   id: v2UuidSchema
@@ -296,6 +311,13 @@ export const v2ApiContracts = {
     path: "/v2/boards/{boardId}/connections",
     params: v2CreateConnectionParamsSchema,
     body: v2CreateConnectionBodySchema,
+    response: v2ConnectionSchema
+  },
+  updateConnection: {
+    method: "PATCH",
+    path: "/v2/connections/{connectionId}",
+    params: v2UpdateConnectionParamsSchema,
+    body: v2UpdateConnectionBodySchema,
     response: v2ConnectionSchema
   },
   deleteConnection: {
@@ -348,6 +370,8 @@ export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
+export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;
+export type V2UpdateConnectionRequest = z.input<typeof v2UpdateConnectionBodySchema>;

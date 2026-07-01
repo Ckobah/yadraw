@@ -46,6 +46,7 @@ import {
   updateV2CardData,
   createV2Connection,
   deleteV2Connection,
+  updateV2Connection,
   deleteV2Card,
   duplicateV2Card,
 } from "./api";
@@ -147,6 +148,10 @@ function isValidHandle(
   );
 }
 
+function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
+  return connection.title?.trim() || connection.label || undefined;
+}
+
 function clampCardSize(size: V2Card["size"]): V2Card["size"] {
   return {
     width: Math.max(size.width, V2_CARD_MIN_SIZE.width),
@@ -220,7 +225,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       target: conn.targetCardId,
       sourceHandle: conn.sourcePortKey,
       targetHandle: conn.targetPortKey,
-      label: conn.label || undefined,
+      label: getConnectionEdgeLabel(conn),
       type: "smoothstep",
       animated: false,
       markerEnd: {
@@ -618,7 +623,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       if (cardActionLockRef.current) return;
       if (
         !window.confirm(
-          "Удалить карточку? Связи с ней будут удалены с доски. Файлы останутся в хранилище."
+          "Delete this card? Connections to this card will be removed from the board. Files will stay in storage."
         )
       ) {
         return;
@@ -745,6 +750,64 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const handleUpdateConnection = useCallback(
+    async (
+      connectionId: string,
+      patch: { title?: string | null; description?: string | null; data?: Record<string, unknown> }
+    ) => {
+      const previous = connectionRecords.find((connection) => connection.id === connectionId);
+      if (!previous) return;
+      const optimistic: V2Connection = {
+        ...previous,
+        ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
+        ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
+        ...(patch.data !== undefined ? { data: patch.data } : {}),
+      };
+
+      setConnectionRecords((current) =>
+        current.map((connection) => (connection.id === connectionId ? optimistic : connection))
+      );
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === connectionId
+            ? { ...edge, label: getConnectionEdgeLabel(optimistic) }
+            : edge
+        )
+      );
+
+      setSaveStatus("saving");
+      try {
+        const updated = await updateV2Connection(connectionId, patch);
+        setConnectionRecords((current) =>
+          current.map((connection) => (connection.id === connectionId ? updated : connection))
+        );
+        setEdges((current) =>
+          current.map((edge) =>
+            edge.id === connectionId
+              ? { ...edge, label: getConnectionEdgeLabel(updated) }
+              : edge
+          )
+        );
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to update connection:", err);
+        setConnectionRecords((current) =>
+          current.map((connection) => (connection.id === connectionId ? previous : connection))
+        );
+        setEdges((current) =>
+          current.map((edge) =>
+            edge.id === connectionId
+              ? { ...edge, label: getConnectionEdgeLabel(previous) }
+              : edge
+          )
+        );
+        setSaveStatus("error");
+        throw err;
+      }
+    },
+    [connectionRecords, setEdges]
+  );
+
   const handleEdgeClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
     event.stopPropagation();
     setSelectedConnectionId(edge.id);
@@ -810,7 +873,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           target: created.targetCardId,
           sourceHandle: created.sourcePortKey,
           targetHandle: created.targetPortKey,
-          label: created.label || undefined,
+          label: getConnectionEdgeLabel(created),
           type: "smoothstep",
           animated: false,
           markerEnd: {
@@ -931,6 +994,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           connection={selectedConnection}
           sourceCard={cardById.get(selectedConnection.sourceCardId) ?? null}
           targetCard={cardById.get(selectedConnection.targetCardId) ?? null}
+          saveStatus={saveStatus}
+          onUpdateConnection={handleUpdateConnection}
           onClose={() => setSelectedConnectionId(null)}
         />
       ) : null}

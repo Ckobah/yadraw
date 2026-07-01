@@ -5,13 +5,15 @@ import {
   v2CreateConnectionBodySchema,
   v2ConnectorSlotSchema,
   v2UpdateCardBodySchema,
+  v2UpdateConnectionBodySchema,
   type V2BoardDetail,
   type V2Card,
   type V2CardType,
   type V2Connection,
   type V2CreateCardRequest,
   type V2CreateConnectionRequest,
-  type V2UpdateCardRequest
+  type V2UpdateCardRequest,
+  type V2UpdateConnectionRequest
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
@@ -49,6 +51,7 @@ export type V2BoardService = {
   updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
   deleteCard(context: RequestContext, cardId: string): Promise<{ deleted: true; id: string }>;
   createConnection(context: RequestContext, boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
+  updateConnection(context: RequestContext, connectionId: string, input: V2UpdateConnectionRequest): Promise<V2Connection>;
   deleteConnection(context: RequestContext, connectionId: string): Promise<{ deleted: true; id: string }>;
   listCardAttachments(context: RequestContext, cardId: string): Promise<V2CardAttachment[]>;
   uploadCardAttachment(
@@ -367,6 +370,30 @@ export function createV2BoardService(
         label: input.label,
         status: "active"
       });
+    },
+
+    async updateConnection(context, connectionId, rawInput) {
+      const parsedInput = v2UpdateConnectionBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid connection update payload");
+      }
+      const input = parsedInput.data;
+      const existing = await repository.getConnection(connectionId);
+      if (!existing) {
+        notFound("Connection not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "write");
+
+      if (!repository.updateConnection) {
+        throw new V2ServiceError("conflict", "V2 connection update repository is not available");
+      }
+
+      const updated = await repository.updateConnection(connectionId, input);
+      if (!updated) {
+        notFound("Connection not found");
+      }
+
+      return updated;
     },
 
     async deleteConnection(context, connectionId) {
