@@ -49,6 +49,7 @@ import {
   updateV2Connection,
   deleteV2Card,
   duplicateV2Card,
+  V2ApiError,
 } from "./api";
 
 type Props = {
@@ -152,6 +153,25 @@ function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
   return connection.title?.trim() || connection.label || undefined;
 }
 
+function isSameConnectionEndpoint(
+  connection: V2Connection,
+  input: {
+    sourceCardId: string;
+    targetCardId: string;
+    sourcePortKey: string;
+    targetPortKey: string;
+    type?: string;
+  }
+): boolean {
+  return (
+    connection.sourceCardId === input.sourceCardId &&
+    connection.targetCardId === input.targetCardId &&
+    connection.sourcePortKey === input.sourcePortKey &&
+    connection.targetPortKey === input.targetPortKey &&
+    connection.type === (input.type ?? "data")
+  );
+}
+
 function clampCardSize(size: V2Card["size"]): V2Card["size"] {
   return {
     width: Math.max(size.width, V2_CARD_MIN_SIZE.width),
@@ -208,6 +228,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
+  const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
   const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
@@ -251,10 +272,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [connectionRecords, setConnectionRecords] = useState<V2Connection[]>(connections);
   const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  const connectionRecordsRef = useRef(connectionRecords);
 
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
+
+  useEffect(() => {
+    connectionRecordsRef.current = connectionRecords;
+  }, [connectionRecords]);
 
   const nodeTypes = useMemo(
     () => ({ v2Card: V2CardNodeComponent }),
@@ -378,6 +409,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     (_event: unknown, node: V2CardNode) => {
       setSelectedCardId(node.id);
       setSelectedConnectionId(null);
+      setConnectionCreateError(null);
     },
     []
   );
@@ -560,6 +592,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setSelectedCardId(cardId);
     setVisualEditingCardId(cardId);
     setCardActionError(null);
+    setConnectionCreateError(null);
   }, []);
 
   const handleConnectorSlotDragStart = useCallback(() => {
@@ -590,6 +623,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       cardActionLockRef.current = pending;
       setPendingCardAction(pending);
       setCardActionError(null);
+      setConnectionCreateError(null);
       setSaveStatus("saving");
       try {
         const created = await duplicateV2Card(cardId);
@@ -632,6 +666,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       cardActionLockRef.current = pending;
       setPendingCardAction(pending);
       setCardActionError(null);
+      setConnectionCreateError(null);
       setSaveStatus("saving");
       try {
         await deleteV2Card(cardId);
@@ -671,6 +706,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       position: { x: number; y: number }
     ) => {
       setSaveStatus("saving");
+      setConnectionCreateError(null);
       try {
         const created = await createV2Card(board.id, {
           cardTypeId: cardType.id,
@@ -814,6 +850,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setSelectedCardId(null);
     setVisualEditingCardId(null);
     setCardActionError(null);
+    setConnectionCreateError(null);
   }, []);
 
   // ── Create connection ────────────────────────────────────────────
@@ -838,6 +875,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         console.error(
           "Invalid connection: source handle must be output, target handle must be input"
         );
+        setConnectionCreateError("Connection could not be created.");
+        setSaveStatus("error");
         return;
       }
 
@@ -854,17 +893,29 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             sourcePortKey: targetHandle,
             targetPortKey: sourceHandle,
           };
+      const createInput = {
+        ...connectionInput,
+        type: "data",
+        label: connectionInput.sourcePortKey,
+      };
+      const duplicate = connectionRecordsRef.current.find((record) =>
+        isSameConnectionEndpoint(record, createInput)
+      );
+      if (duplicate) {
+        setSelectedConnectionId(duplicate.id);
+        setSelectedCardId(null);
+        setConnectionCreateError("Connection already exists.");
+        setSaveStatus("error");
+        return;
+      }
+
+      const previousEdges = edgesRef.current;
+      const previousConnectionRecords = connectionRecordsRef.current;
 
       setSaveStatus("saving");
+      setConnectionCreateError(null);
       try {
-        const created = await createV2Connection(
-          board.id,
-          {
-            ...connectionInput,
-            type: "data",
-            label: connectionInput.sourcePortKey,
-          }
-        );
+        const created = await createV2Connection(board.id, createInput);
 
         // Add the new edge from the API response
         const newEdge: Edge = {
@@ -896,6 +947,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to create connection:", err);
+        setEdges(previousEdges);
+        setConnectionRecords(previousConnectionRecords);
+        setConnectionCreateError(
+          err instanceof V2ApiError && err.status === 409
+            ? "Connection already exists."
+            : "Connection could not be created."
+        );
         setSaveStatus("error");
       }
     },
@@ -915,6 +973,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         current.filter((connection) => !deletedIds.has(connection.id))
       );
       setSelectedConnectionId((current) => (current && deletedIds.has(current) ? null : current));
+      setConnectionCreateError(null);
     },
     []
   );
@@ -940,6 +999,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           setSelectedCardId(null);
           setSelectedConnectionId(null);
           setVisualEditingCardId(null);
+          setConnectionCreateError(null);
         }}
         nodeTypes={nodeTypes}
         defaultViewport={storedViewport ?? undefined}
@@ -972,6 +1032,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           nodeColor={() => "#7147e8"}
           maskColor="rgba(0,0,0,0.08)"
         />
+        {connectionCreateError ? (
+          <div className="v2CanvasConnectionError" role="status">
+            {connectionCreateError}
+          </div>
+        ) : null}
       </ReactFlow>
       {selectedCard ? (
         <V2CardInspector
