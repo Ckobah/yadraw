@@ -6,6 +6,8 @@ import {
   v2CardFileSchema,
   v2CardSchema,
   v2CardVisualStyleSchema,
+  v2ConnectionAttachmentSchema,
+  v2ConnectionFileSchema,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
@@ -26,6 +28,7 @@ const targetCardId = "99999999-9999-4999-8999-999999999999";
 const connectionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const fileId = "77777777-7777-4777-8777-777777777777";
 const cardFileId = "88888888-8888-4888-8888-888888888888";
+const connectionFileId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 describe("v2 API contracts", () => {
   it("parses the minimal board detail DTO", () => {
@@ -436,6 +439,80 @@ describe("v2 file attachment schemas", () => {
         cardId,
         fileId,
         role: "attachment",
+        filename: "bearing.pdf",
+        sizeBytes: -1,
+        processingStatus: "processed",
+        createdAt: timestamp
+      })
+    ).toThrow();
+  });
+
+  it("accepts a valid connection-file link", () => {
+    expect(
+      v2ConnectionFileSchema.parse({
+        id: connectionFileId,
+        workspaceId,
+        connectionId,
+        fileId,
+        role: "attachment",
+        metadata: { source: "connector" },
+        file: baseFile,
+        createdBy: null,
+        createdAt: timestamp,
+        deletedAt: null
+      })
+    ).toMatchObject({
+      id: connectionFileId,
+      connectionId,
+      fileId,
+      role: "attachment"
+    });
+  });
+
+  it("rejects invalid connection-file metadata", () => {
+    expect(() =>
+      v2ConnectionFileSchema.parse({
+        id: connectionFileId,
+        workspaceId,
+        connectionId,
+        fileId,
+        role: "attachment",
+        metadata: ["not", "object"],
+        createdAt: timestamp
+      })
+    ).toThrow();
+  });
+
+  it("accepts a compact connection attachment", () => {
+    expect(
+      v2ConnectionAttachmentSchema.parse({
+        id: connectionFileId,
+        connectionId,
+        fileId,
+        role: "attachment",
+        metadata: { source: "connector" },
+        filename: "bearing.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 2048,
+        sha256: "abc123",
+        processingStatus: "processed",
+        createdAt: timestamp
+      })
+    ).toMatchObject({
+      filename: "bearing.pdf",
+      sha256: "abc123",
+      processingStatus: "processed"
+    });
+  });
+
+  it("rejects negative sizeBytes in compact connection attachment", () => {
+    expect(() =>
+      v2ConnectionAttachmentSchema.parse({
+        id: connectionFileId,
+        connectionId,
+        fileId,
+        role: "attachment",
+        metadata: {},
         filename: "bearing.pdf",
         sizeBytes: -1,
         processingStatus: "processed",

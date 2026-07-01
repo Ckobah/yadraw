@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   type V2CardAttachment,
+  type V2ConnectionAttachment,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectorSlotSchema,
@@ -19,6 +20,7 @@ import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
 import type {
   V2CreateCardAttachmentRecordInput,
+  V2CreateConnectionAttachmentRecordInput,
   V2FileDownloadRecord,
   V2Repository
 } from "./repository.js";
@@ -79,6 +81,23 @@ export type V2BoardService = {
     cardId: string,
     attachmentId: string
   ): Promise<{ deleted: true; id: string }>;
+  listConnectionAttachments(context: RequestContext, connectionId: string): Promise<V2ConnectionAttachment[]>;
+  uploadConnectionAttachment(
+    context: RequestContext,
+    connectionId: string,
+    input: {
+      filename: string;
+      body: Buffer;
+      mimeType?: string | null;
+      role?: string;
+      metadata?: Record<string, unknown>;
+    }
+  ): Promise<V2ConnectionAttachment>;
+  detachConnectionAttachment(
+    context: RequestContext,
+    connectionId: string,
+    attachmentId: string
+  ): Promise<{ deleted: true; id: string }>;
 };
 
 function cloneJson<T>(value: T): T {
@@ -117,6 +136,15 @@ function safeFilename(filename: string): string {
 
 function buildStoragePath(workspaceId: string, cardId: string, fileId: string, filename: string): string {
   return `workspaces/${workspaceId}/cards/${cardId}/${fileId}-${safeFilename(filename)}`;
+}
+
+function buildConnectionStoragePath(
+  workspaceId: string,
+  connectionId: string,
+  fileId: string,
+  filename: string
+): string {
+  return `workspaces/${workspaceId}/connections/${connectionId}/${fileId}-${safeFilename(filename)}`;
 }
 
 type ConnectionSlotRole = "source" | "target";
@@ -185,14 +213,20 @@ export function createV2BoardService(
   function requireAttachmentRepository(): {
     listCardAttachments(cardId: string): Promise<V2CardAttachment[]>;
     createCardAttachment(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
+    listConnectionAttachments(connectionId: string): Promise<V2ConnectionAttachment[]>;
+    createConnectionAttachment(input: V2CreateConnectionAttachmentRecordInput): Promise<V2ConnectionAttachment>;
     getFileForDownload(fileId: string): Promise<V2FileDownloadRecord | null>;
     detachCardAttachment(cardId: string, attachmentId: string): Promise<boolean>;
+    detachConnectionAttachment(connectionId: string, attachmentId: string): Promise<boolean>;
   } {
     if (
       !repository.listCardAttachments ||
       !repository.createCardAttachment ||
+      !repository.listConnectionAttachments ||
+      !repository.createConnectionAttachment ||
       !repository.getFileForDownload ||
-      !repository.detachCardAttachment
+      !repository.detachCardAttachment ||
+      !repository.detachConnectionAttachment
     ) {
       throw new V2ServiceError("storage_unavailable", "V2 attachment repository is not available");
     }
@@ -200,8 +234,11 @@ export function createV2BoardService(
     return {
       listCardAttachments: repository.listCardAttachments.bind(repository),
       createCardAttachment: repository.createCardAttachment.bind(repository),
+      listConnectionAttachments: repository.listConnectionAttachments.bind(repository),
+      createConnectionAttachment: repository.createConnectionAttachment.bind(repository),
       getFileForDownload: repository.getFileForDownload.bind(repository),
-      detachCardAttachment: repository.detachCardAttachment.bind(repository)
+      detachCardAttachment: repository.detachCardAttachment.bind(repository),
+      detachConnectionAttachment: repository.detachConnectionAttachment.bind(repository)
     };
   }
 
@@ -505,6 +542,99 @@ export function createV2BoardService(
       }
       await authorizeWorkspace(context, card.workspaceId, "write");
       const deleted = await requireAttachmentRepository().detachCardAttachment(cardId, attachmentId);
+      if (!deleted) {
+        notFound("Attachment not found");
+      }
+
+      return { deleted: true, id: attachmentId };
+    },
+
+    async listConnectionAttachments(context, connectionId) {
+      const existing = await repository.getConnection(connectionId);
+      if (!existing) {
+        notFound("Connection not found");
+      }
+      await authorizeWorkspace(context, existing.workspaceId, "read");
+      return requireAttachmentRepository().listConnectionAttachments(connectionId);
+    },
+
+    async uploadConnectionAttachment(context, connectionId, input) {
+      const connection = await repository.getConnection(connectionId);
+      if (!connection) {
+        notFound("Connection not found");
+      }
+      await authorizeWorkspace(context, connection.workspaceId, "write");
+
+      if (input.body.length === 0) {
+        validationFailed("File is empty");
+      }
+      if (input.body.length > V2_MAX_ATTACHMENT_BYTES) {
+        validationFailed("File exceeds 25MB limit");
+      }
+
+      const role = (input.role ?? "attachment").trim() || "attachment";
+      const fileId = randomUUID();
+      const filename = safeFilename(input.filename);
+      const storage = requireStorage();
+      const storagePath = buildConnectionStoragePath(
+        connection.workspaceId,
+        connection.id,
+        fileId,
+        filename
+      );
+      const mimeType = input.mimeType?.trim() || "application/octet-stream";
+      const sha256 = sha256Hex(input.body);
+
+      await storage.objectStorage.putObject({
+        bucket: storage.bucket,
+        key: storagePath,
+        body: input.body,
+        contentType: mimeType,
+        metadata: {
+          "yadraw-connection-id": connection.id,
+          "yadraw-file-id": fileId
+        }
+      });
+
+      try {
+        return await requireAttachmentRepository().createConnectionAttachment({
+          fileId,
+          connectionId: connection.id,
+          workspaceId: connection.workspaceId,
+          storageBucket: storage.bucket,
+          storagePath,
+          filename,
+          mimeType,
+          sizeBytes: input.body.length,
+          sha256,
+          role,
+          metadata: cloneJson(input.metadata ?? {}),
+          createdBy: context.userId
+        });
+      } catch (error) {
+        console.warn(
+          {
+            fileId,
+            connectionId: connection.id,
+            storageBucket: storage.bucket,
+            storagePath
+          },
+          "V2 connection attachment DB insert failed after object upload; orphan object may remain"
+        );
+        throw error;
+      }
+    },
+
+    async detachConnectionAttachment(context, connectionId, attachmentId) {
+      const connection = await repository.getConnection(connectionId);
+      if (!connection) {
+        notFound("Connection not found");
+      }
+      await authorizeWorkspace(context, connection.workspaceId, "write");
+      const deleted = await requireAttachmentRepository().detachConnectionAttachment(
+        connectionId,
+        attachmentId
+      );
       if (!deleted) {
         notFound("Attachment not found");
       }

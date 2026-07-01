@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createDefaultV2MemorySeed, createV2MemoryRepository } from "./repository.js";
 import { registerV2Routes } from "./routes.js";
@@ -16,6 +17,10 @@ const outsideContext: RequestContext = {
   userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   source: "dev"
 };
+
+function sha256Hex(body: string | Buffer): string {
+  return createHash("sha256").update(body).digest("hex");
+}
 
 function createFakeStorage(): V2ObjectStorage & { objects: Map<string, Buffer> } {
   const objects = new Map<string, Buffer>();
@@ -302,5 +307,198 @@ describe("v2 attachment API", () => {
     expect(response.statusCode).toBe(403);
     await outsiderServer.close();
     await owner.server.close();
+  });
+
+  it("uploads, lists, downloads, and detaches a connection attachment without changing cards or connection data", async () => {
+    const { server, seed, repository, storage } = await createAttachmentServer();
+    const connection = seed.connections[0]!;
+    const sourceCard = seed.cards.find((card) => card.id === connection.sourceCardId)!;
+    const targetCard = seed.cards.find((card) => card.id === connection.targetCardId)!;
+    const sourceBefore = await repository.getCard(sourceCard.id);
+    const targetBefore = await repository.getCard(targetCard.id);
+    const connectionBefore = await repository.getConnection(connection.id);
+    const fileBody = "connector file";
+    const multipartBody = createMultipartBody([
+      {
+        name: "file",
+        file: {
+          filename: "../connector.txt",
+          contentType: "text/plain",
+          body: fileBody
+        }
+      },
+      { name: "role", value: "attachment" },
+      { name: "metadata", value: "{\"scope\":\"connector\"}" }
+    ]);
+
+    const upload = await server.inject({
+      method: "POST",
+      url: `/v2/connections/${connection.id}/attachments`,
+      headers: { "content-type": multipartBody.contentType },
+      payload: multipartBody.body
+    });
+
+    expect(upload.statusCode).toBe(201);
+    const attachment = upload.json();
+    expect(attachment).toMatchObject({
+      connectionId: connection.id,
+      role: "attachment",
+      metadata: { scope: "connector" },
+      filename: "connector.txt",
+      mimeType: "text/plain",
+      sizeBytes: fileBody.length,
+      sha256: sha256Hex(fileBody),
+      processingStatus: "processed"
+    });
+    expect([...storage.objects.keys()][0]).toContain(`/connections/${connection.id}/`);
+
+    const list = await server.inject({
+      method: "GET",
+      url: `/v2/connections/${connection.id}/attachments`
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toEqual([attachment]);
+
+    const download = await server.inject({
+      method: "GET",
+      url: `/v2/files/${attachment.fileId}/download`
+    });
+    expect(download.statusCode).toBe(200);
+    expect(download.body).toBe(fileBody);
+    expect(sha256Hex(download.body)).toBe(sha256Hex(fileBody));
+
+    await expect(repository.listCardAttachments?.(sourceCard.id)).resolves.toEqual([]);
+    await expect(repository.listCardAttachments?.(targetCard.id)).resolves.toEqual([]);
+    await expect(repository.getCard(sourceCard.id)).resolves.toMatchObject({
+      data: sourceBefore?.data
+    });
+    await expect(repository.getCard(targetCard.id)).resolves.toMatchObject({
+      data: targetBefore?.data
+    });
+    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({
+      data: connectionBefore?.data
+    });
+
+    const detach = await server.inject({
+      method: "DELETE",
+      url: `/v2/connections/${connection.id}/attachments/${attachment.id}`
+    });
+    expect(detach.statusCode).toBe(204);
+
+    const listAfterDetach = await server.inject({
+      method: "GET",
+      url: `/v2/connections/${connection.id}/attachments`
+    });
+    expect(listAfterDetach.statusCode).toBe(200);
+    expect(listAfterDetach.json()).toEqual([]);
+
+    const downloadAfterDetach = await server.inject({
+      method: "GET",
+      url: `/v2/files/${attachment.fileId}/download`
+    });
+    expect(downloadAfterDetach.statusCode).toBe(200);
+    expect(downloadAfterDetach.body).toBe(fileBody);
+    await server.close();
+  });
+
+  it("rejects connection attachment access for users without workspace access", async () => {
+    const owner = await createAttachmentServer(ownerContext);
+    const connection = owner.seed.connections[0]!;
+    const multipartBody = createMultipartBody([
+      {
+        name: "file",
+        file: {
+          filename: "connector.txt",
+          contentType: "text/plain",
+          body: "private connector file"
+        }
+      }
+    ]);
+    const upload = await owner.server.inject({
+      method: "POST",
+      url: `/v2/connections/${connection.id}/attachments`,
+      headers: { "content-type": multipartBody.contentType },
+      payload: multipartBody.body
+    });
+    const attachment = upload.json();
+
+    const service = createV2BoardService(owner.repository, {
+      objectStorage: owner.storage,
+      storageBucket: "test-bucket"
+    });
+    const outsiderServer = Fastify({
+      bodyLimit: V2_MAX_ATTACHMENT_BYTES + 1024 * 1024
+    });
+    await outsiderServer.register(multipart);
+    outsiderServer.addHook("preHandler", async (request) => {
+      request.requestContext = outsideContext;
+    });
+    registerV2Routes(outsiderServer, service);
+
+    const list = await outsiderServer.inject({
+      method: "GET",
+      url: `/v2/connections/${connection.id}/attachments`
+    });
+    expect(list.statusCode).toBe(403);
+
+    const uploadDenied = await outsiderServer.inject({
+      method: "POST",
+      url: `/v2/connections/${connection.id}/attachments`,
+      headers: { "content-type": multipartBody.contentType },
+      payload: multipartBody.body
+    });
+    expect(uploadDenied.statusCode).toBe(403);
+
+    const downloadDenied = await outsiderServer.inject({
+      method: "GET",
+      url: `/v2/files/${attachment.fileId}/download`
+    });
+    expect(downloadDenied.statusCode).toBe(403);
+
+    const detachDenied = await outsiderServer.inject({
+      method: "DELETE",
+      url: `/v2/connections/${connection.id}/attachments/${attachment.id}`
+    });
+    expect(detachDenied.statusCode).toBe(403);
+
+    await outsiderServer.close();
+    await owner.server.close();
+  });
+
+  it("returns 503 for connection upload when storage is not configured", async () => {
+    const seed = createDefaultV2MemorySeed();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const server = Fastify({
+      bodyLimit: V2_MAX_ATTACHMENT_BYTES + 1024 * 1024
+    });
+    await server.register(multipart);
+    server.addHook("preHandler", async (request) => {
+      request.requestContext = ownerContext;
+    });
+    registerV2Routes(server, service);
+    const multipartBody = createMultipartBody([
+      {
+        name: "file",
+        file: {
+          filename: "connector.txt",
+          contentType: "text/plain",
+          body: "storage missing"
+        }
+      }
+    ]);
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v2/connections/${seed.connections[0]!.id}/attachments`,
+      headers: { "content-type": multipartBody.contentType },
+      payload: multipartBody.body
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      error: { code: "service_unavailable" }
+    });
+    await server.close();
   });
 });

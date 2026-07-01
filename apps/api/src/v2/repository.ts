@@ -5,6 +5,7 @@ import {
   v2CardAttachmentSchema,
   v2CardSchema,
   v2CardTypeSchema,
+  v2ConnectionAttachmentSchema,
   v2ConnectionSchema,
   type V2Board,
   type V2BoardDetail,
@@ -14,6 +15,7 @@ import {
   type V2CardType,
   type V2CardTypePort,
   type V2Connection,
+  type V2ConnectionAttachment,
   type V2ConnectionStatus,
   type V2CreateConnectionInput,
   type V2JsonObject,
@@ -60,6 +62,21 @@ export type V2CreateCardAttachmentRecordInput = {
   createdBy?: string | null;
 };
 
+export type V2CreateConnectionAttachmentRecordInput = {
+  fileId: string;
+  connectionId: string;
+  workspaceId: string;
+  storageBucket: string;
+  storagePath: string;
+  filename: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  sha256?: string | null;
+  role?: string;
+  metadata?: Record<string, unknown>;
+  createdBy?: string | null;
+};
+
 export type V2FileDownloadRecord = {
   fileId: string;
   workspaceId: string;
@@ -91,8 +108,11 @@ export type V2Repository = {
   deleteConnection(connectionId: string): Promise<boolean>;
   listCardAttachments?(cardId: string): Promise<V2CardAttachment[]>;
   createCardAttachment?(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
+  listConnectionAttachments?(connectionId: string): Promise<V2ConnectionAttachment[]>;
+  createConnectionAttachment?(input: V2CreateConnectionAttachmentRecordInput): Promise<V2ConnectionAttachment>;
   getFileForDownload?(fileId: string): Promise<V2FileDownloadRecord | null>;
   detachCardAttachment?(cardId: string, attachmentId: string): Promise<boolean>;
+  detachConnectionAttachment?(connectionId: string, attachmentId: string): Promise<boolean>;
 };
 
 type V2MemorySeed = {
@@ -127,6 +147,17 @@ type V2MemorySeed = {
     id: string;
     workspaceId: string;
     cardId: string;
+    fileId: string;
+    role: string;
+    metadata: Record<string, unknown>;
+    createdBy?: string | null;
+    createdAt: string;
+    deletedAt?: string | null;
+  }>;
+  connectionFiles?: Array<{
+    id: string;
+    workspaceId: string;
+    connectionId: string;
     fileId: string;
     role: string;
     metadata: Record<string, unknown>;
@@ -470,11 +501,28 @@ function attachmentFromRow(row: QueryResultRow): V2CardAttachment {
   });
 }
 
+function connectionAttachmentFromRow(row: QueryResultRow): V2ConnectionAttachment {
+  return v2ConnectionAttachmentSchema.parse({
+    id: String(row.connection_file_id ?? row.id),
+    connectionId: String(row.connection_id),
+    fileId: String(row.file_id),
+    role: String(row.role),
+    metadata: asObject(row.metadata),
+    filename: String(row.filename),
+    mimeType: row.mime_type === null || row.mime_type === undefined ? null : String(row.mime_type),
+    sizeBytes: row.size_bytes === null || row.size_bytes === undefined ? null : Number(row.size_bytes),
+    sha256: row.sha256 === null || row.sha256 === undefined ? null : String(row.sha256),
+    processingStatus: row.processing_status,
+    createdAt: toIso(row.created_at)
+  });
+}
+
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
   const state = {
     ...cloneJson(seed),
     files: cloneJson(seed.files ?? []),
-    cardFiles: cloneJson(seed.cardFiles ?? [])
+    cardFiles: cloneJson(seed.cardFiles ?? []),
+    connectionFiles: cloneJson(seed.connectionFiles ?? [])
   };
   const deletedCardIds = new Set<string>();
   const deletedConnectionIds = new Set<string>();
@@ -482,6 +530,11 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     state.cardFiles
       .filter((cardFile) => cardFile.deletedAt)
       .map((cardFile) => cardFile.id)
+  );
+  const deletedConnectionFileIds = new Set<string>(
+    state.connectionFiles
+      .filter((connectionFile) => connectionFile.deletedAt)
+      .map((connectionFile) => connectionFile.id)
   );
   const deletedFileIds = new Set<string>(
     state.files
@@ -773,6 +826,94 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       });
     },
 
+    async listConnectionAttachments(connectionId) {
+      if (deletedConnectionIds.has(connectionId)) return [];
+      const connection = state.connections.find((item) => item.id === connectionId);
+      if (!connection) return [];
+
+      return state.connectionFiles
+        .filter(
+          (connectionFile) =>
+            connectionFile.connectionId === connectionId &&
+            !deletedConnectionFileIds.has(connectionFile.id)
+        )
+        .map((connectionFile) => {
+          const file = state.files.find(
+            (item) => item.id === connectionFile.fileId && !deletedFileIds.has(item.id)
+          );
+          if (!file) return null;
+          return v2ConnectionAttachmentSchema.parse({
+            id: connectionFile.id,
+            connectionId: connectionFile.connectionId,
+            fileId: connectionFile.fileId,
+            role: connectionFile.role,
+            metadata: cloneJson(connectionFile.metadata ?? {}),
+            filename: file.filename,
+            mimeType: file.mimeType ?? null,
+            sizeBytes: file.sizeBytes ?? null,
+            sha256: file.sha256 ?? null,
+            processingStatus: file.processingStatus,
+            createdAt: connectionFile.createdAt
+          });
+        })
+        .filter((attachment): attachment is V2ConnectionAttachment => attachment !== null);
+    },
+
+    async createConnectionAttachment(input) {
+      const connection = state.connections.find(
+        (item) => item.id === input.connectionId && !deletedConnectionIds.has(item.id)
+      );
+      if (!connection) {
+        throw new Error("Connection not found");
+      }
+
+      const timestamp = nowIso();
+      const file = {
+        id: input.fileId,
+        workspaceId: input.workspaceId,
+        storageBucket: input.storageBucket,
+        storagePath: input.storagePath,
+        filename: input.filename,
+        mimeType: input.mimeType ?? null,
+        sizeBytes: input.sizeBytes ?? null,
+        sha256: input.sha256 ?? null,
+        metadata: {},
+        processingStatus: "processed" as const,
+        createdBy: input.createdBy ?? null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        deletedAt: null
+      };
+      const connectionFile = {
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        connectionId: input.connectionId,
+        fileId: input.fileId,
+        role: input.role ?? "attachment",
+        metadata: cloneJson(input.metadata ?? {}),
+        createdBy: input.createdBy ?? null,
+        createdAt: timestamp,
+        deletedAt: null
+      };
+
+      state.files.push(file);
+      state.connectionFiles.push(connectionFile);
+
+      return v2ConnectionAttachmentSchema.parse({
+        id: connectionFile.id,
+        connectionId: connectionFile.connectionId,
+        fileId: connectionFile.fileId,
+        role: connectionFile.role,
+        metadata: connectionFile.metadata,
+        filename: file.filename,
+        mimeType: file.mimeType,
+        sizeBytes: file.sizeBytes,
+        sha256: file.sha256,
+        processingStatus: file.processingStatus,
+        createdAt: connectionFile.createdAt
+      });
+    },
+
     async getFileForDownload(fileId) {
       const file = state.files.find((item) => item.id === fileId && !deletedFileIds.has(item.id));
       if (!file) return null;
@@ -796,6 +937,20 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
       cardFile.deletedAt = nowIso();
       deletedCardFileIds.add(cardFile.id);
+      return true;
+    },
+
+    async detachConnectionAttachment(connectionId, attachmentId) {
+      const connectionFile = state.connectionFiles.find(
+        (item) =>
+          item.id === attachmentId &&
+          item.connectionId === connectionId &&
+          !deletedConnectionFileIds.has(item.id)
+      );
+      if (!connectionFile) return false;
+
+      connectionFile.deletedAt = nowIso();
+      deletedConnectionFileIds.add(connectionFile.id);
       return true;
     }
   };
@@ -1429,6 +1584,119 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       }
     },
 
+    async listConnectionAttachments(connectionId) {
+      const result = await pool.query(
+        `
+          select
+            cf.id as connection_file_id,
+            cf.connection_id,
+            cf.file_id,
+            cf.role,
+            cf.metadata,
+            cf.created_at,
+            f.filename,
+            f.mime_type,
+            f.size_bytes,
+            f.sha256,
+            f.processing_status
+          from connection_files cf
+          join files f
+            on f.id = cf.file_id
+            and f.deleted_at is null
+          where cf.connection_id = $1
+            and cf.deleted_at is null
+          order by cf.created_at asc, cf.id asc
+        `,
+        [connectionId]
+      );
+
+      return result.rows.map(connectionAttachmentFromRow);
+    },
+
+    async createConnectionAttachment(input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const fileResult = await client.query(
+          `
+            insert into files (
+              id,
+              workspace_id,
+              storage_bucket,
+              storage_path,
+              filename,
+              mime_type,
+              size_bytes,
+              sha256,
+              metadata,
+              processing_status,
+              processing_error,
+              created_by
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, 'processed', null, $9)
+            returning *
+          `,
+          [
+            input.fileId,
+            input.workspaceId,
+            input.storageBucket,
+            input.storagePath,
+            input.filename,
+            input.mimeType ?? null,
+            input.sizeBytes ?? null,
+            input.sha256 ?? null,
+            input.createdBy ?? null
+          ]
+        );
+
+        const connectionFileResult = await client.query(
+          `
+            insert into connection_files (
+              workspace_id,
+              connection_id,
+              file_id,
+              role,
+              metadata,
+              created_by
+            )
+            values ($1, $2, $3, $4, $5::jsonb, $6)
+            returning *
+          `,
+          [
+            input.workspaceId,
+            input.connectionId,
+            input.fileId,
+            input.role ?? "attachment",
+            JSON.stringify(input.metadata ?? {}),
+            input.createdBy ?? null
+          ]
+        );
+
+        await client.query("commit");
+
+        const fileRow = fileResult.rows[0] as QueryResultRow;
+        const connectionFileRow = connectionFileResult.rows[0] as QueryResultRow;
+        return v2ConnectionAttachmentSchema.parse({
+          id: String(connectionFileRow.id),
+          connectionId: String(connectionFileRow.connection_id),
+          fileId: String(connectionFileRow.file_id),
+          role: String(connectionFileRow.role),
+          metadata: asObject(connectionFileRow.metadata),
+          filename: String(fileRow.filename),
+          mimeType: fileRow.mime_type === null ? null : String(fileRow.mime_type),
+          sizeBytes: fileRow.size_bytes === null ? null : Number(fileRow.size_bytes),
+          sha256: fileRow.sha256 === null ? null : String(fileRow.sha256),
+          processingStatus: fileRow.processing_status,
+          createdAt: toIso(connectionFileRow.created_at)
+        });
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
     async getFileForDownload(fileId) {
       const result = await pool.query(
         `
@@ -1471,6 +1739,21 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             and deleted_at is null
         `,
         [attachmentId, cardId]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async detachConnectionAttachment(connectionId, attachmentId) {
+      const result = await pool.query(
+        `
+          update connection_files
+          set deleted_at = now()
+          where id = $1
+            and connection_id = $2
+            and deleted_at is null
+        `,
+        [attachmentId, connectionId]
       );
 
       return (result.rowCount ?? 0) > 0;

@@ -187,6 +187,33 @@ export const v2CardAttachmentSchema = z.object({
   createdAt: v2TimestampSchema
 });
 
+export const v2ConnectionFileSchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  connectionId: v2UuidSchema,
+  fileId: v2UuidSchema,
+  role: z.string().min(1).default("attachment"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  file: v2FileSchema.optional(),
+  createdBy: v2UuidSchema.nullable().optional(),
+  createdAt: v2TimestampSchema,
+  deletedAt: v2TimestampSchema.nullable().optional()
+});
+
+export const v2ConnectionAttachmentSchema = z.object({
+  id: v2UuidSchema,
+  connectionId: v2UuidSchema,
+  fileId: v2UuidSchema,
+  role: z.string().min(1),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+  filename: z.string().min(1),
+  mimeType: z.string().nullable().optional(),
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
+  sha256: z.string().nullable().optional(),
+  processingStatus: v2FileProcessingStatusSchema,
+  createdAt: v2TimestampSchema
+});
+
 export const v2BoardDetailSchema = z.object({
   workspace: v2WorkspaceSchema,
   project: v2ProjectSchema,
@@ -342,6 +369,8 @@ export const V2FileProcessingStatusSchema = v2FileProcessingStatusSchema;
 export const V2FileSchema = v2FileSchema;
 export const V2CardFileSchema = v2CardFileSchema;
 export const V2CardAttachmentSchema = v2CardAttachmentSchema;
+export const V2ConnectionFileSchema = v2ConnectionFileSchema;
+export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -366,6 +395,8 @@ export type V2Connection = z.infer<typeof v2ConnectionSchema>;
 export type V2File = z.infer<typeof v2FileSchema>;
 export type V2CardFile = z.infer<typeof v2CardFileSchema>;
 export type V2CardAttachment = z.infer<typeof v2CardAttachmentSchema>;
+export type V2ConnectionFile = z.infer<typeof v2ConnectionFileSchema>;
+export type V2ConnectionAttachment = z.infer<typeof v2ConnectionAttachmentSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;

@@ -96,6 +96,47 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get("/v2/connections/:connectionId/attachments", async (request, reply) => {
+    try {
+      const { connectionId } = request.params as { connectionId: string };
+      return await service.listConnectionAttachments(request.requestContext, connectionId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/connections/:connectionId/attachments", async (request, reply) => {
+    try {
+      const { connectionId } = request.params as { connectionId: string };
+      const input = await readAttachmentUpload(request);
+      const attachment = await service.uploadConnectionAttachment(
+        request.requestContext,
+        connectionId,
+        input
+      );
+      return reply.code(201).send(attachment);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.delete("/v2/connections/:connectionId/attachments/:attachmentId", async (request, reply) => {
+    try {
+      const { connectionId, attachmentId } = request.params as {
+        connectionId: string;
+        attachmentId: string;
+      };
+      await service.detachConnectionAttachment(
+        request.requestContext,
+        connectionId,
+        attachmentId
+      );
+      return reply.code(204).send();
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/cards/:cardId/attachments", async (request, reply) => {
     try {
       const { cardId } = request.params as { cardId: string };
