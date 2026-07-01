@@ -13,7 +13,14 @@ import {
   type Connection,
   type Viewport,
 } from "@xyflow/react";
-import { useMemo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -27,6 +34,7 @@ import {
   type V2CardNode,
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
+import { V2ConnectorInspector } from "./v2-connector-inspector";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
@@ -192,6 +200,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
   const cardActionLockRef = useRef<PendingCardAction>(null);
@@ -289,6 +298,40 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         : [],
     [connectionRecords, selectedCard]
   );
+  const selectedConnection = useMemo(
+    () => connectionRecords.find((connection) => connection.id === selectedConnectionId) ?? null,
+    [connectionRecords, selectedConnectionId]
+  );
+  const displayedEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const isSelected = edge.id === selectedConnectionId;
+        return {
+          ...edge,
+          selected: isSelected,
+          style: {
+            ...(edge.style ?? {}),
+            stroke: isSelected ? "var(--blue)" : "var(--line-strong)",
+            strokeWidth: isSelected ? 2.75 : 1.5,
+          },
+          labelStyle: {
+            ...(edge.labelStyle ?? {}),
+            fill: isSelected ? "var(--blue)" : "var(--muted)",
+            fontWeight: isSelected ? 700 : 500,
+          },
+        };
+      }),
+    [edges, selectedConnectionId]
+  );
+
+  useEffect(() => {
+    if (
+      selectedConnectionId &&
+      !connectionRecords.some((connection) => connection.id === selectedConnectionId)
+    ) {
+      setSelectedConnectionId(null);
+    }
+  }, [connectionRecords, selectedConnectionId]);
 
   // ── Visual edit handlers ─────────────────────────────────────────
   const handleResizeCard = useCallback(
@@ -329,6 +372,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleNodeClick = useCallback(
     (_event: unknown, node: V2CardNode) => {
       setSelectedCardId(node.id);
+      setSelectedConnectionId(null);
     },
     []
   );
@@ -550,6 +594,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
         setSelectedCardId(created.id);
+        setSelectedConnectionId(null);
         setVisualEditingCardId(null);
         setSaveStatus("saved");
       } catch (err) {
@@ -596,6 +641,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           )
         );
         setSelectedCardId((current) => (current === cardId ? null : current));
+        setSelectedConnectionId(null);
         setVisualEditingCardId((current) => (current === cardId ? null : current));
         setSaveStatus("saved");
       } catch (err) {
@@ -635,6 +681,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
         setSelectedCardId(created.id);
+        setSelectedConnectionId(null);
         setVisualEditingCardId(null);
         setSaveStatus("saved");
       } catch (err) {
@@ -697,6 +744,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     },
     []
   );
+
+  const handleEdgeClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
+    event.stopPropagation();
+    setSelectedConnectionId(edge.id);
+    setSelectedCardId(null);
+    setVisualEditingCardId(null);
+    setCardActionError(null);
+  }, []);
 
   // ── Create connection ────────────────────────────────────────────
   const handleConnect = useCallback(
@@ -796,6 +851,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setConnectionRecords((current) =>
         current.filter((connection) => !deletedIds.has(connection.id))
       );
+      setSelectedConnectionId((current) => (current && deletedIds.has(current) ? null : current));
     },
     []
   );
@@ -804,12 +860,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     <>
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={displayedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
         onNodeDragStop={handleNodeDragStop}
         onNodeDoubleClick={handleNodeDoubleClick}
+        onEdgeClick={handleEdgeClick}
         onConnect={handleConnect}
         onEdgesDelete={handleEdgesDelete}
         onPaneClick={() => {
@@ -818,6 +875,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             return;
           }
           setSelectedCardId(null);
+          setSelectedConnectionId(null);
           setVisualEditingCardId(null);
         }}
         nodeTypes={nodeTypes}
@@ -867,6 +925,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}
+        />
+      ) : selectedConnection ? (
+        <V2ConnectorInspector
+          connection={selectedConnection}
+          sourceCard={cardById.get(selectedConnection.sourceCardId) ?? null}
+          targetCard={cardById.get(selectedConnection.targetCardId) ?? null}
+          onClose={() => setSelectedConnectionId(null)}
         />
       ) : null}
     </>

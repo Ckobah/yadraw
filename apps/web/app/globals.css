@@ -3246,6 +3246,57 @@ button:disabled {
   padding: 14px;
 }
 
+.v2ConnectorInspector {
+  --v2-inspector-accent: var(--blue);
+}
+
+.v2ConnectorInspectorIcon {
+  background: #edf5ff;
+  color: var(--blue);
+}
+
+.v2ConnectorRoute {
+  gap: 8px;
+}
+
+.v2ConnectorRouteLabel {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.v2ConnectorRouteFlow {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.v2ConnectorRouteFlow strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ConnectorRouteFlow span {
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.v2ConnectorRoute p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
 .v2InspectorHero {
   display: grid;
   gap: 6px;
