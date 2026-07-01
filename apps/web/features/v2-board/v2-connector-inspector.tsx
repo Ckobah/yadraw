@@ -12,6 +12,7 @@ import {
   type DataFieldType,
   type SaveStatus,
 } from "./v2-card-inspector-helpers";
+import { V2ConnectorFilesSection } from "./v2-connector-files-section";
 
 type V2ConnectorInspectorProps = {
   connection: V2Connection;
@@ -379,10 +380,7 @@ export function V2ConnectorInspector({
           </div>
         </section>
 
-        <section className="v2InspectorSection">
-          <h3>Files</h3>
-          <p className="v2InspectorEmpty">Connector files will be added in a later stage.</p>
-        </section>
+        <V2ConnectorFilesSection connectionId={connection.id} />
 
         <section className="v2InspectorSection">
           <details className="v2InspectorDetails">

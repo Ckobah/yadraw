@@ -8,6 +8,7 @@ import type {
   V2CardAttachment,
   V2CardVisualStyle,
   V2Connection,
+  V2ConnectionAttachment,
   V2CreateCardRequest,
 } from "@yadraw/shared";
 import type { V2CardType } from "@yadraw/shared";
@@ -432,6 +433,79 @@ export async function deleteV2CardAttachment(
     throw new V2ApiError(
       response.status,
       `Attachment detach failed with ${response.status}`,
+      body
+    );
+  }
+}
+
+export async function listV2ConnectionAttachments(
+  connectionId: string
+): Promise<V2ConnectionAttachment[]> {
+  const response = await fetch(
+    `/v2/actions/connections/${encodeURIComponent(connectionId)}/attachments`,
+    { method: "GET", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection attachments request failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2ConnectionAttachment[]>;
+}
+
+export async function uploadV2ConnectionAttachment(
+  connectionId: string,
+  input: {
+    file: File;
+    role?: string;
+    metadata?: Record<string, unknown>;
+  }
+): Promise<V2ConnectionAttachment> {
+  const formData = new FormData();
+  formData.set("file", input.file);
+  formData.set("role", input.role ?? "attachment");
+  if (input.metadata) {
+    formData.set("metadata", JSON.stringify(input.metadata));
+  }
+
+  const response = await fetch(
+    `/v2/actions/connections/${encodeURIComponent(connectionId)}/attachments`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      body: formData,
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection attachment upload failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2ConnectionAttachment>;
+}
+
+export async function deleteV2ConnectionAttachment(
+  connectionId: string,
+  attachmentId: string
+): Promise<void> {
+  const response = await fetch(
+    `/v2/actions/connections/${encodeURIComponent(connectionId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection attachment detach failed with ${response.status}`,
       body
     );
   }
