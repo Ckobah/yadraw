@@ -74,8 +74,8 @@ function getAutoRouteWaypoints(params: {
   targetPosition: unknown;
 }): Point[] {
   const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = params;
-  const sourceSide = String(sourcePosition);
-  const targetSide = String(targetPosition);
+  const sourceSide = String(sourcePosition).toLowerCase();
+  const targetSide = String(targetPosition).toLowerCase();
   const horizontal =
     sourceSide === "right" ||
     sourceSide === "left" ||
@@ -241,6 +241,22 @@ function moveWaypointSegment(waypoints: Point[], segmentIndex: number, delta: Po
 
 function getSegmentOrientation(start: Point, end: Point): "horizontal" | "vertical" {
   return Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? "horizontal" : "vertical";
+}
+
+function projectPointToSegment(point: Point, start: Point, end: Point): Point {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return start;
+
+  const ratio = Math.max(
+    0,
+    Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared)
+  );
+  return {
+    x: start.x + dx * ratio,
+    y: start.y + dy * ratio,
+  };
 }
 
 export function V2ConnectorEdge({
@@ -491,10 +507,18 @@ export function V2ConnectorEdge({
           ? { x: 0, y: delta.y }
           : { x: delta.x, y: 0 };
       latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, segmentDelta);
-      latestLabelPosition = {
+      const movedRoutePoints = getRoutePoints(latestWaypoints);
+      const movedSegmentStart = movedRoutePoints[segmentIndex] ?? segmentStart;
+      const movedSegmentEnd = movedRoutePoints[segmentIndex + 1] ?? movedSegmentStart;
+      const requestedLabelPosition = {
         x: currentLabelPosition.x + delta.x,
         y: currentLabelPosition.y + delta.y,
       };
+      latestLabelPosition = projectPointToSegment(
+        requestedLabelPosition,
+        movedSegmentStart,
+        movedSegmentEnd
+      );
       previewVisualStyle({
         routeMode: "manual",
         waypoints: latestWaypoints,
