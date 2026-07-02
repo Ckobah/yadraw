@@ -17,6 +17,10 @@ type Props = {
   onCancel: () => void;
 };
 
+type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition">> & {
+  labelPosition?: V2ConnectionVisualStyle["labelPosition"];
+};
+
 const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "none", label: "None" },
   { value: "arrow", label: "Arrow" },
@@ -26,7 +30,7 @@ const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "square", label: "Square" },
 ];
 
-function normalizeStyle(style: V2ConnectionVisualStyle | undefined): Required<V2ConnectionVisualStyle> {
+function normalizeStyle(style: V2ConnectionVisualStyle | undefined): VisualStyleDraft {
   return {
     strokeColor: style?.strokeColor ?? "#475467",
     strokeWidth: style?.strokeWidth ?? 2,
@@ -35,6 +39,7 @@ function normalizeStyle(style: V2ConnectionVisualStyle | undefined): Required<V2
     markerEnd: style?.markerEnd ?? "arrow",
     routeMode: style?.routeMode ?? "auto",
     waypoints: Array.isArray(style?.waypoints) ? style.waypoints : [],
+    ...(style?.routeMode === "manual" && style?.labelPosition ? { labelPosition: style.labelPosition } : {}),
   };
 }
 
@@ -49,7 +54,7 @@ export function V2ConnectorVisualEditPanel({
   onSave,
   onCancel,
 }: Props) {
-  const [draft, setDraft] = useState<Required<V2ConnectionVisualStyle>>(() =>
+  const [draft, setDraft] = useState<VisualStyleDraft>(() =>
     normalizeStyle(connection.visualStyle)
   );
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +71,7 @@ export function V2ConnectorVisualEditPanel({
     setError(null);
   }, [connection.id, connection.visualStyle]);
 
-  function updateDraft(patch: Partial<Required<V2ConnectionVisualStyle>>) {
+  function updateDraft(patch: Partial<VisualStyleDraft>) {
     setDraft((current) => {
       const next = { ...current, ...patch };
       onPreview(connection.id, next);
@@ -85,7 +90,7 @@ export function V2ConnectorVisualEditPanel({
   }
 
   async function resetRoute() {
-    const next = { ...draft, routeMode: "auto" as const, waypoints: [] };
+    const next = { ...draft, routeMode: "auto" as const, waypoints: [], labelPosition: null };
     setDraft(next);
     setError(null);
     onPreview(connection.id, next);
@@ -97,7 +102,11 @@ export function V2ConnectorVisualEditPanel({
   }
 
   function toggleGeometry() {
-    updateDraft({ routeMode: draft.routeMode === "manual" ? "auto" : "manual" });
+    updateDraft(
+      draft.routeMode === "manual"
+        ? { routeMode: "auto", labelPosition: null }
+        : { routeMode: "manual" }
+    );
   }
 
   function cancel() {

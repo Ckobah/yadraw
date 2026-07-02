@@ -27,6 +27,8 @@ type V2ConnectorEdgeModel = Edge<V2ConnectorEdgeData>;
 type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
+const DUPLICATE_POINT_DISTANCE = 6;
+const LABEL_WAYPOINT_DISTANCE = 28;
 
 function isFinitePoint(point: V2ConnectionWaypoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
@@ -46,6 +48,93 @@ function buildManualPath(points: Point[]): string {
   if (!first) return "";
   const rest = points.slice(1);
   return `M ${first.x} ${first.y} ${rest.map((point) => `L ${point.x} ${point.y}`).join(" ")}`;
+}
+
+function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function normalizeWaypoints(points: Point[]): Point[] {
+  const normalized: Point[] = [];
+  for (const point of points) {
+    if (!isFinitePoint(point)) continue;
+    const previous = normalized[normalized.length - 1];
+    if (previous && distance(previous, point) < DUPLICATE_POINT_DISTANCE) continue;
+    normalized.push(point);
+    if (normalized.length >= MAX_WAYPOINTS) break;
+  }
+  return normalized;
+}
+
+function getAutoRouteWaypoints(params: {
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  sourcePosition: unknown;
+  targetPosition: unknown;
+}): Point[] {
+  const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = params;
+  const sourceSide = String(sourcePosition);
+  const targetSide = String(targetPosition);
+  const horizontal =
+    sourceSide === "right" ||
+    sourceSide === "left" ||
+    targetSide === "right" ||
+    targetSide === "left";
+
+  if (horizontal) {
+    const midX = sourceX + (targetX - sourceX) / 2;
+    return normalizeWaypoints([
+      { x: midX, y: sourceY },
+      { x: midX, y: targetY },
+    ]);
+  }
+
+  const midY = sourceY + (targetY - sourceY) / 2;
+  return normalizeWaypoints([
+    { x: sourceX, y: midY },
+    { x: targetX, y: midY },
+  ]);
+}
+
+function buildRoundedManualPath(points: Point[], radius: number): string {
+  const first = points[0];
+  if (!first) return "";
+  if (points.length < 3 || radius <= 0) return buildManualPath(points);
+
+  const parts = [`M ${first.x} ${first.y}`];
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const previous = points[index - 1];
+    const corner = points[index];
+    const next = points[index + 1];
+    if (!previous || !corner || !next) continue;
+
+    const previousLength = distance(previous, corner);
+    const nextLength = distance(corner, next);
+    const safeRadius = Math.min(radius, previousLength / 2, nextLength / 2);
+
+    if (safeRadius <= 0.5 || previousLength <= 0 || nextLength <= 0) {
+      parts.push(`L ${corner.x} ${corner.y}`);
+      continue;
+    }
+
+    const beforeCorner = {
+      x: corner.x + ((previous.x - corner.x) / previousLength) * safeRadius,
+      y: corner.y + ((previous.y - corner.y) / previousLength) * safeRadius,
+    };
+    const afterCorner = {
+      x: corner.x + ((next.x - corner.x) / nextLength) * safeRadius,
+      y: corner.y + ((next.y - corner.y) / nextLength) * safeRadius,
+    };
+
+    parts.push(`L ${beforeCorner.x} ${beforeCorner.y}`);
+    parts.push(`Q ${corner.x} ${corner.y} ${afterCorner.x} ${afterCorner.y}`);
+  }
+
+  const last = points[points.length - 1];
+  if (last) parts.push(`L ${last.x} ${last.y}`);
+  return parts.join(" ");
 }
 
 function buildSegmentPath(start: Point, end: Point): string {
@@ -103,6 +192,35 @@ function getEventFlowPoint(
   return screenToFlowPosition({ x: event.clientX, y: event.clientY });
 }
 
+function nearestSegmentIndex(points: Point[], point: Point): number {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    if (!start || !end) continue;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const lengthSquared = dx * dx + dy * dy;
+    const ratio =
+      lengthSquared === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+    const projection = {
+      x: start.x + dx * ratio,
+      y: start.y + dy * ratio,
+    };
+    const currentDistance = distance(point, projection);
+    if (currentDistance < bestDistance) {
+      bestDistance = currentDistance;
+      bestIndex = index;
+    }
+  }
+
+  return bestIndex;
+}
+
 export function V2ConnectorEdge({
   id,
   sourceX,
@@ -120,10 +238,9 @@ export function V2ConnectorEdge({
   const { screenToFlowPosition } = useReactFlow();
   const connection = data?.connection;
   const visualStyle = connection?.visualStyle ?? {};
-  const waypoints = getWaypoints(visualStyle);
+  const storedWaypoints = getWaypoints(visualStyle);
   const isVisualEditing = Boolean(data?.isVisualEditing);
   const canEditGeometry = isVisualEditing && visualStyle.routeMode === "manual";
-  const usesManualRoute = visualStyle.routeMode === "manual" && waypoints.length > 0;
 
   const automaticPathResult = getSmoothStepPath({
     sourceX,
@@ -136,9 +253,26 @@ export function V2ConnectorEdge({
   });
   const automaticPath = automaticPathResult[0];
   const automaticLabel = { x: automaticPathResult[1], y: automaticPathResult[2] };
+  const materializedAutoWaypoints = getAutoRouteWaypoints({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+  });
+  const waypoints =
+    visualStyle.routeMode === "manual" && storedWaypoints.length === 0
+      ? materializedAutoWaypoints
+      : storedWaypoints;
+  const usesManualRoute = visualStyle.routeMode === "manual" && waypoints.length > 0;
   const routePoints = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
-  const manualPath = buildManualPath(routePoints);
-  const labelPosition = usesManualRoute ? getPolylineLabelPosition(routePoints) : automaticLabel;
+  const manualPath = buildRoundedManualPath(routePoints, getCornerRadius(visualStyle));
+  const savedLabelPosition =
+    visualStyle.routeMode === "manual" && visualStyle.labelPosition && isFinitePoint(visualStyle.labelPosition)
+      ? visualStyle.labelPosition
+      : null;
+  const labelPosition = savedLabelPosition ?? (usesManualRoute ? getPolylineLabelPosition(routePoints) : automaticLabel);
   const path = usesManualRoute ? manualPath : automaticPath;
   const baseStrokeWidth = getStrokeWidth(visualStyle);
   const strokeWidth = selected || isVisualEditing ? baseStrokeWidth + 1.25 : baseStrokeWidth;
@@ -147,31 +281,65 @@ export function V2ConnectorEdge({
     strokeWidth,
   };
 
-  function previewWaypoints(nextWaypoints: Point[]) {
+  function previewVisualStyle(patch: V2ConnectionVisualStyle) {
     if (!connection) return;
     data?.onPreviewVisualStyle?.(connection.id, {
       ...visualStyle,
+      ...patch,
+    });
+  }
+
+  async function saveVisualStyle(patch: V2ConnectionVisualStyle) {
+    if (!connection) return;
+    await data?.onSaveVisualStyle?.(connection.id, {
+      ...visualStyle,
+      ...patch,
+    });
+  }
+
+  function previewWaypoints(nextWaypoints: Point[]) {
+    previewVisualStyle({
       routeMode: nextWaypoints.length > 0 ? "manual" : "auto",
-      waypoints: nextWaypoints,
+      waypoints: normalizeWaypoints(nextWaypoints),
     });
   }
 
   async function saveWaypoints(nextWaypoints: Point[]) {
-    if (!connection) return;
-    await data?.onSaveVisualStyle?.(connection.id, {
-      ...visualStyle,
+    await saveVisualStyle({
       routeMode: nextWaypoints.length > 0 ? "manual" : "auto",
-      waypoints: nextWaypoints,
+      waypoints: normalizeWaypoints(nextWaypoints),
     });
   }
 
-  function insertWaypoint(segmentIndex: number, point: Point): Point[] {
-    const next = [...waypoints];
-    const insertIndex = usesManualRoute
-      ? Math.min(Math.max(segmentIndex, 0), next.length)
-      : next.length;
+  function insertWaypoint(baseWaypoints: Point[], segmentIndex: number, point: Point): Point[] {
+    const next = normalizeWaypoints(baseWaypoints);
+    const insertIndex = Math.min(Math.max(segmentIndex, 0), next.length);
     next.splice(insertIndex, 0, point);
-    return next.slice(0, MAX_WAYPOINTS);
+    return normalizeWaypoints(next).slice(0, MAX_WAYPOINTS);
+  }
+
+  function getEditableWaypoints(): Point[] {
+    return normalizeWaypoints(waypoints.length > 0 ? waypoints : materializedAutoWaypoints);
+  }
+
+  function getRoutePoints(nextWaypoints: Point[]): Point[] {
+    return [{ x: sourceX, y: sourceY }, ...nextWaypoints, { x: targetX, y: targetY }];
+  }
+
+  function updateLabelRoute(labelPoint: Point, baseWaypoints = getEditableWaypoints()): Point[] {
+    const normalized = normalizeWaypoints(baseWaypoints);
+    const nearestWaypointIndex = normalized.findIndex(
+      (waypoint) => distance(waypoint, labelPoint) < LABEL_WAYPOINT_DISTANCE
+    );
+
+    if (nearestWaypointIndex >= 0) {
+      return normalized.map((waypoint, index) =>
+        index === nearestWaypointIndex ? labelPoint : waypoint
+      );
+    }
+
+    const insertAfterSegment = nearestSegmentIndex(getRoutePoints(normalized), labelPoint);
+    return insertWaypoint(normalized, insertAfterSegment, labelPoint);
   }
 
   function handleSegmentDoubleClick(
@@ -182,7 +350,7 @@ export function V2ConnectorEdge({
     event.preventDefault();
     event.stopPropagation();
     const point = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
-    const next = insertWaypoint(segmentIndex, point);
+    const next = insertWaypoint(getEditableWaypoints(), segmentIndex, point);
     previewWaypoints(next);
     void saveWaypoints(next);
   }
@@ -195,28 +363,26 @@ export function V2ConnectorEdge({
     event.preventDefault();
     event.stopPropagation();
 
-    const start = { x: event.clientX, y: event.clientY };
-    let dragIndex: number | null = null;
-    let latestWaypoints = waypoints;
+    const startClient = { x: event.clientX, y: event.clientY };
+    const startFlow = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
+    const baseWaypoints = getEditableWaypoints();
+    let latestWaypoints = baseWaypoints;
     let didDrag = false;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      const distance = Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y);
-      if (distance < 3 && dragIndex === null) return;
+      const dragDistance = Math.hypot(moveEvent.clientX - startClient.x, moveEvent.clientY - startClient.y);
+      if (dragDistance < 3 && !didDrag) return;
       didDrag = true;
       const point = getEventFlowPoint(moveEvent, screenToFlowPosition);
-
-      if (dragIndex === null) {
-        const inserted = insertWaypoint(segmentIndex, point);
-        dragIndex = usesManualRoute
-          ? Math.min(Math.max(segmentIndex, 0), waypoints.length)
-          : inserted.length - 1;
-        latestWaypoints = inserted;
-      } else {
-        latestWaypoints = latestWaypoints.map((waypoint, index) =>
-          index === dragIndex ? point : waypoint
-        );
-      }
+      const delta = { x: point.x - startFlow.x, y: point.y - startFlow.y };
+      const moved = baseWaypoints.map((waypoint, index) => {
+        const movePreviousEndpoint = index === segmentIndex - 1;
+        const moveNextEndpoint = index === segmentIndex;
+        return movePreviousEndpoint || moveNextEndpoint
+          ? { x: waypoint.x + delta.x, y: waypoint.y + delta.y }
+          : waypoint;
+      });
+      latestWaypoints = normalizeWaypoints(moved);
 
       previewWaypoints(latestWaypoints);
     };
@@ -273,6 +439,47 @@ export function V2ConnectorEdge({
     void saveWaypoints(next);
   }
 
+  function handleLabelPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!isVisualEditing || !connection) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const startClient = { x: event.clientX, y: event.clientY };
+    const currentLabelPosition = savedLabelPosition ?? labelPosition;
+    const baseWaypoints = getEditableWaypoints();
+    let latestLabelPosition = currentLabelPosition;
+    let latestWaypoints = updateLabelRoute(currentLabelPosition, baseWaypoints);
+    let didDrag = false;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const dragDistance = Math.hypot(moveEvent.clientX - startClient.x, moveEvent.clientY - startClient.y);
+      if (dragDistance < 3 && !didDrag) return;
+      didDrag = true;
+      latestLabelPosition = getEventFlowPoint(moveEvent, screenToFlowPosition);
+      latestWaypoints = updateLabelRoute(latestLabelPosition, baseWaypoints);
+      previewVisualStyle({
+        routeMode: "manual",
+        waypoints: latestWaypoints,
+        labelPosition: latestLabelPosition,
+      });
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      if (didDrag) {
+        void saveVisualStyle({
+          routeMode: "manual",
+          waypoints: latestWaypoints,
+          labelPosition: latestLabelPosition,
+        });
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  }
+
   const segmentPaths = usesManualRoute
     ? routePoints.slice(0, -1).flatMap((point, index) => {
         const nextPoint = routePoints[index + 1];
@@ -303,10 +510,13 @@ export function V2ConnectorEdge({
       <EdgeLabelRenderer>
         {label ? (
           <div
-            className="v2ConnectorEdgeLabel"
+            className={`v2ConnectorEdgeLabel ${isVisualEditing ? "v2ConnectorEdgeLabelEditable nodrag nopan" : ""}`}
             style={{
               transform: `translate(-50%, -50%) translate(${labelPosition.x}px, ${labelPosition.y}px)`,
             }}
+            onPointerDown={handleLabelPointerDown}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
           >
             {label}
           </div>

@@ -80,7 +80,8 @@ export const v2ConnectionVisualStyleSchema = z.object({
   markerStart: v2ConnectionMarkerSchema.optional(),
   markerEnd: v2ConnectionMarkerSchema.optional(),
   routeMode: v2ConnectionRouteModeSchema.optional(),
-  waypoints: z.array(v2ConnectionWaypointSchema).max(20).optional()
+  waypoints: z.array(v2ConnectionWaypointSchema).max(20).optional(),
+  labelPosition: v2ConnectionWaypointSchema.nullable().optional()
 });
 
 export const v2WorkspaceSchema = z.object({

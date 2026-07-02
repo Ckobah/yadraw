@@ -2350,7 +2350,7 @@ button:disabled {
 .v2ConnectorEdgeInteraction,
 .v2ConnectorEdgeInteractionHidden {
   stroke: transparent;
-  stroke-width: 18;
+  stroke-width: 22;
   pointer-events: stroke;
 }
 
@@ -2379,6 +2379,16 @@ button:disabled {
   line-height: 1.2;
   pointer-events: none;
   white-space: nowrap;
+  user-select: none;
+}
+
+.v2ConnectorEdgeLabelEditable {
+  cursor: grab;
+  pointer-events: all;
+}
+
+.v2ConnectorEdgeLabelEditable:active {
+  cursor: grabbing;
 }
 
 .v2ConnectorWaypointHandle {

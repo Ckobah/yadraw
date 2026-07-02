@@ -356,7 +356,8 @@ describe("v2 board service", () => {
         waypoints: [
           { x: 320, y: 220 },
           { x: 380, y: 260 }
-        ]
+        ],
+        labelPosition: { x: 350, y: 240 }
       }
     });
     expect(partiallyStyled.visualStyle).toEqual({
@@ -368,7 +369,8 @@ describe("v2 board service", () => {
       waypoints: [
         { x: 320, y: 220 },
         { x: 380, y: 260 }
-      ]
+      ],
+      labelPosition: { x: 350, y: 240 }
     });
 
     const detail = await service.getBoard(ownerContext, seed.board.id);
@@ -383,7 +385,8 @@ describe("v2 board service", () => {
         waypoints: [
           { x: 320, y: 220 },
           { x: 380, y: 260 }
-        ]
+        ],
+        labelPosition: { x: 350, y: 240 }
       }
     });
     expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ sourceBusiness: true });
