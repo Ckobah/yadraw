@@ -2358,6 +2358,10 @@ button:disabled {
   cursor: grab;
 }
 
+.v2ConnectorEdgeInteractionSnap {
+  stroke: rgba(37, 99, 235, 0.22);
+}
+
 .v2ConnectorEdgeInteraction:active {
   cursor: grabbing;
 }
@@ -2389,6 +2393,21 @@ button:disabled {
 
 .v2ConnectorEdgeLabelEditable:active {
   cursor: grabbing;
+}
+
+.v2ConnectorSnapIndicator {
+  position: absolute;
+  z-index: 7;
+  border: 1px solid rgba(37, 99, 235, 0.24);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 2px 6px;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
 }
 
 .v2ConnectorWaypointHandle {

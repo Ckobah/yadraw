@@ -8,10 +8,11 @@ import {
   type Edge,
   type EdgeProps,
 } from "@xyflow/react";
-import type {
-  CSSProperties,
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
+import {
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { V2Connection, V2ConnectionVisualStyle, V2ConnectionWaypoint } from "@yadraw/shared";
 
@@ -28,6 +29,8 @@ type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
+const SNAP_ANGLE_DEGREES = 5;
+const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 
 function isFinitePoint(point: V2ConnectionWaypoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
@@ -63,6 +66,48 @@ function normalizeWaypoints(points: Point[]): Point[] {
     if (normalized.length >= MAX_WAYPOINTS) break;
   }
   return normalized;
+}
+
+function isNearHorizontal(dx: number, dy: number): boolean {
+  if (dx === 0 && dy === 0) return false;
+  const angle = Math.abs(Math.atan2(dy, dx));
+  return angle <= SNAP_ANGLE_RADIANS || Math.PI - angle <= SNAP_ANGLE_RADIANS;
+}
+
+function isNearVertical(dx: number, dy: number): boolean {
+  if (dx === 0 && dy === 0) return false;
+  const angle = Math.abs(Math.atan2(dy, dx));
+  return Math.abs(Math.PI / 2 - angle) <= SNAP_ANGLE_RADIANS;
+}
+
+function snapPointToNeighbor(point: Point, neighbor: Point): { point: Point; snapped: boolean } {
+  const dx = point.x - neighbor.x;
+  const dy = point.y - neighbor.y;
+  if (isNearHorizontal(dx, dy)) {
+    return { point: { x: point.x, y: neighbor.y }, snapped: true };
+  }
+  if (isNearVertical(dx, dy)) {
+    return { point: { x: neighbor.x, y: point.y }, snapped: true };
+  }
+  return { point, snapped: false };
+}
+
+function snapBendPoint(point: Point, previous: Point | undefined, next: Point | undefined): { point: Point; snapped: boolean } {
+  if (!previous && !next) return { point, snapped: false };
+
+  let snapped = false;
+  let nextPoint = point;
+  if (previous) {
+    const result = snapPointToNeighbor(nextPoint, previous);
+    nextPoint = result.point;
+    snapped ||= result.snapped;
+  }
+  if (next) {
+    const result = snapPointToNeighbor(nextPoint, next);
+    nextPoint = result.point;
+    snapped ||= result.snapped;
+  }
+  return { point: nextPoint, snapped };
 }
 
 function getAutoRouteWaypoints(params: {
@@ -274,6 +319,7 @@ export function V2ConnectorEdge({
   data,
 }: EdgeProps<V2ConnectorEdgeModel>) {
   const { screenToFlowPosition } = useReactFlow();
+  const [isSnapActive, setIsSnapActive] = useState(false);
   const connection = data?.connection;
   const visualStyle = connection?.visualStyle ?? {};
   const storedWaypoints = getWaypoints(visualStyle);
@@ -405,6 +451,7 @@ export function V2ConnectorEdge({
       const point = getEventFlowPoint(moveEvent, screenToFlowPosition);
       const delta = { x: point.x - startFlow.x, y: point.y - startFlow.y };
       latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, delta);
+      setIsSnapActive(true);
       latestLabelPosition = shouldMoveLabel
         ? { x: baseLabelPosition.x + delta.x, y: baseLabelPosition.y + delta.y }
         : baseLabelPosition;
@@ -421,6 +468,7 @@ export function V2ConnectorEdge({
     const handlePointerUp = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      setIsSnapActive(false);
       if (didDrag) {
         void saveVisualStyle({
           routeMode: "manual",
@@ -447,7 +495,14 @@ export function V2ConnectorEdge({
     let latestWaypoints = waypoints;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      const point = getEventFlowPoint(moveEvent, screenToFlowPosition);
+      const rawPoint = getEventFlowPoint(moveEvent, screenToFlowPosition);
+      const routeBeforeDrag = getRoutePoints(waypoints);
+      const previous = routeBeforeDrag[waypointIndex];
+      const next = routeBeforeDrag[waypointIndex + 2];
+      const { point, snapped } = moveEvent.altKey
+        ? { point: rawPoint, snapped: false }
+        : snapBendPoint(rawPoint, previous, next);
+      setIsSnapActive(snapped);
       latestWaypoints = waypoints.map((waypoint, index) =>
         index === waypointIndex ? point : waypoint
       );
@@ -457,6 +512,7 @@ export function V2ConnectorEdge({
     const handlePointerUp = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      setIsSnapActive(false);
       void saveWaypoints(latestWaypoints);
     };
 
@@ -507,6 +563,7 @@ export function V2ConnectorEdge({
           ? { x: 0, y: delta.y }
           : { x: delta.x, y: 0 };
       latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, segmentDelta);
+      setIsSnapActive(true);
       const movedRoutePoints = getRoutePoints(latestWaypoints);
       const movedSegmentStart = movedRoutePoints[segmentIndex] ?? segmentStart;
       const movedSegmentEnd = movedRoutePoints[segmentIndex + 1] ?? movedSegmentStart;
@@ -530,6 +587,7 @@ export function V2ConnectorEdge({
     const handlePointerUp = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      setIsSnapActive(false);
       if (didDrag) {
         void saveVisualStyle({
           routeMode: "manual",
@@ -564,7 +622,11 @@ export function V2ConnectorEdge({
       {segmentPaths.map((segmentPath, index) => (
         <path
           key={`${id}-segment-${index}`}
-          className={canEditGeometry ? "v2ConnectorEdgeInteraction" : "v2ConnectorEdgeInteractionHidden"}
+          className={
+            canEditGeometry
+              ? `v2ConnectorEdgeInteraction ${isSnapActive ? "v2ConnectorEdgeInteractionSnap" : ""}`
+              : "v2ConnectorEdgeInteractionHidden"
+          }
           d={segmentPath}
           fill="none"
           onClick={(event) => event.stopPropagation()}
@@ -573,6 +635,16 @@ export function V2ConnectorEdge({
         />
       ))}
       <EdgeLabelRenderer>
+        {isSnapActive ? (
+          <div
+            className="v2ConnectorSnapIndicator"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelPosition.x}px, ${labelPosition.y - 24}px)`,
+            }}
+          >
+            Snap
+          </div>
+        ) : null}
         {label ? (
           <div
             className={`v2ConnectorEdgeLabel ${isVisualEditing ? "v2ConnectorEdgeLabelEditable nodrag nopan" : ""}`}
