@@ -2213,191 +2213,138 @@ button:disabled {
   top: 16px;
   left: 50%;
   z-index: 30;
-  display: grid;
-  width: min(560px, calc(100vw - 48px));
-  gap: 10px;
+  display: block;
+  max-width: calc(100vw - 48px);
   transform: translateX(-50%);
   border: 1px solid #bcc7d8;
-  border-radius: 10px;
-  background: #fff;
-  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 6px;
   color: #111827;
   box-shadow: 0 16px 42px rgba(31, 45, 73, 0.16);
   pointer-events: auto;
 }
 
-.v2ConnectorVisualEditHeader,
-.v2ConnectorVisualEditFooter {
+.v2ConnectorVisualEditToolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.v2ConnectorVisualEditHeader div {
-  display: grid;
-  gap: 3px;
-}
-
-.v2ConnectorVisualEditHeader strong {
-  font-size: 13px;
-  font-weight: 760;
-  line-height: 1;
-}
-
-.v2ConnectorVisualEditHeader span,
-.v2ConnectorVisualEditFooter span {
-  color: #667085;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.v2ConnectorVisualEditHeader button {
-  display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border: 1px solid #d9e0eb;
-  border-radius: 7px;
-  background: #fff;
-  color: #273142;
-  cursor: pointer;
-}
-
-.v2ConnectorVisualEditHeader button:hover,
-.v2ConnectorVisualEditHeader button:focus-visible {
-  border-color: var(--blue);
-  color: var(--blue);
-  outline: 0;
-}
-
-.v2ConnectorVisualEditGrid {
-  display: grid;
-  grid-template-columns: 72px 76px 112px 1fr 1fr;
-  gap: 8px;
-  align-items: end;
-}
-
-.v2ConnectorVisualEditGrid label {
-  display: grid;
+  flex-wrap: nowrap;
   gap: 5px;
-  min-width: 0;
+  white-space: nowrap;
 }
 
-.v2ConnectorVisualEditGrid label span {
-  color: #606b80;
-  font-size: 10px;
-  font-weight: 650;
+.v2ConnectorVisualTool,
+.v2ConnectorVisualIconButton,
+.v2ConnectorVisualTextButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  border: 1px solid #d9e0eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #273142;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.v2ConnectorVisualTool {
+  gap: 5px;
+  padding: 0 7px;
+}
+
+.v2ConnectorVisualIcon {
+  display: inline-grid;
+  width: 14px;
+  place-items: center;
+  color: #667085;
+  font-size: 12px;
   line-height: 1;
 }
 
-.v2ConnectorVisualEditGrid input,
-.v2ConnectorVisualEditGrid select {
-  width: 100%;
-  height: 30px;
+.v2ConnectorVisualColorTool {
+  padding-right: 5px;
+}
+
+.v2ConnectorVisualTool input,
+.v2ConnectorVisualTool select {
+  height: 22px;
   min-width: 0;
-  border: 1px solid #d9e0eb;
-  border-radius: 7px;
-  background: #fff;
+  border: 0;
+  background: transparent;
   color: #182230;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
-.v2ConnectorVisualEditGrid input[type="color"] {
-  padding: 3px;
-}
-
-.v2ConnectorVisualEditGrid input[type="number"],
-.v2ConnectorVisualEditGrid select {
-  padding: 0 8px;
-}
-
-.v2ConnectorVisualEditGrid input:focus,
-.v2ConnectorVisualEditGrid select:focus {
-  border-color: var(--blue);
-  outline: 0;
-  box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.12);
-}
-
-.v2ConnectorVisualEditGeometry {
-  display: grid;
-  gap: 8px;
-  border: 1px solid #edf1f7;
-  border-radius: 8px;
-  background: #f8fafc;
-  padding: 8px;
-}
-
-.v2ConnectorVisualEditGeometryHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.v2ConnectorVisualEditGeometryHeader div,
-.v2ConnectorVisualEditGeometry label {
-  display: grid;
-  gap: 4px;
-}
-
-.v2ConnectorVisualEditGeometryHeader strong {
-  font-size: 12px;
-  font-weight: 760;
-}
-
-.v2ConnectorVisualEditGeometryHeader span,
-.v2ConnectorVisualEditGeometry label span,
-.v2ConnectorVisualEditGeometry p {
-  margin: 0;
-  color: #667085;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.v2ConnectorVisualEditGeometry select {
-  width: min(180px, 100%);
-  height: 30px;
-  border: 1px solid #d9e0eb;
-  border-radius: 7px;
-  background: #fff;
-  padding: 0 8px;
-  color: #182230;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.v2ConnectorVisualEditGeometry select:focus {
-  border-color: var(--blue);
-  outline: 0;
-  box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.12);
-}
-
-.v2ConnectorVisualEditReset {
-  height: 28px;
-  border: 1px solid #d9e0eb;
-  border-radius: 7px;
-  background: #fff;
-  padding: 0 9px;
-  color: #273142;
-  font-size: 11px;
-  font-weight: 750;
+.v2ConnectorVisualTool input[type="color"] {
+  width: 24px;
+  padding: 0;
   cursor: pointer;
 }
 
-.v2ConnectorVisualEditReset:hover:not(:disabled),
-.v2ConnectorVisualEditReset:focus-visible:not(:disabled) {
-  border-color: var(--blue);
-  color: var(--blue);
+.v2ConnectorVisualTool input[type="number"] {
+  width: 42px;
+}
+
+.v2ConnectorVisualTool select {
+  width: 92px;
+  cursor: pointer;
+}
+
+.v2ConnectorVisualTool input:focus,
+.v2ConnectorVisualTool select:focus {
   outline: 0;
 }
 
-.v2ConnectorVisualEditReset:disabled {
+.v2ConnectorVisualIconButton {
+  width: 30px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.v2ConnectorVisualIconButtonActive {
+  border-color: color-mix(in srgb, var(--blue) 65%, #d9e0eb);
+  background: color-mix(in srgb, var(--blue) 10%, #fff);
+  color: var(--blue);
+}
+
+.v2ConnectorVisualTextButton {
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.v2ConnectorVisualSaveButtonDirty {
+  border-color: color-mix(in srgb, var(--blue) 65%, #d9e0eb);
+  background: color-mix(in srgb, var(--blue) 10%, #fff);
+  color: var(--blue);
+}
+
+.v2ConnectorVisualTool:hover,
+.v2ConnectorVisualTool:focus-within,
+.v2ConnectorVisualIconButton:hover:not(:disabled),
+.v2ConnectorVisualIconButton:focus-visible:not(:disabled),
+.v2ConnectorVisualTextButton:hover:not(:disabled),
+.v2ConnectorVisualTextButton:focus-visible:not(:disabled) {
+  border-color: var(--blue);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.1);
+}
+
+.v2ConnectorVisualIconButton:disabled,
+.v2ConnectorVisualTextButton:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.45;
+}
+
+.v2ConnectorVisualEditStatus,
+.v2ConnectorVisualEditError {
+  max-width: 84px;
+  overflow: hidden;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
 }
 
 .v2ConnectorEdgeInteraction,
@@ -2459,41 +2406,6 @@ button:disabled {
   cursor: grabbing;
 }
 
-.v2ConnectorVisualEditFooter div {
-  display: flex;
-  gap: 6px;
-}
-
-.v2ConnectorVisualEditFooter button {
-  height: 30px;
-  border: 1px solid #d9e0eb;
-  border-radius: 7px;
-  background: #fff;
-  padding: 0 10px;
-  color: #273142;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.v2ConnectorVisualEditFooter button:hover:not(:disabled),
-.v2ConnectorVisualEditFooter button:focus-visible:not(:disabled) {
-  border-color: var(--blue);
-  color: var(--blue);
-  outline: 0;
-}
-
-.v2ConnectorVisualEditFooter button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.v2ConnectorVisualEditFooter .v2ConnectorVisualEditPrimary {
-  border-color: color-mix(in srgb, var(--blue) 65%, #d9e0eb);
-  background: color-mix(in srgb, var(--blue) 10%, #fff);
-  color: var(--blue);
-}
-
 .v2ConnectorVisualEditError {
   color: #c2410c !important;
 }
@@ -2501,11 +2413,12 @@ button:disabled {
 @media (max-width: 760px) {
   .v2ConnectorVisualEditPanel {
     top: 12px;
-    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    border-radius: 14px;
   }
 
-  .v2ConnectorVisualEditGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .v2ConnectorVisualEditToolbar {
+    flex-wrap: wrap;
   }
 }
 

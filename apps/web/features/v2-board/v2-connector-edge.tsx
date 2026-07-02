@@ -122,6 +122,7 @@ export function V2ConnectorEdge({
   const visualStyle = connection?.visualStyle ?? {};
   const waypoints = getWaypoints(visualStyle);
   const isVisualEditing = Boolean(data?.isVisualEditing);
+  const canEditGeometry = isVisualEditing && visualStyle.routeMode === "manual";
   const usesManualRoute = visualStyle.routeMode === "manual" && waypoints.length > 0;
 
   const automaticPathResult = getSmoothStepPath({
@@ -177,7 +178,7 @@ export function V2ConnectorEdge({
     event: ReactMouseEvent<SVGPathElement>,
     segmentIndex: number
   ) {
-    if (!isVisualEditing || !connection) return;
+    if (!canEditGeometry || !connection) return;
     event.preventDefault();
     event.stopPropagation();
     const point = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
@@ -190,7 +191,7 @@ export function V2ConnectorEdge({
     event: ReactPointerEvent<SVGPathElement>,
     segmentIndex: number
   ) {
-    if (!isVisualEditing || !connection) return;
+    if (!canEditGeometry || !connection) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -236,7 +237,7 @@ export function V2ConnectorEdge({
     event: ReactPointerEvent<HTMLButtonElement>,
     waypointIndex: number
   ) {
-    if (!isVisualEditing || !connection) return;
+    if (!canEditGeometry || !connection) return;
     event.preventDefault();
     event.stopPropagation();
 
@@ -264,7 +265,7 @@ export function V2ConnectorEdge({
     event: ReactMouseEvent<HTMLButtonElement>,
     waypointIndex: number
   ) {
-    if (!isVisualEditing || !connection) return;
+    if (!canEditGeometry || !connection) return;
     event.preventDefault();
     event.stopPropagation();
     const next = waypoints.filter((_waypoint, index) => index !== waypointIndex);
@@ -292,7 +293,7 @@ export function V2ConnectorEdge({
       {segmentPaths.map((segmentPath, index) => (
         <path
           key={`${id}-segment-${index}`}
-          className={isVisualEditing ? "v2ConnectorEdgeInteraction" : "v2ConnectorEdgeInteractionHidden"}
+          className={canEditGeometry ? "v2ConnectorEdgeInteraction" : "v2ConnectorEdgeInteractionHidden"}
           d={segmentPath}
           fill="none"
           onDoubleClick={(event) => handleSegmentDoubleClick(event, index)}
@@ -310,7 +311,7 @@ export function V2ConnectorEdge({
             {label}
           </div>
         ) : null}
-        {isVisualEditing
+        {canEditGeometry
           ? waypoints.map((waypoint, index) => (
               <button
                 key={`${id}-waypoint-${index}`}

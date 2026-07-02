@@ -5,7 +5,6 @@ import { X } from "lucide-react";
 import type {
   V2Connection,
   V2ConnectionMarker,
-  V2ConnectionRouteMode,
   V2ConnectionVisualStyle,
 } from "@yadraw/shared";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
@@ -25,11 +24,6 @@ const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "triangle", label: "Triangle" },
   { value: "circle", label: "Circle" },
   { value: "square", label: "Square" },
-];
-
-const routeModeOptions: Array<{ value: V2ConnectionRouteMode; label: string }> = [
-  { value: "auto", label: "Auto" },
-  { value: "manual", label: "Manual" },
 ];
 
 function normalizeStyle(style: V2ConnectionVisualStyle | undefined): Required<V2ConnectionVisualStyle> {
@@ -102,6 +96,10 @@ export function V2ConnectorVisualEditPanel({
     }
   }
 
+  function toggleGeometry() {
+    updateDraft({ routeMode: draft.routeMode === "manual" ? "auto" : "manual" });
+  }
+
   function cancel() {
     const saved = normalizeStyle(connection.visualStyle);
     setDraft(saved);
@@ -118,29 +116,23 @@ export function V2ConnectorVisualEditPanel({
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <header className="v2ConnectorVisualEditHeader">
-        <div>
-          <strong>Connector style</strong>
-          <span>{saveStatus === "saving" ? "Saving..." : saveStatus === "saved" ? "Saved" : "Visual edit"}</span>
-        </div>
-        <button type="button" aria-label="Close connector visual editor" onClick={cancel}>
-          <X size={15} strokeWidth={2.2} />
-        </button>
-      </header>
-
-      <div className="v2ConnectorVisualEditGrid">
-        <label>
-          <span>Color</span>
+      <div className="v2ConnectorVisualEditToolbar" role="toolbar" aria-label="Connector visual style">
+        <label className="v2ConnectorVisualTool v2ConnectorVisualColorTool" title="Color">
+          <span aria-hidden="true" className="v2ConnectorVisualIcon">■</span>
+          <span className="visuallyHidden">Color</span>
           <input
             type="color"
+            aria-label="Color"
             value={draft.strokeColor}
             onChange={(event) => updateDraft({ strokeColor: event.target.value })}
           />
         </label>
-        <label>
-          <span>Width</span>
+        <label className="v2ConnectorVisualTool" title="Width">
+          <span aria-hidden="true" className="v2ConnectorVisualIcon">━</span>
+          <span className="visuallyHidden">Width</span>
           <input
             type="number"
+            aria-label="Width"
             min={1}
             max={12}
             step={0.5}
@@ -150,10 +142,12 @@ export function V2ConnectorVisualEditPanel({
             }
           />
         </label>
-        <label>
-          <span>Corner radius</span>
+        <label className="v2ConnectorVisualTool" title="Corner radius">
+          <span aria-hidden="true" className="v2ConnectorVisualIcon">⌜</span>
+          <span className="visuallyHidden">Corner radius</span>
           <input
             type="number"
+            aria-label="Corner radius"
             min={0}
             max={48}
             step={2}
@@ -163,9 +157,11 @@ export function V2ConnectorVisualEditPanel({
             }
           />
         </label>
-        <label>
-          <span>Start</span>
+        <label className="v2ConnectorVisualTool" title="Start marker">
+          <span aria-hidden="true" className="v2ConnectorVisualIcon">⇤</span>
+          <span className="visuallyHidden">Start marker</span>
           <select
+            aria-label="Start marker"
             value={draft.markerStart}
             onChange={(event) => updateDraft({ markerStart: event.target.value as V2ConnectionMarker })}
           >
@@ -176,9 +172,11 @@ export function V2ConnectorVisualEditPanel({
             ))}
           </select>
         </label>
-        <label>
-          <span>End</span>
+        <label className="v2ConnectorVisualTool" title="End marker">
+          <span aria-hidden="true" className="v2ConnectorVisualIcon">⇥</span>
+          <span className="visuallyHidden">End marker</span>
           <select
+            aria-label="End marker"
             value={draft.markerEnd}
             onChange={(event) => updateDraft({ markerEnd: event.target.value as V2ConnectionMarker })}
           >
@@ -189,61 +187,60 @@ export function V2ConnectorVisualEditPanel({
             ))}
           </select>
         </label>
-      </div>
-
-      <div className="v2ConnectorVisualEditGeometry">
-        <div className="v2ConnectorVisualEditGeometryHeader">
-          <div>
-            <strong>Geometry</strong>
-            <span>{draft.waypoints.length} bend point{draft.waypoints.length === 1 ? "" : "s"}</span>
-          </div>
-          <button
-            type="button"
-            className="v2ConnectorVisualEditReset"
-            disabled={saveStatus === "saving" || (draft.routeMode === "auto" && draft.waypoints.length === 0)}
-            onClick={() => void resetRoute()}
-          >
-            Reset route
-          </button>
-        </div>
-        <label>
-          <span>Route</span>
-          <select
-            value={draft.routeMode}
-            onChange={(event) =>
-              updateDraft({ routeMode: event.target.value as V2ConnectionRouteMode })
-            }
-          >
-            {routeModeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p>
-          Double-click a connector segment to add a bend point. Drag points to reshape the route.
-        </p>
-      </div>
-
-      <footer className="v2ConnectorVisualEditFooter">
-        <span className={error ? "v2ConnectorVisualEditError" : ""}>
-          {error ?? (isDirty ? "Unsaved changes" : "No changes")}
+        <button
+          type="button"
+          className={`v2ConnectorVisualIconButton ${draft.routeMode === "manual" ? "v2ConnectorVisualIconButtonActive" : ""}`}
+          title={`Geometry ${draft.routeMode === "manual" ? "on" : "off"} · ${draft.waypoints.length} bend point${draft.waypoints.length === 1 ? "" : "s"}`}
+          aria-pressed={draft.routeMode === "manual"}
+          onClick={toggleGeometry}
+        >
+          <span aria-hidden="true">⌁</span>
+          <span className="visuallyHidden">Geometry</span>
+        </button>
+        <button
+          type="button"
+          className="v2ConnectorVisualIconButton"
+          title="Reset route"
+          disabled={saveStatus === "saving" || (draft.routeMode === "auto" && draft.waypoints.length === 0)}
+          onClick={() => void resetRoute()}
+        >
+          <span aria-hidden="true">↺</span>
+          <span className="visuallyHidden">Reset route</span>
+        </button>
+        <span
+          className={error ? "v2ConnectorVisualEditError" : "v2ConnectorVisualEditStatus"}
+          title="Status"
+        >
+          {error ?? (saveStatus === "saving" ? "Saving..." : isDirty ? "Unsaved" : "Saved")}
         </span>
-        <div>
-          <button type="button" disabled={!isDirty || saveStatus === "saving"} onClick={cancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="v2ConnectorVisualEditPrimary"
-            disabled={!isDirty || saveStatus === "saving"}
-            onClick={() => void save()}
-          >
-            Save
-          </button>
-        </div>
-      </footer>
+        <button
+          type="button"
+          className="v2ConnectorVisualTextButton"
+          title="Cancel"
+          disabled={!isDirty || saveStatus === "saving"}
+          onClick={cancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          className={`v2ConnectorVisualTextButton v2ConnectorVisualSaveButton ${isDirty ? "v2ConnectorVisualSaveButtonDirty" : ""}`}
+          title="Save"
+          disabled={!isDirty || saveStatus === "saving"}
+          onClick={() => void save()}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className="v2ConnectorVisualIconButton"
+          title="Close"
+          aria-label="Close connector visual editor"
+          onClick={cancel}
+        >
+          <X size={15} strokeWidth={2.2} />
+        </button>
+      </div>
     </section>
   );
 }
