@@ -17,8 +17,9 @@ type Props = {
   onCancel: () => void;
 };
 
-type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition">> & {
+type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition" | "labelSegmentIndex">> & {
   labelPosition?: V2ConnectionVisualStyle["labelPosition"];
+  labelSegmentIndex?: V2ConnectionVisualStyle["labelSegmentIndex"];
 };
 
 const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
@@ -40,6 +41,9 @@ function normalizeStyle(style: V2ConnectionVisualStyle | undefined): VisualStyle
     routeMode: style?.routeMode ?? "auto",
     waypoints: Array.isArray(style?.waypoints) ? style.waypoints : [],
     ...(style?.routeMode === "manual" && style?.labelPosition ? { labelPosition: style.labelPosition } : {}),
+    ...(style?.routeMode === "manual" && typeof style?.labelSegmentIndex === "number"
+      ? { labelSegmentIndex: style.labelSegmentIndex }
+      : {}),
   };
 }
 
@@ -90,7 +94,13 @@ export function V2ConnectorVisualEditPanel({
   }
 
   async function resetRoute() {
-    const next = { ...draft, routeMode: "auto" as const, waypoints: [], labelPosition: null };
+    const next = {
+      ...draft,
+      routeMode: "auto" as const,
+      waypoints: [],
+      labelPosition: null,
+      labelSegmentIndex: null,
+    };
     setDraft(next);
     setError(null);
     onPreview(connection.id, next);
@@ -104,7 +114,7 @@ export function V2ConnectorVisualEditPanel({
   function toggleGeometry() {
     updateDraft(
       draft.routeMode === "manual"
-        ? { routeMode: "auto", labelPosition: null }
+        ? { routeMode: "auto", labelPosition: null, labelSegmentIndex: null }
         : { routeMode: "manual" }
     );
   }

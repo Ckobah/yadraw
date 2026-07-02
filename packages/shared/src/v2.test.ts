@@ -273,12 +273,14 @@ describe("v2ConnectionVisualStyleSchema", () => {
       v2ConnectionVisualStyleSchema.parse({
         routeMode: "auto",
         waypoints: [],
-        labelPosition: null
+        labelPosition: null,
+        labelSegmentIndex: null
       })
     ).toEqual({
       routeMode: "auto",
       waypoints: [],
-      labelPosition: null
+      labelPosition: null,
+      labelSegmentIndex: null
     });
 
     expect(
@@ -288,7 +290,8 @@ describe("v2ConnectionVisualStyleSchema", () => {
           { x: 120, y: 80 },
           { x: 180, y: 160 }
         ],
-        labelPosition: { x: 150, y: 120 }
+        labelPosition: { x: 150, y: 120 },
+        labelSegmentIndex: 1
       })
     ).toEqual({
       routeMode: "manual",
@@ -296,7 +299,8 @@ describe("v2ConnectionVisualStyleSchema", () => {
         { x: 120, y: 80 },
         { x: 180, y: 160 }
       ],
-      labelPosition: { x: 150, y: 120 }
+      labelPosition: { x: 150, y: 120 },
+      labelSegmentIndex: 1
     });
   });
 
@@ -331,6 +335,11 @@ describe("v2ConnectionVisualStyleSchema", () => {
     expect(() =>
       v2ConnectionVisualStyleSchema.parse({
         labelPosition: { x: 10, y: Number.NEGATIVE_INFINITY }
+      })
+    ).toThrow();
+    expect(() =>
+      v2ConnectionVisualStyleSchema.parse({
+        labelSegmentIndex: -1
       })
     ).toThrow();
   });

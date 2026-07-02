@@ -934,7 +934,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setSelectedConnectionId(edge.id);
     setSelectedCardId(null);
     setVisualEditingCardId(null);
-    setVisualEditingConnectionId(null);
+    setVisualEditingConnectionId((current) => (current === edge.id ? current : null));
     setCardActionError(null);
     setConnectionCreateError(null);
   }, []);

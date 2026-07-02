@@ -28,7 +28,6 @@ type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
-const LABEL_WAYPOINT_DISTANCE = 28;
 
 function isFinitePoint(point: V2ConnectionWaypoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
@@ -221,6 +220,29 @@ function nearestSegmentIndex(points: Point[], point: Point): number {
   return bestIndex;
 }
 
+function clampSegmentIndex(index: number | null | undefined, segmentCount: number): number | null {
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || segmentCount <= 0) {
+    return null;
+  }
+  return Math.min(index, segmentCount - 1);
+}
+
+function moveWaypointSegment(waypoints: Point[], segmentIndex: number, delta: Point): Point[] {
+  return normalizeWaypoints(
+    waypoints.map((waypoint, index) => {
+      const movePreviousEndpoint = index === segmentIndex - 1;
+      const moveNextEndpoint = index === segmentIndex;
+      return movePreviousEndpoint || moveNextEndpoint
+        ? { x: waypoint.x + delta.x, y: waypoint.y + delta.y }
+        : waypoint;
+    })
+  );
+}
+
+function getSegmentOrientation(start: Point, end: Point): "horizontal" | "vertical" {
+  return Math.abs(end.x - start.x) >= Math.abs(end.y - start.y) ? "horizontal" : "vertical";
+}
+
 export function V2ConnectorEdge({
   id,
   sourceX,
@@ -326,22 +348,6 @@ export function V2ConnectorEdge({
     return [{ x: sourceX, y: sourceY }, ...nextWaypoints, { x: targetX, y: targetY }];
   }
 
-  function updateLabelRoute(labelPoint: Point, baseWaypoints = getEditableWaypoints()): Point[] {
-    const normalized = normalizeWaypoints(baseWaypoints);
-    const nearestWaypointIndex = normalized.findIndex(
-      (waypoint) => distance(waypoint, labelPoint) < LABEL_WAYPOINT_DISTANCE
-    );
-
-    if (nearestWaypointIndex >= 0) {
-      return normalized.map((waypoint, index) =>
-        index === nearestWaypointIndex ? labelPoint : waypoint
-      );
-    }
-
-    const insertAfterSegment = nearestSegmentIndex(getRoutePoints(normalized), labelPoint);
-    return insertWaypoint(normalized, insertAfterSegment, labelPoint);
-  }
-
   function handleSegmentDoubleClick(
     event: ReactMouseEvent<SVGPathElement>,
     segmentIndex: number
@@ -366,7 +372,14 @@ export function V2ConnectorEdge({
     const startClient = { x: event.clientX, y: event.clientY };
     const startFlow = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
     const baseWaypoints = getEditableWaypoints();
+    const baseRoutePoints = getRoutePoints(baseWaypoints);
+    const baseLabelPosition = savedLabelPosition ?? labelPosition;
+    const baseLabelSegmentIndex =
+      clampSegmentIndex(visualStyle.labelSegmentIndex, baseRoutePoints.length - 1) ??
+      nearestSegmentIndex(baseRoutePoints, baseLabelPosition);
+    const shouldMoveLabel = baseLabelSegmentIndex === segmentIndex;
     let latestWaypoints = baseWaypoints;
+    let latestLabelPosition = baseLabelPosition;
     let didDrag = false;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
@@ -375,23 +388,31 @@ export function V2ConnectorEdge({
       didDrag = true;
       const point = getEventFlowPoint(moveEvent, screenToFlowPosition);
       const delta = { x: point.x - startFlow.x, y: point.y - startFlow.y };
-      const moved = baseWaypoints.map((waypoint, index) => {
-        const movePreviousEndpoint = index === segmentIndex - 1;
-        const moveNextEndpoint = index === segmentIndex;
-        return movePreviousEndpoint || moveNextEndpoint
-          ? { x: waypoint.x + delta.x, y: waypoint.y + delta.y }
-          : waypoint;
-      });
-      latestWaypoints = normalizeWaypoints(moved);
+      latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, delta);
+      latestLabelPosition = shouldMoveLabel
+        ? { x: baseLabelPosition.x + delta.x, y: baseLabelPosition.y + delta.y }
+        : baseLabelPosition;
 
-      previewWaypoints(latestWaypoints);
+      previewVisualStyle({
+        routeMode: "manual",
+        waypoints: latestWaypoints,
+        ...(shouldMoveLabel
+          ? { labelPosition: latestLabelPosition, labelSegmentIndex: segmentIndex }
+          : {}),
+      });
     };
 
     const handlePointerUp = () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
       if (didDrag) {
-        void saveWaypoints(latestWaypoints);
+        void saveVisualStyle({
+          routeMode: "manual",
+          waypoints: latestWaypoints,
+          ...(shouldMoveLabel
+            ? { labelPosition: latestLabelPosition, labelSegmentIndex: segmentIndex }
+            : {}),
+        });
       }
     };
 
@@ -447,20 +468,38 @@ export function V2ConnectorEdge({
     const startClient = { x: event.clientX, y: event.clientY };
     const currentLabelPosition = savedLabelPosition ?? labelPosition;
     const baseWaypoints = getEditableWaypoints();
+    const baseRoutePoints = getRoutePoints(baseWaypoints);
+    const segmentIndex =
+      clampSegmentIndex(visualStyle.labelSegmentIndex, baseRoutePoints.length - 1) ??
+      nearestSegmentIndex(baseRoutePoints, currentLabelPosition);
+    const segmentStart = baseRoutePoints[segmentIndex] ?? baseRoutePoints[0] ?? currentLabelPosition;
+    const segmentEnd = baseRoutePoints[segmentIndex + 1] ?? segmentStart;
+    const segmentOrientation = getSegmentOrientation(segmentStart, segmentEnd);
     let latestLabelPosition = currentLabelPosition;
-    let latestWaypoints = updateLabelRoute(currentLabelPosition, baseWaypoints);
+    let latestWaypoints = baseWaypoints;
     let didDrag = false;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dragDistance = Math.hypot(moveEvent.clientX - startClient.x, moveEvent.clientY - startClient.y);
       if (dragDistance < 3 && !didDrag) return;
       didDrag = true;
-      latestLabelPosition = getEventFlowPoint(moveEvent, screenToFlowPosition);
-      latestWaypoints = updateLabelRoute(latestLabelPosition, baseWaypoints);
+      const point = getEventFlowPoint(moveEvent, screenToFlowPosition);
+      const startFlow = getEventFlowPoint({ clientX: startClient.x, clientY: startClient.y }, screenToFlowPosition);
+      const delta = { x: point.x - startFlow.x, y: point.y - startFlow.y };
+      const segmentDelta =
+        segmentOrientation === "horizontal"
+          ? { x: 0, y: delta.y }
+          : { x: delta.x, y: 0 };
+      latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, segmentDelta);
+      latestLabelPosition = {
+        x: currentLabelPosition.x + delta.x,
+        y: currentLabelPosition.y + delta.y,
+      };
       previewVisualStyle({
         routeMode: "manual",
         waypoints: latestWaypoints,
         labelPosition: latestLabelPosition,
+        labelSegmentIndex: segmentIndex,
       });
     };
 
@@ -472,6 +511,7 @@ export function V2ConnectorEdge({
           routeMode: "manual",
           waypoints: latestWaypoints,
           labelPosition: latestLabelPosition,
+          labelSegmentIndex: segmentIndex,
         });
       }
     };
@@ -503,6 +543,7 @@ export function V2ConnectorEdge({
           className={canEditGeometry ? "v2ConnectorEdgeInteraction" : "v2ConnectorEdgeInteractionHidden"}
           d={segmentPath}
           fill="none"
+          onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => handleSegmentDoubleClick(event, index)}
           onPointerDown={(event) => handleSegmentPointerDown(event, index)}
         />
