@@ -9,13 +9,19 @@ import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
+import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
+import type { V2LinkedFieldDraft } from "./v2-linked-fields";
 
 type V2CardInspectorProps = {
   card: V2Card;
   cardType: V2CardType | null;
+  cardTypes: V2CardType[];
   incomingConnections: V2Connection[];
   outgoingConnections: V2Connection[];
   cardById: Map<string, V2Card>;
+  allCards: V2Card[];
+  allConnections: V2Connection[];
+  linkedFieldDrafts: V2LinkedFieldDraft[];
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
   actionError: string | null;
@@ -27,6 +33,8 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
+  onAddLinkedFieldDraft: (draft: V2LinkedFieldDraft) => void;
+  onRemoveLinkedFieldDraft: (draftId: string) => void;
   onDuplicateCard: (cardId: string) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
   onClose: () => void;
@@ -35,14 +43,20 @@ type V2CardInspectorProps = {
 export function V2CardInspector({
   card,
   cardType,
+  cardTypes,
   incomingConnections,
   outgoingConnections,
   cardById,
+  allCards,
+  allConnections,
+  linkedFieldDrafts,
   saveStatus,
   pendingAction,
   actionError,
   onUpdateCardBasics,
   onUpdateCardData,
+  onAddLinkedFieldDraft,
+  onRemoveLinkedFieldDraft,
   onDuplicateCard,
   onDeleteCard,
   onClose,
@@ -121,6 +135,18 @@ export function V2CardInspector({
           card={card}
           saveStatus={saveStatus}
           onUpdateCardData={onUpdateCardData}
+        />
+        <V2LinkedFieldsPreview
+          card={card}
+          cardTypes={cardTypes}
+          incomingConnections={incomingConnections}
+          outgoingConnections={outgoingConnections}
+          cardById={cardById}
+          allCards={allCards}
+          allConnections={allConnections}
+          drafts={linkedFieldDrafts}
+          onAddDraft={onAddLinkedFieldDraft}
+          onRemoveDraft={onRemoveLinkedFieldDraft}
         />
         <V2CardAttachmentsSection cardId={card.id} />
         <V2CardConnectionsSection

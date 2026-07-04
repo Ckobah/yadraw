@@ -4287,6 +4287,155 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.v2LinkedFieldsSection {
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 20%, #e4e7f0);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 5%, #fff);
+}
+
+.v2LinkedFieldsBadge {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 20%, #e4e7f0);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--v2-inspector-accent);
+  font-size: 10.5px;
+  font-weight: 780;
+  line-height: 1;
+}
+
+.v2LinkedFieldsBuilder {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.v2LinkedFieldControl {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v2LinkedFieldControl > span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1;
+}
+
+.v2LinkedFieldGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 8px;
+}
+
+.v2LinkedFieldHint,
+.v2LinkedFieldWarning,
+.v2LinkedFieldError {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 660;
+  line-height: 1.3;
+}
+
+.v2LinkedFieldHint {
+  color: #667085;
+}
+
+.v2LinkedFieldWarning {
+  color: #b45309;
+}
+
+.v2LinkedFieldError {
+  color: #c2410c;
+}
+
+.v2LinkedFieldAddButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 36%, #e4e7f0);
+  border-radius: 10px;
+  background: var(--v2-inspector-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.v2LinkedFieldAddButton:hover,
+.v2LinkedFieldAddButton:focus-visible {
+  filter: brightness(0.96);
+  outline: 0;
+}
+
+.v2LinkedFieldResultList {
+  display: grid;
+  gap: 7px;
+}
+
+.v2LinkedFieldResultRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.v2LinkedFieldResultText {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v2LinkedFieldResultText strong,
+.v2LinkedFieldResultText span,
+.v2LinkedFieldResultText em,
+.v2LinkedFieldResultText p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.v2LinkedFieldResultText strong {
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.v2LinkedFieldResultText span {
+  color: #182230;
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: pre-wrap;
+}
+
+.v2LinkedFieldResultText em {
+  color: #7b8495;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 620;
+}
+
+.v2LinkedFieldResultText p {
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 660;
+}
+
 .v2InspectorEmpty {
   margin: 0;
   color: #8a93a5;

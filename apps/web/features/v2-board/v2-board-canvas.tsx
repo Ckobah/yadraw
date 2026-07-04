@@ -59,6 +59,7 @@ import {
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
+import type { V2LinkedFieldDraft } from "./v2-linked-fields";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -333,6 +334,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [linkedFieldDrafts, setLinkedFieldDrafts] = useState<V2LinkedFieldDraft[]>([]);
   const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
@@ -425,6 +427,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     () => nodes.map((node) => node.data.card),
     [nodes]
   );
+  const boardCards = assistantCards;
   const assistantContext = useMemo<V2BoardAssistantContext>(
     () => ({
       board,
@@ -760,6 +763,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           current.filter(
             (connection) =>
               connection.sourceCardId !== cardId && connection.targetCardId !== cardId
+          )
+        );
+        setLinkedFieldDrafts((current) =>
+          current.filter(
+            (draft) => draft.targetCardId !== cardId && draft.sourceCardId !== cardId
           )
         );
         setSelectedCardId((current) => (current === cardId ? null : current));
@@ -1334,14 +1342,24 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         <V2CardInspector
           card={selectedCard}
           cardType={selectedCardType}
+          cardTypes={cardTypes}
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}
           cardById={cardById}
+          allCards={boardCards}
+          allConnections={connectionRecords}
+          linkedFieldDrafts={linkedFieldDrafts}
           saveStatus={saveStatus}
           pendingAction={pendingCardAction?.cardId === selectedCard.id ? pendingCardAction.action : null}
           actionError={cardActionError?.cardId === selectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
+          onAddLinkedFieldDraft={(draft) => {
+            setLinkedFieldDrafts((current) => [...current, draft]);
+          }}
+          onRemoveLinkedFieldDraft={(draftId) => {
+            setLinkedFieldDrafts((current) => current.filter((draft) => draft.id !== draftId));
+          }}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}
