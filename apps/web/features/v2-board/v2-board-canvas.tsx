@@ -20,7 +20,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Play } from "lucide-react";
+import { Bot, Play } from "lucide-react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -56,6 +56,8 @@ import {
   runV2BoardDryRun,
   V2ApiError,
 } from "./api";
+import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
+import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 
 type Props = {
@@ -330,6 +332,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
+  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
@@ -417,6 +420,21 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const selectedConnection = useMemo(
     () => connectionRecords.find((connection) => connection.id === selectedConnectionId) ?? null,
     [connectionRecords, selectedConnectionId]
+  );
+  const assistantCards = useMemo(
+    () => nodes.map((node) => node.data.card),
+    [nodes]
+  );
+  const assistantContext = useMemo<V2BoardAssistantContext>(
+    () => ({
+      board,
+      cards: assistantCards,
+      connections: connectionRecords,
+      cardTypes,
+      selectedCardId,
+      dryRunResult,
+    }),
+    [assistantCards, board, cardTypes, connectionRecords, dryRunResult, selectedCardId]
   );
 
   useEffect(() => {
@@ -1243,6 +1261,15 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         <div className="v2RunToolbar nodrag nopan">
           <button
             type="button"
+            className="v2AssistantOpenButton"
+            onClick={() => setIsAssistantOpen((current) => !current)}
+            aria-expanded={isAssistantOpen}
+          >
+            <Bot size={14} strokeWidth={2.4} />
+            <span>AI Assistant</span>
+          </button>
+          <button
+            type="button"
             className="v2RunDryRunButton"
             onClick={() => void handleRunDryRun()}
             disabled={isDryRunRunning}
@@ -1257,6 +1284,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             </p>
           ) : null}
         </div>
+        {isAssistantOpen ? (
+          <V2AiAssistantPanel
+            context={assistantContext}
+            onClose={() => setIsAssistantOpen(false)}
+          />
+        ) : null}
         {dryRunResult ? (
           <V2RunDryRunPanel
             result={dryRunResult}
