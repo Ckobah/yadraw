@@ -2492,6 +2492,200 @@ button:disabled {
   opacity: 0.54;
 }
 
+.v2RunToolbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 22;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.v2RunDryRunButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  border: 1px solid #cbd8e7;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: #182230;
+  font-size: 13px;
+  font-weight: 780;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.v2RunDryRunButton:hover:not(:disabled),
+.v2RunDryRunButton:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--green) 45%, #cbd8e7);
+  background: #f7fef9;
+  color: var(--green);
+  outline: 0;
+}
+
+.v2RunDryRunButton:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.v2RunDryRunError {
+  max-width: 280px;
+  margin: 0;
+  border: 1px solid #f3c4c4;
+  border-radius: 8px;
+  background: #fff7f7;
+  padding: 7px 10px;
+  color: #a03b3b;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  box-shadow: 0 12px 34px rgba(160, 59, 59, 0.12);
+}
+
+.v2DryRunPanel {
+  position: absolute;
+  top: 62px;
+  right: 16px;
+  z-index: 24;
+  display: grid;
+  gap: 14px;
+  width: min(360px, calc(100vw - 40px));
+  max-height: min(620px, calc(100vh - 96px));
+  overflow: auto;
+  border: 1px solid #d8e0ec;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 14px;
+  box-shadow: 0 20px 54px rgba(24, 34, 48, 0.16);
+  pointer-events: auto;
+}
+
+.v2DryRunPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2DryRunPanelHeader div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.v2DryRunPanelHeader span {
+  color: #7b8495;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.v2DryRunPanelHeader strong {
+  color: #182230;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.v2DryRunCloseButton {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d8e0ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+}
+
+.v2DryRunCloseButton:hover,
+.v2DryRunCloseButton:focus-visible {
+  border-color: var(--blue);
+  color: var(--blue);
+  outline: 0;
+}
+
+.v2DryRunSummary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin: 0;
+}
+
+.v2DryRunSummary div {
+  min-width: 0;
+  border: 1px solid #e5ebf3;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 9px 10px;
+}
+
+.v2DryRunSummary dt,
+.v2DryRunSection h3 {
+  margin: 0 0 5px;
+  color: #7b8495;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.v2DryRunSummary dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #182230;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.v2DryRunSection {
+  display: grid;
+  gap: 8px;
+}
+
+.v2DryRunSection p {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.v2DryRunSteps,
+.v2DryRunWarnings {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.v2DryRunSteps li,
+.v2DryRunWarnings li {
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.v2DryRunSteps strong {
+  display: block;
+  overflow-wrap: anywhere;
+  color: #182230;
+  font-size: 13px;
+}
+
+.v2DryRunSteps span {
+  color: #667085;
+  font-weight: 700;
+}
+
+.v2DryRunWarnings li {
+  overflow-wrap: anywhere;
+}
+
 .v2CreateToolbarPopover {
   display: grid;
   gap: 10px;

@@ -5,6 +5,7 @@ import {
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectorSlotSchema,
+  v2RunDryRunBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
   type V2BoardDetail,
@@ -13,6 +14,8 @@ import {
   type V2Connection,
   type V2CreateCardRequest,
   type V2CreateConnectionRequest,
+  type V2DryRunResult,
+  type V2RunDryRunRequest,
   type V2UpdateCardRequest,
   type V2UpdateConnectionRequest
 } from "@yadraw/shared";
@@ -48,6 +51,7 @@ export class V2ServiceError extends Error {
 export type V2BoardService = {
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
+  runBoardDryRun(context: RequestContext, boardId: string, input?: V2RunDryRunRequest): Promise<V2DryRunResult>;
   createCard(context: RequestContext, boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
   duplicateCard(context: RequestContext, cardId: string): Promise<V2Card>;
   updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
@@ -188,6 +192,26 @@ function sha256Hex(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
 }
 
+function compareNullableIso(a?: string | null, b?: string | null): number {
+  if (a && b && a !== b) return a.localeCompare(b);
+  if (a && !b) return -1;
+  if (!a && b) return 1;
+  return 0;
+}
+
+function compareDryRunConnection(
+  a: V2Connection,
+  b: V2Connection,
+  cardById: Map<string, V2Card>
+): number {
+  return (
+    compareNullableIso(a.createdAt, b.createdAt) ||
+    a.id.localeCompare(b.id) ||
+    (cardById.get(a.targetCardId)?.title ?? "").localeCompare(cardById.get(b.targetCardId)?.title ?? "") ||
+    a.targetCardId.localeCompare(b.targetCardId)
+  );
+}
+
 export function createV2BoardService(
   repository: V2Repository,
   options: {
@@ -256,6 +280,97 @@ export function createV2BoardService(
     async listCardTypes(context, workspaceId) {
       await authorizeWorkspace(context, workspaceId, "read");
       return { cardTypes: await repository.listCardTypes(workspaceId) };
+    },
+
+    async runBoardDryRun(context, boardId, rawInput = {}) {
+      const input = v2RunDryRunBodySchema.parse(rawInput);
+      const detail = await repository.getBoardDetail(boardId);
+      if (!detail) {
+        notFound("Board not found");
+      }
+      await authorizeWorkspace(context, detail.workspace.id, "read");
+
+      const cardById = new Map(detail.cards.map((card) => [card.id, card]));
+      const typeById = new Map(detail.cardTypes.map((cardType) => [cardType.id, cardType]));
+      const startCardId = input.startCardId ?? detail.cards[0]?.id;
+      const warnings: string[] = [];
+
+      if (!startCardId) {
+        return {
+          ok: true,
+          mode: "dry-run",
+          boardId: detail.board.id,
+          steps: [],
+          warnings: ["Board has no cards to dry-run"]
+        };
+      }
+
+      if (!cardById.has(startCardId)) {
+        notFound("Start card not found on board");
+      }
+
+      const outgoingByCardId = new Map<string, V2Connection[]>();
+      for (const connection of detail.connections.filter((item) => item.status === "active")) {
+        const outgoing = outgoingByCardId.get(connection.sourceCardId) ?? [];
+        outgoing.push(connection);
+        outgoingByCardId.set(connection.sourceCardId, outgoing);
+      }
+      for (const outgoing of outgoingByCardId.values()) {
+        outgoing.sort((a, b) => compareDryRunConnection(a, b, cardById));
+      }
+
+      const visited = new Set<string>();
+      const queued = new Set<string>([startCardId]);
+      const queue = [startCardId];
+      const steps: V2DryRunResult["steps"] = [];
+
+      while (queue.length > 0) {
+        const currentCardId = queue.shift()!;
+        queued.delete(currentCardId);
+        if (visited.has(currentCardId)) continue;
+
+        const card = cardById.get(currentCardId);
+        if (!card) continue;
+
+        visited.add(currentCardId);
+        steps.push({
+          cardId: card.id,
+          title: card.title,
+          type: typeById.get(card.cardTypeId)?.key ?? "unknown",
+          status: "would_run",
+          message: "Would process this card"
+        });
+
+        const outgoing = outgoingByCardId.get(currentCardId) ?? [];
+        if (outgoing.length === 0) {
+          warnings.push(`No outgoing connections from "${card.title}"`);
+          continue;
+        }
+
+        for (const connection of outgoing) {
+          const target = cardById.get(connection.targetCardId);
+          if (!target) continue;
+
+          if (visited.has(target.id)) {
+            warnings.push(`Cycle detected: "${card.title}" -> "${target.title}"`);
+            continue;
+          }
+
+          if (!queued.has(target.id)) {
+            queue.push(target.id);
+            queued.add(target.id);
+          }
+        }
+      }
+
+      return {
+        ok: true,
+        mode: "dry-run",
+        boardId: detail.board.id,
+        startCardId,
+        steps,
+        warnings
+      };
     },
 
     async createCard(context, boardId, rawInput) {

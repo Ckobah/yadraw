@@ -20,6 +20,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { Play } from "lucide-react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -27,6 +28,7 @@ import type {
   V2ConnectionVisualStyle,
   V2CardType,
   V2CardVisualStyle,
+  V2DryRunResult,
 } from "@yadraw/shared";
 import {
   V2_CARD_MIN_SIZE,
@@ -51,8 +53,10 @@ import {
   updateV2Connection,
   deleteV2Card,
   duplicateV2Card,
+  runV2BoardDryRun,
   V2ApiError,
 } from "./api";
+import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -323,6 +327,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
+  const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+  const [isDryRunRunning, setIsDryRunRunning] = useState(false);
   const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
@@ -793,6 +800,23 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [board.id, board.workspaceId, cardTypeMap, setNodes]
   );
 
+  const handleRunDryRun = useCallback(async () => {
+    setIsDryRunRunning(true);
+    setDryRunError(null);
+    try {
+      const result = await runV2BoardDryRun(
+        board.id,
+        selectedCardId ? { startCardId: selectedCardId } : {}
+      );
+      setDryRunResult(result);
+    } catch (err) {
+      console.error("Failed to run dry-run:", err);
+      setDryRunError("Dry-run could not be completed.");
+    } finally {
+      setIsDryRunRunning(false);
+    }
+  }, [board.id, selectedCardId]);
+
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     setNodes((nds) =>
@@ -1216,6 +1240,29 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           cardTypes={cardTypes}
           onCreateCard={handleCreateCard}
         />
+        <div className="v2RunToolbar nodrag nopan">
+          <button
+            type="button"
+            className="v2RunDryRunButton"
+            onClick={() => void handleRunDryRun()}
+            disabled={isDryRunRunning}
+            aria-busy={isDryRunRunning}
+          >
+            <Play size={14} strokeWidth={2.4} />
+            <span>{isDryRunRunning ? "Running..." : "Run dry-run"}</span>
+          </button>
+          {dryRunError ? (
+            <p className="v2RunDryRunError" role="alert">
+              {dryRunError}
+            </p>
+          ) : null}
+        </div>
+        {dryRunResult ? (
+          <V2RunDryRunPanel
+            result={dryRunResult}
+            onClose={() => setDryRunResult(null)}
+          />
+        ) : null}
         <Background color="var(--line)" gap={24} size={1} />
         <Controls showInteractive={false} />
         <MiniMap

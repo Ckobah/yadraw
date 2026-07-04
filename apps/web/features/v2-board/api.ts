@@ -11,6 +11,7 @@ import type {
   V2ConnectionAttachment,
   V2ConnectionVisualStyle,
   V2CreateCardRequest,
+  V2DryRunResult,
 } from "@yadraw/shared";
 import type { V2CardType } from "@yadraw/shared";
 
@@ -315,6 +316,30 @@ export async function createV2Connection(
     );
   }
   return response.json() as Promise<V2Connection>;
+}
+
+export async function runV2BoardDryRun(
+  boardId: string,
+  input: { startCardId?: string } = {}
+): Promise<V2DryRunResult> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/run/dry-run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Dry-run request failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2DryRunResult>;
 }
 
 export async function deleteV2Connection(

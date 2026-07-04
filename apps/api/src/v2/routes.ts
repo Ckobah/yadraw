@@ -30,6 +30,15 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.post("/v2/boards/:boardId/run/dry-run", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.runBoardDryRun(request.requestContext, boardId, request.body as any);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.post("/v2/boards/:boardId/cards", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

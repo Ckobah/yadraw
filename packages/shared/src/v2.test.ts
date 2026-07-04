@@ -12,8 +12,10 @@ import {
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
+  v2DryRunResultSchema,
   v2FileProcessingStatusSchema,
   v2FileSchema,
+  v2RunDryRunBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateCardBodySchema
 } from "./v2.js";
@@ -242,6 +244,34 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
     expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
+    expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
+  });
+
+  it("parses dry-run requests and results", () => {
+    expect(v2RunDryRunBodySchema.parse({ startCardId: cardId })).toEqual({ startCardId: cardId });
+    expect(v2RunDryRunBodySchema.parse({})).toEqual({});
+
+    expect(
+      v2DryRunResultSchema.parse({
+        ok: true,
+        mode: "dry-run",
+        boardId,
+        startCardId: cardId,
+        steps: [
+          {
+            cardId,
+            title: "Source",
+            type: "source",
+            status: "would_run",
+            message: "Would process this card"
+          }
+        ],
+        warnings: []
+      })
+    ).toMatchObject({
+      mode: "dry-run",
+      steps: [{ status: "would_run" }]
+    });
   });
 });
 

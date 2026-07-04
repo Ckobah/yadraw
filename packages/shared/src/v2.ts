@@ -330,6 +330,33 @@ export const v2DeleteResultSchema = z.object({
   id: v2UuidSchema
 });
 
+export const v2RunDryRunParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2RunDryRunBodySchema = z
+  .object({
+    startCardId: v2UuidSchema.optional()
+  })
+  .strict();
+
+export const v2DryRunStepSchema = z.object({
+  cardId: v2UuidSchema,
+  title: z.string().min(1),
+  type: z.string().min(1),
+  status: z.literal("would_run"),
+  message: z.string().min(1)
+});
+
+export const v2DryRunResultSchema = z.object({
+  ok: z.literal(true),
+  mode: z.literal("dry-run"),
+  boardId: v2UuidSchema,
+  startCardId: v2UuidSchema.optional(),
+  steps: z.array(v2DryRunStepSchema),
+  warnings: z.array(z.string())
+});
+
 export const v2ApiContracts = {
   getBoard: {
     method: "GET",
@@ -382,6 +409,13 @@ export const v2ApiContracts = {
     path: "/v2/connections/{connectionId}",
     params: v2DeleteConnectionParamsSchema,
     response: v2DeleteResultSchema
+  },
+  runBoardDryRun: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/run/dry-run",
+    params: v2RunDryRunParamsSchema,
+    body: v2RunDryRunBodySchema,
+    response: v2DryRunResultSchema
   }
 } as const;
 
@@ -437,7 +471,11 @@ export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;
+export type V2RunDryRunInput = z.infer<typeof v2RunDryRunBodySchema>;
+export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
+export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionRequest = z.input<typeof v2UpdateConnectionBodySchema>;
+export type V2RunDryRunRequest = z.input<typeof v2RunDryRunBodySchema>;
