@@ -5,6 +5,7 @@
  * adding the x-yadraw-user-id header server-side so V2_USER_ID
  * never reaches the browser.
  */
+import "server-only";
 
 const apiBaseUrl =
   process.env.API_URL ??

@@ -1,5 +1,5 @@
 import type { V2BoardDetail } from "@yadraw/shared";
-import { fetchV2Board } from "../../../../features/v2-board/api";
+import { fetchV2Board } from "../../../../features/v2-board/server-api";
 import { V2BoardPage } from "../../../../features/v2-board/v2-board-page";
 import { V2BoardErrorState } from "../../../../features/v2-board/v2-board-error-state";
 
