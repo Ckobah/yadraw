@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { Link2, Pencil, X } from "lucide-react";
 import type {
   V2Card,
@@ -32,6 +32,17 @@ type V2LinkedFieldsPreviewProps = {
   onDeleteBinding: (bindingId: string) => Promise<void>;
 };
 
+type V2LinkedFieldMappingPayload = {
+  sourceCardId: string;
+  sourceCardTitle: string;
+  sourceCardTypeId?: string | null;
+  sourceCardTypeKey?: string | null;
+  direction: V2LinkedFieldDirection;
+  sourceFieldPath: string;
+};
+
+const LINKED_FIELD_DRAG_TYPE = "application/x-yadraw-v2-linked-field";
+
 function connectedCardForConnection(
   connection: V2Connection,
   direction: V2LinkedFieldDirection
@@ -44,6 +55,38 @@ function dataFieldOptions(card: V2Card | null): string[] {
     .sort((left, right) => left.localeCompare(right))
     .map((key) => `data.${key}`);
   return ["title", "description", ...fields];
+}
+
+function targetFieldFromSourcePath(sourceFieldPath: string): string {
+  const segments = sourceFieldPath
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  return segments[segments.length - 1] ?? "";
+}
+
+function readMappingPayload(payload: string): V2LinkedFieldMappingPayload | null {
+  try {
+    const parsed = JSON.parse(payload) as Partial<V2LinkedFieldMappingPayload>;
+    if (
+      typeof parsed.sourceCardId !== "string" ||
+      typeof parsed.sourceCardTitle !== "string" ||
+      typeof parsed.sourceFieldPath !== "string" ||
+      (parsed.direction !== "incoming" && parsed.direction !== "outgoing")
+    ) {
+      return null;
+    }
+    return {
+      sourceCardId: parsed.sourceCardId,
+      sourceCardTitle: parsed.sourceCardTitle,
+      sourceCardTypeId: parsed.sourceCardTypeId ?? null,
+      sourceCardTypeKey: parsed.sourceCardTypeKey ?? null,
+      direction: parsed.direction,
+      sourceFieldPath: parsed.sourceFieldPath,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function V2LinkedFieldsPreview({
@@ -69,6 +112,7 @@ export function V2LinkedFieldsPreview({
   const [draftError, setDraftError] = useState<string | null>(null);
   const [editingBindingId, setEditingBindingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isMappingDropActive, setIsMappingDropActive] = useState(false);
 
   const cardTypeById = useMemo(
     () => new Map(cardTypes.map((cardType) => [cardType.id, cardType])),
@@ -89,9 +133,45 @@ export function V2LinkedFieldsPreview({
   const selectedSourceCard = sourceCardId ? cardById.get(sourceCardId) ?? null : connectedCards[0] ?? null;
   const selectedSourceType = selectedSourceCard ? cardTypeById.get(selectedSourceCard.cardTypeId) ?? null : null;
   const sourceOptions = dataFieldOptions(selectedSourceCard);
+  const selectedCardType = cardTypeById.get(card.cardTypeId) ?? null;
+  const mappingColumns = {
+    incoming: incomingConnections
+      .map((connection) => {
+        const connectedCard = cardById.get(connectedCardForConnection(connection, "incoming"));
+        if (!connectedCard) return null;
+        const cardType = cardTypeById.get(connectedCard.cardTypeId) ?? null;
+        return { connection, card: connectedCard, cardType, fields: dataFieldOptions(connectedCard) };
+      })
+      .filter((item): item is {
+        connection: V2Connection;
+        card: V2Card;
+        cardType: V2CardType | null;
+        fields: string[];
+      } => Boolean(item)),
+    outgoing: outgoingConnections
+      .map((connection) => {
+        const connectedCard = cardById.get(connectedCardForConnection(connection, "outgoing"));
+        if (!connectedCard) return null;
+        const cardType = cardTypeById.get(connectedCard.cardTypeId) ?? null;
+        return { connection, card: connectedCard, cardType, fields: dataFieldOptions(connectedCard) };
+      })
+      .filter((item): item is {
+        connection: V2Connection;
+        card: V2Card;
+        cardType: V2CardType | null;
+        fields: string[];
+      } => Boolean(item)),
+  };
   const targetKeyWarning =
     targetField.trim() && Object.prototype.hasOwnProperty.call(card.data ?? {}, targetField.trim())
       ? "This key already exists in stored card data. Linked field will not overwrite it."
+      : null;
+  const duplicateTargetWarning =
+    targetField.trim() &&
+    targetBindings.some(
+      (binding) => binding.id !== editingBindingId && binding.targetField === targetField.trim()
+    )
+      ? "A linked field with this target key already exists."
       : null;
   const dynamicModeWarning =
     sourceMode === "connectedCard" && selectedSourceCard && !selectedSourceType
@@ -116,6 +196,92 @@ export function V2LinkedFieldsPreview({
     setSourceFieldPath(binding.sourceFieldPath);
     setEditingBindingId(binding.id);
     setDraftError(null);
+  }
+
+  function handleMappingDragStart(
+    event: DragEvent<HTMLButtonElement>,
+    payload: V2LinkedFieldMappingPayload
+  ) {
+    event.dataTransfer.effectAllowed = "copy";
+    event.dataTransfer.setData(LINKED_FIELD_DRAG_TYPE, JSON.stringify(payload));
+  }
+
+  function handleMappingDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsMappingDropActive(false);
+
+    const payload = readMappingPayload(event.dataTransfer.getData(LINKED_FIELD_DRAG_TYPE));
+    if (!payload) {
+      return;
+    }
+
+    const sourceCard = cardById.get(payload.sourceCardId) ?? null;
+    const sourceType = sourceCard ? cardTypeById.get(sourceCard.cardTypeId) ?? null : null;
+
+    setTargetField(targetFieldFromSourcePath(payload.sourceFieldPath));
+    setSourceFieldPath(payload.sourceFieldPath);
+    setDirection(payload.direction);
+    setSourceCardId(payload.sourceCardId);
+    setSourceMode(sourceType?.key ? "connectedCard" : "exactCard");
+    setEditingBindingId(null);
+    setDraftError(null);
+  }
+
+  function renderMappingCards(
+    items: typeof mappingColumns.incoming,
+    directionValue: V2LinkedFieldDirection,
+    emptyMessage: string
+  ) {
+    if (items.length === 0) {
+      return <p className="v2LinkedMappingEmpty">{emptyMessage}</p>;
+    }
+
+    return items.map((item) => (
+      <div key={item.connection.id} className="v2LinkedMappingCard">
+        <div className="v2LinkedMappingCardHeader">
+          <strong>{item.card.title}</strong>
+          {item.cardType ? (
+            <span>
+              {item.cardType.name} · {item.cardType.key}
+            </span>
+          ) : (
+            <span>No stable type</span>
+          )}
+        </div>
+        <div className="v2LinkedMappingFieldList" aria-label={`${item.card.title} fields`}>
+          {item.fields.map((fieldPath) => (
+            <button
+              key={`${item.card.id}-${fieldPath}`}
+              type="button"
+              draggable
+              className="v2LinkedMappingFieldChip"
+              onDragStart={(event) =>
+                handleMappingDragStart(event, {
+                  sourceCardId: item.card.id,
+                  sourceCardTitle: item.card.title,
+                  sourceCardTypeId: item.cardType?.id ?? null,
+                  sourceCardTypeKey: item.cardType?.key ?? null,
+                  direction: directionValue,
+                  sourceFieldPath: fieldPath,
+                })
+              }
+              onClick={() => {
+                setTargetField(targetFieldFromSourcePath(fieldPath));
+                setSourceFieldPath(fieldPath);
+                setDirection(directionValue);
+                setSourceCardId(item.card.id);
+                setSourceMode(item.cardType?.key ? "connectedCard" : "exactCard");
+                setEditingBindingId(null);
+                setDraftError(null);
+              }}
+              title={`Map ${fieldPath}`}
+            >
+              {fieldPath}
+            </button>
+          ))}
+        </div>
+      </div>
+    ));
   }
 
   async function handleSaveBinding() {
@@ -175,6 +341,69 @@ export function V2LinkedFieldsPreview({
       <div className="v2InspectorSectionHeader">
         <h3>Linked fields</h3>
         <span className="v2LinkedFieldsBadge">Saved rule - resolved live</span>
+      </div>
+
+      <div className="v2LinkedMappingView" aria-label="Linked fields mapping view">
+        <div className="v2LinkedMappingColumn">
+          <div className="v2LinkedMappingColumnHeader">
+            <span>IN</span>
+            <strong>Incoming cards</strong>
+          </div>
+          <div className="v2LinkedMappingCardList">
+            {renderMappingCards(mappingColumns.incoming, "incoming", "No incoming cards")}
+          </div>
+        </div>
+
+        <div className="v2LinkedMappingTarget">
+          <div className="v2LinkedMappingColumnHeader">
+            <span>TARGET</span>
+            <strong>{card.title}</strong>
+          </div>
+          {selectedCardType ? (
+            <p className="v2LinkedMappingType">
+              {selectedCardType.name} · {selectedCardType.key}
+            </p>
+          ) : null}
+          <div className="v2LinkedMappingTargetFields" aria-label="Selected card stored fields">
+            {dataFieldOptions(card).map((fieldPath) => (
+              <span key={fieldPath}>{fieldPath}</span>
+            ))}
+          </div>
+          <div
+            className={`v2LinkedFieldDropZone${isMappingDropActive ? " isActive" : ""}`}
+            onDragEnter={(event) => {
+              if (event.dataTransfer.types.includes(LINKED_FIELD_DRAG_TYPE)) {
+                event.preventDefault();
+                setIsMappingDropActive(true);
+              }
+            }}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes(LINKED_FIELD_DRAG_TYPE)) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }
+            }}
+            onDragLeave={() => setIsMappingDropActive(false)}
+            onDrop={handleMappingDrop}
+          >
+            <strong>Drop a source field here to create a linked field</strong>
+            <span>
+              {targetField && sourceFieldPath
+                ? `${targetField} from ${sourceFieldPath}`
+                : "The draft form will be filled before saving."}
+            </span>
+          </div>
+        </div>
+
+        <div className="v2LinkedMappingColumn">
+          <div className="v2LinkedMappingColumnHeader">
+            <span>OUT</span>
+            <strong>Outgoing cards</strong>
+          </div>
+          <div className="v2LinkedMappingCardList">
+            {renderMappingCards(mappingColumns.outgoing, "outgoing", "No outgoing cards")}
+          </div>
+        </div>
       </div>
 
       <div className="v2LinkedFieldsBuilder">
@@ -291,6 +520,7 @@ export function V2LinkedFieldsPreview({
           </p>
         ) : null}
         {targetKeyWarning ? <p className="v2LinkedFieldWarning">{targetKeyWarning}</p> : null}
+        {duplicateTargetWarning ? <p className="v2LinkedFieldWarning">{duplicateTargetWarning}</p> : null}
         {dynamicModeWarning ? <p className="v2LinkedFieldWarning">{dynamicModeWarning}</p> : null}
         {draftError ? <p className="v2LinkedFieldError">{draftError}</p> : null}
         {error ? <p className="v2LinkedFieldError">{error}</p> : null}

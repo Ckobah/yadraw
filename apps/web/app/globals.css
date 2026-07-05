@@ -4306,6 +4306,183 @@ button:disabled {
   line-height: 1;
 }
 
+.v2LinkedMappingView {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr) minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #e8edf5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.v2LinkedMappingColumn,
+.v2LinkedMappingTarget {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.v2LinkedMappingColumnHeader {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v2LinkedMappingColumnHeader span {
+  color: var(--v2-inspector-accent);
+  font-size: 10px;
+  font-weight: 820;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.v2LinkedMappingColumnHeader strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #1d2939;
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2LinkedMappingCardList {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  max-height: 218px;
+  min-width: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.v2LinkedMappingCard {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #e4e7f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.v2LinkedMappingCardHeader {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v2LinkedMappingCardHeader strong,
+.v2LinkedMappingCardHeader span,
+.v2LinkedMappingType {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2LinkedMappingCardHeader strong {
+  color: #182230;
+  font-size: 11.5px;
+  font-weight: 760;
+}
+
+.v2LinkedMappingCardHeader span,
+.v2LinkedMappingType {
+  color: #7b8495;
+  font-size: 10.5px;
+  font-weight: 640;
+}
+
+.v2LinkedMappingFieldList,
+.v2LinkedMappingTargetFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v2LinkedMappingTargetFields {
+  max-height: 76px;
+  overflow-y: auto;
+}
+
+.v2LinkedMappingFieldChip,
+.v2LinkedMappingTargetFields span {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 6px;
+  overflow: hidden;
+  border: 1px solid #e4e7f0;
+  border-radius: 999px;
+  background: #fff;
+  color: #475467;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2LinkedMappingFieldChip {
+  cursor: grab;
+}
+
+.v2LinkedMappingFieldChip:active {
+  cursor: grabbing;
+}
+
+.v2LinkedMappingFieldChip:hover,
+.v2LinkedMappingFieldChip:focus-visible {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 38%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  color: var(--v2-inspector-accent);
+  outline: 0;
+}
+
+.v2LinkedFieldDropZone {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  padding: 10px;
+  border: 1px dashed color-mix(in srgb, var(--v2-inspector-accent) 34%, #d0d5dd);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 4%, #fff);
+}
+
+.v2LinkedFieldDropZone.isActive {
+  border-color: var(--v2-inspector-accent);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 10%, #fff);
+}
+
+.v2LinkedFieldDropZone strong,
+.v2LinkedFieldDropZone span,
+.v2LinkedMappingEmpty {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.v2LinkedFieldDropZone strong {
+  color: #1d2939;
+  font-size: 11.5px;
+  font-weight: 760;
+}
+
+.v2LinkedFieldDropZone span,
+.v2LinkedMappingEmpty {
+  color: #7b8495;
+  font-size: 10.5px;
+  font-weight: 640;
+}
+
 .v2LinkedFieldsBuilder {
   display: grid;
   gap: 8px;
@@ -4501,6 +4678,12 @@ button:disabled {
   color: #b45309;
   font-size: 11px;
   font-weight: 660;
+}
+
+@media (max-width: 560px) {
+  .v2LinkedMappingView {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .v2InspectorEmpty {
