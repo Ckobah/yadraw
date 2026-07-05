@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, X } from "lucide-react";
 import type {
+  V2CardVisualStyle,
   V2CardType,
   V2CreateCardTypeRequest,
   V2UpdateCardTypeRequest,
@@ -22,6 +23,11 @@ type CardTypeDraft = {
   name: string;
   description: string;
   fields: V2CardTypeSchemaFieldDraft[];
+  defaultWidth: string;
+  defaultHeight: string;
+  fillColor: string;
+  borderColor: string;
+  textColor: string;
 };
 
 type V2CardTypeManagerProps = {
@@ -36,6 +42,10 @@ type V2CardTypeManagerProps = {
 };
 
 const CARD_TYPE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
+const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+const DEFAULT_FILL_COLOR = "#ffffff";
+const DEFAULT_BORDER_COLOR = "#d0d7de";
+const DEFAULT_TEXT_COLOR = "#111827";
 
 function draftFromCardType(cardType: V2CardType): CardTypeDraft {
   return {
@@ -44,6 +54,11 @@ function draftFromCardType(cardType: V2CardType): CardTypeDraft {
     name: cardType.name,
     description: cardType.description,
     fields: createV2CardTypeSchemaFieldDrafts(cardType.schema),
+    defaultWidth: String(cardType.defaultSize.width),
+    defaultHeight: String(cardType.defaultSize.height),
+    fillColor: cardType.defaultVisualStyle.fillColor ?? DEFAULT_FILL_COLOR,
+    borderColor: cardType.defaultVisualStyle.borderColor ?? DEFAULT_BORDER_COLOR,
+    textColor: cardType.defaultVisualStyle.textColor ?? DEFAULT_TEXT_COLOR,
   };
 }
 
@@ -54,6 +69,19 @@ function emptyDraft(): CardTypeDraft {
     name: "",
     description: "",
     fields: [],
+    defaultWidth: "300",
+    defaultHeight: "180",
+    fillColor: DEFAULT_FILL_COLOR,
+    borderColor: DEFAULT_BORDER_COLOR,
+    textColor: DEFAULT_TEXT_COLOR,
+  };
+}
+
+function buildDefaultVisualStyle(draft: CardTypeDraft): V2CardVisualStyle {
+  return {
+    fillColor: draft.fillColor.trim(),
+    borderColor: draft.borderColor.trim(),
+    textColor: draft.textColor.trim(),
   };
 }
 
@@ -118,6 +146,19 @@ export function V2CardTypeManager({
       return "Key must start with a lowercase letter and use lowercase letters, numbers, or underscores.";
     }
     if (!name) return "Name is required.";
+    const width = Number(draft.defaultWidth);
+    const height = Number(draft.defaultHeight);
+    if (!Number.isFinite(width) || width <= 0) return "Default width must be greater than 0.";
+    if (!Number.isFinite(height) || height <= 0) return "Default height must be greater than 0.";
+    for (const [label, value] of [
+      ["Fill color", draft.fillColor],
+      ["Border color", draft.borderColor],
+      ["Text color", draft.textColor],
+    ] as const) {
+      if (value.trim() && !COLOR_PATTERN.test(value.trim())) {
+        return `${label} must be a hex color like #ffffff.`;
+      }
+    }
     const duplicate = cardTypes.some(
       (cardType) => cardType.key === key && cardType.id !== draft.id
     );
@@ -154,12 +195,19 @@ export function V2CardTypeManager({
     setError(null);
     setMessage(null);
     try {
+      const defaultSize = {
+        width: Number(draft.defaultWidth),
+        height: Number(draft.defaultHeight),
+      };
+      const defaultVisualStyle = buildDefaultVisualStyle(draft);
       if (mode === "new") {
         const created = await onCreateCardType({
           key: draft.key.trim(),
           name: draft.name.trim(),
           description: draft.description,
           schema: schemaResult.schema,
+          defaultSize,
+          defaultVisualStyle,
         });
         setMode("existing");
         setSelectedCardTypeId(created.id);
@@ -177,6 +225,8 @@ export function V2CardTypeManager({
         name: draft.name.trim(),
         description: draft.description,
         schema: schemaResult.schema,
+        defaultSize,
+        defaultVisualStyle,
       });
       setDraft(draftFromCardType(updated));
       setMessage("Card type saved.");
@@ -289,9 +339,53 @@ export function V2CardTypeManager({
               onChange={(fields) => updateDraft({ fields })}
             />
 
-            <section className="v2CardTypeManagerFuture">
+            <section className="v2CardTypeManagerSection">
               <h3>Visual defaults</h3>
-              <p>Type color requires dedicated storage and is planned for a separate foundation update.</p>
+              <p>Used when new cards of this type are created. Existing cards are not changed.</p>
+              <div className="v2CardTypeVisualGrid">
+                <label>
+                  <span>Default width</span>
+                  <input
+                    className="v2InspectorDataValue"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={draft.defaultWidth}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ defaultWidth: event.target.value })}
+                  />
+                </label>
+                <label>
+                  <span>Default height</span>
+                  <input
+                    className="v2InspectorDataValue"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={draft.defaultHeight}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ defaultHeight: event.target.value })}
+                  />
+                </label>
+                <ColorControl
+                  label="Fill color"
+                  value={draft.fillColor}
+                  disabled={isSaving}
+                  onChange={(fillColor) => updateDraft({ fillColor })}
+                />
+                <ColorControl
+                  label="Border color"
+                  value={draft.borderColor}
+                  disabled={isSaving}
+                  onChange={(borderColor) => updateDraft({ borderColor })}
+                />
+                <ColorControl
+                  label="Text color"
+                  value={draft.textColor}
+                  disabled={isSaving}
+                  onChange={(textColor) => updateDraft({ textColor })}
+                />
+              </div>
             </section>
 
             {error ? <p className="v2InspectorDataError">{error}</p> : null}
@@ -315,5 +409,40 @@ export function V2CardTypeManager({
         </div>
       </section>
     </div>
+  );
+}
+
+function ColorControl({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const colorValue = COLOR_PATTERN.test(value) ? value : "#ffffff";
+  return (
+    <label className="v2CardTypeColorControl">
+      <span>{label}</span>
+      <span className="v2CardTypeColorInputs">
+        <input
+          className="v2CardTypeColorSwatch"
+          type="color"
+          value={colorValue}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <input
+          className="v2InspectorDataValue"
+          value={value}
+          placeholder="#ffffff"
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </span>
+    </label>
   );
 }

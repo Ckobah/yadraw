@@ -16,6 +16,7 @@ import {
   type V2CardType,
   type V2CardTypePort,
   type V2CardTypeSchema,
+  type V2CardVisualStyle,
   type V2Connection,
   type V2ConnectionAttachment,
   type V2ConnectionStatus,
@@ -53,6 +54,8 @@ export type V2CreateCardTypeRecordInput = {
   name: string;
   description: string;
   schema: V2CardTypeSchema;
+  defaultSize: V2Size;
+  defaultVisualStyle: V2CardVisualStyle;
 };
 
 export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
@@ -286,6 +289,7 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
     description: String(row.description ?? ""),
     defaultData: asObject(row.default_data),
     schema: asObject(row.schema ?? { fields: [] }),
+    defaultVisualStyle: asObject(row.default_visual_style ?? {}),
     defaultSize: {
       width: Number(row.default_width),
       height: Number(row.default_height)
@@ -414,6 +418,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       description: "Provides input data.",
       defaultData: { kind: "source" },
       schema: { fields: [] },
+      defaultVisualStyle: {},
       defaultSize: { width: 196, height: 122 },
       ports: [
         {
@@ -441,6 +446,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       description: "Transforms input data.",
       defaultData: { kind: "task" },
       schema: { fields: [] },
+      defaultVisualStyle: {},
       defaultSize: { width: 196, height: 122 },
       ports: [
         {
@@ -698,7 +704,8 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         description: input.description,
         defaultData: {},
         schema: cloneJson(input.schema),
-        defaultSize: { width: 300, height: 180 },
+        defaultVisualStyle: cloneJson(input.defaultVisualStyle),
+        defaultSize: cloneJson(input.defaultSize),
         ports: [],
         createdAt: timestamp,
         updatedAt: timestamp
@@ -719,6 +726,10 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.schema !== undefined ? { schema: cloneJson(input.schema) } : {}),
+        ...(input.defaultSize !== undefined ? { defaultSize: cloneJson(input.defaultSize) } : {}),
+        ...(input.defaultVisualStyle !== undefined
+          ? { defaultVisualStyle: cloneJson(input.defaultVisualStyle) }
+          : {}),
         updatedAt: nowIso()
       });
       state.cardTypes[index] = updated;
@@ -1411,9 +1422,12 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             key,
             name,
             description,
-            schema
+            schema,
+            default_width,
+            default_height,
+            default_visual_style
           )
-          values ($1, $2, $3, $4, $5::jsonb)
+          values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8::jsonb)
           returning *
         `,
         [
@@ -1421,7 +1435,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           input.key,
           input.name,
           input.description,
-          JSON.stringify(input.schema)
+          JSON.stringify(input.schema),
+          input.defaultSize.width,
+          input.defaultSize.height,
+          JSON.stringify(input.defaultVisualStyle)
         ]
       );
       const row = result.rows[0];
@@ -1450,6 +1467,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               name = $3,
               description = $4,
               schema = $5::jsonb,
+              default_width = $6,
+              default_height = $7,
+              default_visual_style = $8::jsonb,
               updated_at = now()
           where id = $1
             and deleted_at is null
@@ -1460,7 +1480,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           input.key ?? existing.key,
           input.name ?? existing.name,
           input.description ?? existing.description,
-          JSON.stringify(input.schema ?? existing.schema)
+          JSON.stringify(input.schema ?? existing.schema),
+          (input.defaultSize ?? existing.defaultSize).width,
+          (input.defaultSize ?? existing.defaultSize).height,
+          JSON.stringify(input.defaultVisualStyle ?? existing.defaultVisualStyle)
         ]
       );
       const row = result.rows[0];

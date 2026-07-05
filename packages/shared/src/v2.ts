@@ -53,6 +53,8 @@ export const v2ConnectorSlotSchema = z.object({
 });
 
 export const v2CardVisualStyleSchema = z.object({
+  fillColor: z.string().min(1).max(32).optional(),
+  borderColor: z.string().min(1).max(32).optional(),
   fontFamily: z.string().min(1).max(80).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
   textColor: z.string().min(1).max(32).optional(),
@@ -180,6 +182,7 @@ export const v2CardTypeSchema = z.object({
   description: z.string(),
   defaultData: v2JsonObjectSchema,
   schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
+  defaultVisualStyle: v2CardVisualStyleSchema.default({}),
   defaultSize: v2SizeSchema,
   ports: z.array(v2CardTypePortSchema),
   createdAt: v2TimestampSchema,
@@ -370,7 +373,9 @@ export const v2CreateCardTypeBodySchema = z
     key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
     name: z.string().trim().min(1),
     description: z.string().optional(),
-    schema: v2CardTypeDefinitionSchema.default({ fields: [] })
+    schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
+    defaultSize: v2SizeSchema.optional(),
+    defaultVisualStyle: v2CardVisualStyleSchema.default({})
   })
   .strict();
 
@@ -384,7 +389,9 @@ export const v2UpdateCardTypeBodySchema = z
     key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/).optional(),
     name: z.string().trim().min(1).optional(),
     description: z.string().optional(),
-    schema: v2CardTypeDefinitionSchema.optional()
+    schema: v2CardTypeDefinitionSchema.optional(),
+    defaultSize: v2SizeSchema.optional(),
+    defaultVisualStyle: v2CardVisualStyleSchema.optional()
   })
   .strict();
 

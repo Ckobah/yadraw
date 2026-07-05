@@ -296,6 +296,7 @@ function fallbackCardType(card: V2Card, workspaceId: string): V2CardType {
     description: "",
     defaultData: {},
     schema: { fields: [] },
+    defaultVisualStyle: {},
     defaultSize: { width: 200, height: 120 },
     ports: [],
     createdAt: "",

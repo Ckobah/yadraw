@@ -202,6 +202,12 @@ describe("v2 card type schema API", () => {
         key: "supplier",
         name: "Supplier",
         description: "Provides material data.",
+        defaultSize: { width: 260, height: 150 },
+        defaultVisualStyle: {
+          fillColor: "#ffffff",
+          borderColor: "#d0d7de",
+          textColor: "#111827"
+        },
         schema: {
           fields: [{ key: "phone", label: "Phone", type: "text" }]
         }
@@ -214,7 +220,12 @@ describe("v2 card type schema API", () => {
       name: "Supplier",
       description: "Provides material data.",
       defaultData: {},
-      defaultSize: { width: 300, height: 180 },
+      defaultSize: { width: 260, height: 150 },
+      defaultVisualStyle: {
+        fillColor: "#ffffff",
+        borderColor: "#d0d7de",
+        textColor: "#111827"
+      },
       ports: [],
       schema: { fields: [{ key: "phone", label: "Phone", type: "text" }] }
     });
@@ -274,6 +285,12 @@ describe("v2 card type schema API", () => {
         key: "updated_source",
         name: "Updated Source",
         description: "Updated description",
+        defaultSize: { width: 320, height: 190 },
+        defaultVisualStyle: {
+          fillColor: "#f8fafc",
+          borderColor: "#94a3b8",
+          textColor: "#0f172a"
+        },
         schema: {
           fields: [{ key: "email", label: "Email", type: "text" }]
         }
@@ -287,6 +304,12 @@ describe("v2 card type schema API", () => {
       name: "Updated Source",
       description: "Updated description",
       defaultData,
+      defaultSize: { width: 320, height: 190 },
+      defaultVisualStyle: {
+        fillColor: "#f8fafc",
+        borderColor: "#94a3b8",
+        textColor: "#0f172a"
+      },
       schema: { fields: [{ key: "email", label: "Email", type: "text" }] }
     });
 
@@ -325,6 +348,88 @@ describe("v2 card type schema API", () => {
       });
       expect([400, 409]).toContain(response.statusCode);
     }
+
+    await server.close();
+  });
+
+  it("updates visual defaults without changing default data, schema-only fields, or card data", async () => {
+    const { server, seed, repository } = createSchemaServer();
+    const cardType = seed.cardTypes[0]!;
+    const card = seed.cards.find((item) => item.cardTypeId === cardType.id)!;
+    const defaultData = structuredClone(cardType.defaultData);
+    const cardData = structuredClone(card.data);
+    const schema = structuredClone(cardType.schema);
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/card-types/${cardType.id}`,
+      payload: {
+        defaultSize: { width: 360, height: 210 },
+        defaultVisualStyle: {
+          fillColor: "#fff7ed",
+          borderColor: "#fb923c",
+          textColor: "#7c2d12"
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      defaultSize: { width: 360, height: 210 },
+      defaultVisualStyle: {
+        fillColor: "#fff7ed",
+        borderColor: "#fb923c",
+        textColor: "#7c2d12"
+      },
+      defaultData,
+      schema
+    });
+
+    const detail = await repository.getBoardDetail(seed.board.id);
+    const updatedCard = detail!.cards.find((item) => item.id === card.id)!;
+    expect(updatedCard.data).toEqual(cardData);
+
+    await server.close();
+  });
+
+  it("creates new cards with type default size and visual style", async () => {
+    const { server, seed } = createSchemaServer();
+
+    const typeResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/card-types`,
+      payload: {
+        key: "visual_type",
+        name: "Visual Type",
+        defaultSize: { width: 280, height: 170 },
+        defaultVisualStyle: {
+          fillColor: "#eff6ff",
+          borderColor: "#60a5fa",
+          textColor: "#1e3a8a"
+        }
+      }
+    });
+    expect(typeResponse.statusCode).toBe(201);
+    const cardType = typeResponse.json();
+
+    const cardResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/cards`,
+      payload: {
+        cardTypeId: cardType.id,
+        title: "Uses defaults"
+      }
+    });
+
+    expect(cardResponse.statusCode).toBe(201);
+    expect(cardResponse.json()).toMatchObject({
+      size: { width: 280, height: 170 },
+      visualStyle: {
+        fillColor: "#eff6ff",
+        borderColor: "#60a5fa",
+        textColor: "#1e3a8a"
+      }
+    });
 
     await server.close();
   });

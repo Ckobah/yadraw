@@ -197,7 +197,27 @@ describe("v2 API contracts", () => {
     });
 
     expect(v2CardTypeEntitySchema.parse(baseCardType)).toMatchObject({
-      schema: { fields: [] }
+      schema: { fields: [] },
+      defaultVisualStyle: {}
+    });
+  });
+
+  it("parses card type visual defaults", () => {
+    expect(
+      v2CardTypeEntitySchema.parse({
+        ...baseCardType,
+        defaultVisualStyle: {
+          fillColor: "#ffffff",
+          borderColor: "#d0d7de",
+          textColor: "#111827"
+        }
+      })
+    ).toMatchObject({
+      defaultVisualStyle: {
+        fillColor: "#ffffff",
+        borderColor: "#d0d7de",
+        textColor: "#111827"
+      }
     });
   });
 
@@ -361,6 +381,12 @@ describe("v2 API contracts", () => {
         key: "supplier",
         name: "Supplier",
         description: "Provides parts",
+        defaultSize: { width: 320, height: 180 },
+        defaultVisualStyle: {
+          fillColor: "#ffffff",
+          borderColor: "#d0d7de",
+          textColor: "#111827"
+        },
         schema: {
           fields: [{ key: "phone", label: "Phone", type: "text" }]
         }
@@ -369,6 +395,12 @@ describe("v2 API contracts", () => {
       key: "supplier",
       name: "Supplier",
       description: "Provides parts",
+      defaultSize: { width: 320, height: 180 },
+      defaultVisualStyle: {
+        fillColor: "#ffffff",
+        borderColor: "#d0d7de",
+        textColor: "#111827"
+      },
       schema: {
         fields: [{ key: "phone", label: "Phone", type: "text" }]
       }
@@ -377,10 +409,14 @@ describe("v2 API contracts", () => {
     expect(
       v2UpdateCardTypeBodySchema.parse({
         name: "Updated supplier",
+        defaultSize: { width: 340, height: 190 },
+        defaultVisualStyle: { fillColor: "#f8fafc" },
         schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
       })
     ).toEqual({
       name: "Updated supplier",
+      defaultSize: { width: 340, height: 190 },
+      defaultVisualStyle: { fillColor: "#f8fafc" },
       schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
     });
 
