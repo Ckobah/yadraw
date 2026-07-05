@@ -1,6 +1,8 @@
 import type {
   V2Card,
   V2CardAttachment,
+  V2CardType,
+  V2CardTypeSchema,
   V2CardVisualStyle,
   V2Connection,
   V2ConnectionAttachment,
@@ -185,6 +187,31 @@ export async function deleteV2Card(cardId: string): Promise<void> {
       body
     );
   }
+}
+
+export async function updateV2CardTypeSchema(
+  boardId: string,
+  cardTypeId: string,
+  schema: V2CardTypeSchema
+): Promise<V2CardType> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/card-types/${encodeURIComponent(cardTypeId)}/schema`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ schema }),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card type schema update failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CardType>;
 }
 
 export async function duplicateV2Card(cardId: string): Promise<V2Card> {

@@ -59,6 +59,7 @@ import {
   createV2LinkedFieldBinding,
   updateV2LinkedFieldBinding,
   deleteV2LinkedFieldBinding,
+  updateV2CardTypeSchema,
   V2ApiError,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
@@ -326,7 +327,8 @@ function buildCardNode(
 }
 
 export function V2BoardCanvas({ boardDetail }: Props) {
-  const { board, cards, connections, cardTypes } = boardDetail;
+  const { board, cards, connections, cardTypes: initialCardTypes } = boardDetail;
+  const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -851,6 +853,37 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       }
     },
     [board.id, board.workspaceId, cardTypeMap, setNodes]
+  );
+
+  const handleUpdateCardTypeSchema = useCallback(
+    async (cardTypeId: string, schema: V2CardType["schema"]) => {
+      setSaveStatus("saving");
+      try {
+        const updated = await updateV2CardTypeSchema(board.id, cardTypeId, schema);
+        setCardTypes((current) =>
+          current.map((cardType) => (cardType.id === updated.id ? updated : cardType))
+        );
+        setNodes((current) =>
+          current.map((node) => {
+            if (node.data.card.cardTypeId !== updated.id) return node;
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                cardType: updated,
+              },
+            };
+          })
+        );
+        setSaveStatus("saved");
+        return updated;
+      } catch (error) {
+        console.error("Failed to update card type schema:", error);
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [board.id, setNodes]
   );
 
   const handleRunDryRun = useCallback(async () => {
@@ -1438,6 +1471,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}
           onDeleteLinkedFieldBinding={handleDeleteLinkedFieldBinding}
+          onUpdateCardTypeSchema={handleUpdateCardTypeSchema}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}

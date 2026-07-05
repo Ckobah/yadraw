@@ -15,6 +15,7 @@ import {
   type V2CardStatus,
   type V2CardType,
   type V2CardTypePort,
+  type V2CardTypeSchema,
   type V2Connection,
   type V2ConnectionAttachment,
   type V2ConnectionStatus,
@@ -107,6 +108,7 @@ export type V2Repository = {
   getBoard(boardId: string): Promise<V2Board | null>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
+  updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
   getCard(cardId: string): Promise<V2Card | null>;
   createCard(input: V2CreateCardRecordInput): Promise<V2Card>;
   duplicateCard?(cardId: string): Promise<V2Card | null>;
@@ -140,6 +142,7 @@ type V2MemorySeed = {
     role: V2WorkspaceRole;
   }>;
   cardTypes: V2CardType[];
+  deletedCardTypeIds?: string[];
   cards: V2Card[];
   connections: V2Connection[];
   fieldBindings?: V2MemoryLinkedFieldBinding[];
@@ -580,6 +583,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
   };
   const deletedCardIds = new Set<string>();
   const deletedConnectionIds = new Set<string>();
+  const deletedCardTypeIds = new Set<string>(state.deletedCardTypeIds ?? []);
   const deletedCardFileIds = new Set<string>(
     state.cardFiles
       .filter((cardFile) => cardFile.deletedAt)
@@ -653,7 +657,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         workspace: state.workspace,
         project: state.project,
         board: state.board,
-        cardTypes: state.cardTypes,
+        cardTypes: state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)),
         cards: activeCards(),
         connections: activeConnections()
       });
@@ -665,11 +669,27 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async listCardTypes(workspaceId) {
       if (workspaceId !== state.workspace.id) return [];
-      return cloneJson(state.cardTypes);
+      return cloneJson(state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)));
     },
 
     async getCardType(cardTypeId) {
+      if (deletedCardTypeIds.has(cardTypeId)) return null;
       return cloneJson(state.cardTypes.find((cardType) => cardType.id === cardTypeId) ?? null);
+    },
+
+    async updateCardTypeSchema(cardTypeId, schema) {
+      if (deletedCardTypeIds.has(cardTypeId)) return null;
+      const index = state.cardTypes.findIndex((cardType) => cardType.id === cardTypeId);
+      const existing = state.cardTypes[index];
+      if (index === -1 || !existing) return null;
+
+      const updated = v2CardTypeSchema.parse({
+        ...existing,
+        schema: cloneJson(schema),
+        updatedAt: nowIso()
+      });
+      state.cardTypes[index] = updated;
+      return cloneJson(updated);
     },
 
     async getCard(cardId) {
@@ -1327,6 +1347,25 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           limit 1
         `,
         [cardTypeId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+
+      const ports = await loadPortsForCardTypes([cardTypeId]);
+      return cardTypeFromRow(row, ports.get(cardTypeId) ?? []);
+    },
+
+    async updateCardTypeSchema(cardTypeId, schema) {
+      const result = await pool.query(
+        `
+          update card_types
+          set schema = $2::jsonb,
+              updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning *
+        `,
+        [cardTypeId, JSON.stringify(schema)]
       );
       const row = result.rows[0];
       if (!row) return null;

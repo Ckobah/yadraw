@@ -8,6 +8,7 @@ import {
   v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
   v2RunDryRunBodySchema,
+  v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
@@ -21,6 +22,7 @@ import {
   type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
   type V2UpdateCardRequest,
+  type V2UpdateCardTypeSchemaRequest,
   type V2UpdateConnectionRequest,
   type V2UpdateLinkedFieldBindingRequest
 } from "@yadraw/shared";
@@ -56,6 +58,12 @@ export class V2ServiceError extends Error {
 export type V2BoardService = {
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
+  updateCardTypeSchema(
+    context: RequestContext,
+    boardId: string,
+    cardTypeId: string,
+    input: V2UpdateCardTypeSchemaRequest
+  ): Promise<V2CardType>;
   runBoardDryRun(context: RequestContext, boardId: string, input?: V2RunDryRunRequest): Promise<V2DryRunResult>;
   listLinkedFieldBindings(context: RequestContext, boardId: string): Promise<{ fieldBindings: V2LinkedFieldBinding[] }>;
   createLinkedFieldBinding(
@@ -317,6 +325,18 @@ export function createV2BoardService(
     };
   }
 
+  function requireCardTypeSchemaRepository(): {
+    updateCardTypeSchema(cardTypeId: string, schema: V2CardType["schema"]): Promise<V2CardType | null>;
+  } {
+    if (!repository.updateCardTypeSchema) {
+      throw new V2ServiceError("conflict", "V2 card type schema repository is not available");
+    }
+
+    return {
+      updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository)
+    };
+  }
+
   async function requireBoardForAccess(
     context: RequestContext,
     boardId: string,
@@ -380,6 +400,31 @@ export function createV2BoardService(
     async listCardTypes(context, workspaceId) {
       await authorizeWorkspace(context, workspaceId, "read");
       return { cardTypes: await repository.listCardTypes(workspaceId) };
+    },
+
+    async updateCardTypeSchema(context, boardId, cardTypeId, rawInput) {
+      const parsedInput = v2UpdateCardTypeSchemaBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid card type schema payload");
+      }
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType) {
+        notFound("Card type not found");
+      }
+      if (cardType.workspaceId !== board.workspaceId) {
+        validationFailed("Card type does not belong to the board workspace");
+      }
+
+      const updated = await requireCardTypeSchemaRepository().updateCardTypeSchema(
+        cardType.id,
+        parsedInput.data.schema
+      );
+      if (!updated) {
+        notFound("Card type not found");
+      }
+
+      return updated;
     },
 
     async listLinkedFieldBindings(context, boardId) {

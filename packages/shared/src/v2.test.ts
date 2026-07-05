@@ -23,6 +23,7 @@ import {
   v2RunDryRunBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
   v2UpdateConnectionBodySchema,
+  v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema
 } from "./v2.js";
 
@@ -344,9 +345,35 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
     expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
+    expect(v2ApiContracts.updateCardTypeSchema.body).toBe(v2UpdateCardTypeSchemaBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
     expect(v2ApiContracts.updateLinkedFieldBinding.body).toBe(v2UpdateLinkedFieldBindingBodySchema);
+  });
+
+  it("parses card type schema update requests", () => {
+    expect(
+      v2UpdateCardTypeSchemaBodySchema.parse({
+        schema: {
+          fields: [{ key: "phone", label: "Phone", type: "text" }]
+        }
+      })
+    ).toEqual({
+      schema: {
+        fields: [{ key: "phone", label: "Phone", type: "text" }]
+      }
+    });
+
+    expect(() =>
+      v2UpdateCardTypeSchemaBodySchema.parse({
+        schema: {
+          fields: [
+            { key: "phone", label: "Phone", type: "text" },
+            { key: "phone", label: "Duplicate", type: "text" }
+          ]
+        }
+      })
+    ).toThrow();
   });
 
   it("parses dry-run requests and results", () => {

@@ -361,6 +361,17 @@ export const v2ListCardTypesParamsSchema = z.object({
   workspaceId: v2UuidSchema
 });
 
+export const v2UpdateCardTypeSchemaParamsSchema = z.object({
+  boardId: v2UuidSchema,
+  cardTypeId: v2UuidSchema
+});
+
+export const v2UpdateCardTypeSchemaBodySchema = z
+  .object({
+    schema: v2CardTypeDefinitionSchema
+  })
+  .strict();
+
 export const v2CreateCardParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -488,6 +499,13 @@ export const v2ApiContracts = {
     path: "/v2/workspaces/{workspaceId}/card-types",
     params: v2ListCardTypesParamsSchema,
     response: z.object({ cardTypes: z.array(v2CardTypeSchema) })
+  },
+  updateCardTypeSchema: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}/card-types/{cardTypeId}/schema",
+    params: v2UpdateCardTypeSchemaParamsSchema,
+    body: v2UpdateCardTypeSchemaBodySchema,
+    response: v2CardTypeSchema
   },
   createCard: {
     method: "POST",
@@ -623,6 +641,7 @@ export type V2LinkedFieldBinding = z.infer<typeof v2LinkedFieldBindingSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
+export type V2UpdateCardTypeSchemaInput = z.infer<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;
 export type V2CreateLinkedFieldBindingInput = z.infer<typeof v2CreateLinkedFieldBindingBodySchema>;
@@ -633,6 +652,7 @@ export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
 export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
+export type V2UpdateCardTypeSchemaRequest = z.input<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionRequest = z.input<typeof v2UpdateConnectionBodySchema>;
 export type V2CreateLinkedFieldBindingRequest = z.input<typeof v2CreateLinkedFieldBindingBodySchema>;

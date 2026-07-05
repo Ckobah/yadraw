@@ -16,6 +16,7 @@ import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
+import { V2CardTypeSchemaEditor } from "./v2-card-type-schema-editor";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 
 type V2CardInspectorProps = {
@@ -41,6 +42,10 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
+  onUpdateCardTypeSchema: (
+    cardTypeId: string,
+    schema: V2CardType["schema"]
+  ) => Promise<V2CardType>;
   onCreateLinkedFieldBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
   onUpdateLinkedFieldBinding: (
     bindingId: string,
@@ -69,6 +74,7 @@ export function V2CardInspector({
   actionError,
   onUpdateCardBasics,
   onUpdateCardData,
+  onUpdateCardTypeSchema,
   onCreateLinkedFieldBinding,
   onUpdateLinkedFieldBinding,
   onDeleteLinkedFieldBinding,
@@ -145,6 +151,10 @@ export function V2CardInspector({
           card={card}
           saveStatus={saveStatus}
           onUpdateCardBasics={onUpdateCardBasics}
+        />
+        <V2CardTypeSchemaEditor
+          cardType={cardType}
+          onSave={onUpdateCardTypeSchema}
         />
         <V2CardDataSection
           card={card}
