@@ -65,7 +65,7 @@ export function V2LinkedFieldsPreview({
   const [sourceMode, setSourceMode] = useState<"exactCard" | "connectedCard">("exactCard");
   const [direction, setDirection] = useState<V2LinkedFieldDirection>("incoming");
   const [sourceCardId, setSourceCardId] = useState("");
-  const [sourceFieldPath, setSourceFieldPath] = useState("data.field");
+  const [sourceFieldPath, setSourceFieldPath] = useState("");
   const [draftError, setDraftError] = useState<string | null>(null);
   const [editingBindingId, setEditingBindingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -103,7 +103,7 @@ export function V2LinkedFieldsPreview({
     setSourceMode("exactCard");
     setDirection("incoming");
     setSourceCardId("");
-    setSourceFieldPath("data.field");
+    setSourceFieldPath("");
     setEditingBindingId(null);
     setDraftError(null);
   }
@@ -129,7 +129,7 @@ export function V2LinkedFieldsPreview({
       return;
     }
     if (!normalizedSourceFieldPath) {
-      setDraftError("Source field path is required.");
+      setDraftError("Source field is required.");
       return;
     }
     if (!sourceCard) {
@@ -256,7 +256,7 @@ export function V2LinkedFieldsPreview({
             className="v2InspectorDataValue"
             value={sourceFieldPath}
             list={`v2-linked-fields-${card.id}`}
-            placeholder="data.field"
+            placeholder="data.key, title, description"
             onChange={(event) => {
               setSourceFieldPath(event.target.value);
               setDraftError(null);
@@ -268,6 +268,22 @@ export function V2LinkedFieldsPreview({
             ))}
           </datalist>
         </label>
+        {sourceOptions.length > 0 ? (
+          <div className="v2LinkedFieldSuggestions" aria-label="Source field suggestions">
+            {sourceOptions.map((fieldPath) => (
+              <button
+                key={fieldPath}
+                type="button"
+                onClick={() => {
+                  setSourceFieldPath(fieldPath);
+                  setDraftError(null);
+                }}
+              >
+                {fieldPath}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         {selectedSourceType && sourceMode === "connectedCard" ? (
           <p className="v2LinkedFieldHint">

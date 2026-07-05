@@ -4359,6 +4359,38 @@ button:disabled {
   gap: 8px;
 }
 
+.v2LinkedFieldSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.v2LinkedFieldSuggestions button {
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 7px;
+  overflow: hidden;
+  border: 1px solid #e4e7f0;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475467;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.v2LinkedFieldSuggestions button:hover,
+.v2LinkedFieldSuggestions button:focus-visible {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 36%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  color: var(--v2-inspector-accent);
+  outline: 0;
+}
+
 .v2LinkedFieldHint,
 .v2LinkedFieldWarning,
 .v2LinkedFieldError {

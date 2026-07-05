@@ -126,7 +126,7 @@ export function resolveV2LinkedFieldDrafts({
       }
 
       if (!draft.sourceFieldPath.trim()) {
-        return emptyResult(draft, "invalid", "Source field path is required.");
+        return emptyResult(draft, "invalid", "Source field is required.");
       }
 
       if (draft.sourceMode === "exactCard") {
