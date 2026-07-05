@@ -7,6 +7,7 @@ import {
   v2CardTypeSchema,
   v2ConnectionAttachmentSchema,
   v2ConnectionSchema,
+  v2LinkedFieldBindingSchema,
   type V2Board,
   type V2BoardDetail,
   type V2CardAttachment,
@@ -18,11 +19,14 @@ import {
   type V2ConnectionAttachment,
   type V2ConnectionStatus,
   type V2CreateConnectionInput,
+  type V2CreateLinkedFieldBindingInput,
   type V2JsonObject,
+  type V2LinkedFieldBinding,
   type V2Project,
   type V2Size,
   type V2UpdateCardInput,
   type V2UpdateConnectionInput,
+  type V2UpdateLinkedFieldBindingInput,
   type V2Viewport,
   type V2Workspace,
   type V2WorkspaceRole
@@ -45,6 +49,12 @@ export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
   workspaceId: string;
   boardId: string;
   status: V2ConnectionStatus;
+};
+
+export type V2CreateLinkedFieldBindingRecordInput = V2CreateLinkedFieldBindingInput & {
+  workspaceId: string;
+  boardId: string;
+  status: "active";
 };
 
 export type V2CreateCardAttachmentRecordInput = {
@@ -106,6 +116,11 @@ export type V2Repository = {
   createConnection(input: V2CreateConnectionRecordInput): Promise<V2Connection>;
   updateConnection?(connectionId: string, input: V2UpdateConnectionInput): Promise<V2Connection | null>;
   deleteConnection(connectionId: string): Promise<boolean>;
+  listLinkedFieldBindings?(boardId: string): Promise<V2LinkedFieldBinding[]>;
+  getLinkedFieldBinding?(bindingId: string): Promise<V2LinkedFieldBinding | null>;
+  createLinkedFieldBinding?(input: V2CreateLinkedFieldBindingRecordInput): Promise<V2LinkedFieldBinding>;
+  updateLinkedFieldBinding?(bindingId: string, input: V2UpdateLinkedFieldBindingInput): Promise<V2LinkedFieldBinding | null>;
+  deleteLinkedFieldBinding?(bindingId: string): Promise<boolean>;
   listCardAttachments?(cardId: string): Promise<V2CardAttachment[]>;
   createCardAttachment?(input: V2CreateCardAttachmentRecordInput): Promise<V2CardAttachment>;
   listConnectionAttachments?(connectionId: string): Promise<V2ConnectionAttachment[]>;
@@ -127,6 +142,7 @@ type V2MemorySeed = {
   cardTypes: V2CardType[];
   cards: V2Card[];
   connections: V2Connection[];
+  fieldBindings?: V2MemoryLinkedFieldBinding[];
   files?: Array<{
     id: string;
     workspaceId: string;
@@ -165,6 +181,11 @@ type V2MemorySeed = {
     createdAt: string;
     deletedAt?: string | null;
   }>;
+};
+
+type V2MemoryLinkedFieldBinding = Omit<V2LinkedFieldBinding, "status"> & {
+  status: "active" | "deleted";
+  deletedAt?: string | null;
 };
 
 function nowIso(): string {
@@ -300,6 +321,33 @@ function connectionFromRow(row: QueryResultRow): V2Connection {
     type: String(row.type),
     label: String(row.label ?? ""),
     status: row.status,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at)
+  });
+}
+
+function linkedFieldBindingFromRow(row: QueryResultRow): V2LinkedFieldBinding {
+  return v2LinkedFieldBindingSchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    boardId: String(row.board_id),
+    targetCardId: String(row.target_card_id),
+    targetField: String(row.target_field),
+    sourceMode: String(row.source_mode),
+    direction: String(row.connection_direction),
+    sourceCardId: row.source_card_id === null || row.source_card_id === undefined ? null : String(row.source_card_id),
+    sourceCardTypeId:
+      row.source_card_type_id === null || row.source_card_type_id === undefined
+        ? null
+        : String(row.source_card_type_id),
+    sourceCardTypeKey:
+      row.source_card_type_key === null || row.source_card_type_key === undefined
+        ? null
+        : String(row.source_card_type_key),
+    sourceFieldPath: String(row.source_field_path),
+    onMissing: String(row.on_missing),
+    onMultiple: String(row.on_multiple),
+    status: String(row.status),
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at)
   });
@@ -522,6 +570,7 @@ function connectionAttachmentFromRow(row: QueryResultRow): V2ConnectionAttachmen
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
   const state = {
     ...cloneJson(seed),
+    fieldBindings: cloneJson((seed.fieldBindings ?? []) as V2MemoryLinkedFieldBinding[]),
     files: cloneJson(seed.files ?? []),
     cardFiles: cloneJson(seed.cardFiles ?? []),
     connectionFiles: cloneJson(seed.connectionFiles ?? [])
@@ -542,6 +591,11 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     state.files
       .filter((file) => file.deletedAt)
       .map((file) => file.id)
+  );
+  const deletedFieldBindingIds = new Set<string>(
+    state.fieldBindings
+      .filter((binding) => binding.deletedAt || binding.status === "deleted")
+      .map((binding) => binding.id)
   );
 
   function activeCards(): V2Card[] {
@@ -751,6 +805,83 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       if (!exists) return false;
 
       deletedConnectionIds.add(connectionId);
+      return true;
+    },
+
+    async listLinkedFieldBindings(boardId) {
+      return cloneJson(
+        state.fieldBindings.filter(
+          (binding) =>
+            binding.boardId === boardId &&
+            binding.status === "active" &&
+            !deletedFieldBindingIds.has(binding.id)
+        )
+      ).map((binding) => v2LinkedFieldBindingSchema.parse(binding));
+    },
+
+    async getLinkedFieldBinding(bindingId) {
+      const binding = state.fieldBindings.find(
+        (item) => item.id === bindingId && item.status === "active" && !deletedFieldBindingIds.has(item.id)
+      );
+      return binding ? v2LinkedFieldBindingSchema.parse(cloneJson(binding)) : null;
+    },
+
+    async createLinkedFieldBinding(input) {
+      const timestamp = nowIso();
+      const binding = v2LinkedFieldBindingSchema.parse({
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        boardId: input.boardId,
+        targetCardId: input.targetCardId,
+        targetField: input.targetField,
+        sourceMode: input.sourceMode,
+        direction: input.direction,
+        sourceCardId: input.sourceCardId ?? null,
+        sourceCardTypeId: input.sourceCardTypeId ?? null,
+        sourceCardTypeKey: input.sourceCardTypeKey ?? null,
+        sourceFieldPath: input.sourceFieldPath,
+        onMissing: input.onMissing,
+        onMultiple: input.onMultiple,
+        status: input.status,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+
+      state.fieldBindings.push(binding);
+      return cloneJson(binding);
+    },
+
+    async updateLinkedFieldBinding(bindingId, input) {
+      const index = state.fieldBindings.findIndex(
+        (binding) => binding.id === bindingId && binding.status === "active" && !deletedFieldBindingIds.has(binding.id)
+      );
+      const existing = state.fieldBindings[index];
+      if (index === -1 || !existing) return null;
+
+      const updated = v2LinkedFieldBindingSchema.parse({
+        ...existing,
+        ...input,
+        sourceCardId: input.sourceCardId !== undefined ? input.sourceCardId : existing.sourceCardId ?? null,
+        sourceCardTypeId:
+          input.sourceCardTypeId !== undefined ? input.sourceCardTypeId : existing.sourceCardTypeId ?? null,
+        sourceCardTypeKey:
+          input.sourceCardTypeKey !== undefined ? input.sourceCardTypeKey : existing.sourceCardTypeKey ?? null,
+        updatedAt: nowIso()
+      });
+      state.fieldBindings[index] = updated;
+      return cloneJson(updated);
+    },
+
+    async deleteLinkedFieldBinding(bindingId) {
+      const binding = state.fieldBindings.find(
+        (item) => item.id === bindingId && item.status === "active" && !deletedFieldBindingIds.has(item.id)
+      );
+      if (!binding) return false;
+
+      binding.status = "deleted";
+      binding.deletedAt = nowIso();
+      binding.updatedAt = binding.deletedAt;
+      deletedFieldBindingIds.add(binding.id);
       return true;
     },
 
@@ -1482,6 +1613,153 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             and deleted_at is null
         `,
         [connectionId]
+      );
+
+      return (result.rowCount ?? 0) > 0;
+    },
+
+    async listLinkedFieldBindings(boardId) {
+      const result = await pool.query(
+        `
+          select *
+          from v2_card_field_bindings
+          where board_id = $1
+            and status = 'active'
+            and deleted_at is null
+          order by created_at asc, id asc
+        `,
+        [boardId]
+      );
+
+      return result.rows.map(linkedFieldBindingFromRow);
+    },
+
+    async getLinkedFieldBinding(bindingId) {
+      const result = await pool.query(
+        `
+          select *
+          from v2_card_field_bindings
+          where id = $1
+            and status = 'active'
+            and deleted_at is null
+          limit 1
+        `,
+        [bindingId]
+      );
+      const row = result.rows[0];
+      return row ? linkedFieldBindingFromRow(row) : null;
+    },
+
+    async createLinkedFieldBinding(input) {
+      const result = await pool.query(
+        `
+          insert into v2_card_field_bindings (
+            workspace_id,
+            board_id,
+            target_card_id,
+            target_field,
+            source_mode,
+            connection_direction,
+            source_card_id,
+            source_card_type_id,
+            source_card_type_key,
+            source_field_path,
+            on_missing,
+            on_multiple,
+            status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          returning *
+        `,
+        [
+          input.workspaceId,
+          input.boardId,
+          input.targetCardId,
+          input.targetField,
+          input.sourceMode,
+          input.direction,
+          input.sourceCardId ?? null,
+          input.sourceCardTypeId ?? null,
+          input.sourceCardTypeKey ?? null,
+          input.sourceFieldPath,
+          input.onMissing,
+          input.onMultiple,
+          input.status
+        ]
+      );
+
+      return linkedFieldBindingFromRow(result.rows[0] as QueryResultRow);
+    },
+
+    async updateLinkedFieldBinding(bindingId, input) {
+      const existing = await this.getLinkedFieldBinding!(bindingId);
+      if (!existing) return null;
+
+      const next = {
+        targetCardId: input.targetCardId ?? existing.targetCardId,
+        targetField: input.targetField ?? existing.targetField,
+        sourceMode: input.sourceMode ?? existing.sourceMode,
+        direction: input.direction ?? existing.direction,
+        sourceCardId: input.sourceCardId !== undefined ? input.sourceCardId : existing.sourceCardId ?? null,
+        sourceCardTypeId:
+          input.sourceCardTypeId !== undefined ? input.sourceCardTypeId : existing.sourceCardTypeId ?? null,
+        sourceCardTypeKey:
+          input.sourceCardTypeKey !== undefined ? input.sourceCardTypeKey : existing.sourceCardTypeKey ?? null,
+        sourceFieldPath: input.sourceFieldPath ?? existing.sourceFieldPath,
+        onMissing: input.onMissing ?? existing.onMissing,
+        onMultiple: input.onMultiple ?? existing.onMultiple
+      };
+
+      const result = await pool.query(
+        `
+          update v2_card_field_bindings
+          set target_card_id = $2,
+              target_field = $3,
+              source_mode = $4,
+              connection_direction = $5,
+              source_card_id = $6,
+              source_card_type_id = $7,
+              source_card_type_key = $8,
+              source_field_path = $9,
+              on_missing = $10,
+              on_multiple = $11,
+              updated_at = now()
+          where id = $1
+            and status = 'active'
+            and deleted_at is null
+          returning *
+        `,
+        [
+          bindingId,
+          next.targetCardId,
+          next.targetField,
+          next.sourceMode,
+          next.direction,
+          next.sourceCardId,
+          next.sourceCardTypeId,
+          next.sourceCardTypeKey,
+          next.sourceFieldPath,
+          next.onMissing,
+          next.onMultiple
+        ]
+      );
+
+      const row = result.rows[0];
+      return row ? linkedFieldBindingFromRow(row) : null;
+    },
+
+    async deleteLinkedFieldBinding(bindingId) {
+      const result = await pool.query(
+        `
+          update v2_card_field_bindings
+          set status = 'deleted',
+              deleted_at = now(),
+              updated_at = now()
+          where id = $1
+            and status = 'active'
+            and deleted_at is null
+        `,
+        [bindingId]
       );
 
       return (result.rowCount ?? 0) > 0;

@@ -29,6 +29,11 @@ export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
 export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
+export const v2LinkedFieldSourceModeSchema = z.enum(["exactCard", "connectedCard"]);
+export const v2LinkedFieldDirectionSchema = z.enum(["incoming", "outgoing"]);
+export const v2LinkedFieldOnMissingSchema = z.enum(["empty"]);
+export const v2LinkedFieldOnMultipleSchema = z.enum(["warning"]);
+export const v2LinkedFieldStatusSchema = z.enum(["active", "deleted"]);
 export const v2FileProcessingStatusSchema = z.enum([
   "pending",
   "processing",
@@ -243,6 +248,59 @@ export const v2ConnectionAttachmentSchema = z.object({
   createdAt: v2TimestampSchema
 });
 
+export const v2LinkedFieldBindingSchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  boardId: v2UuidSchema,
+  targetCardId: v2UuidSchema,
+  targetField: z.string().trim().min(1),
+  sourceMode: v2LinkedFieldSourceModeSchema,
+  direction: v2LinkedFieldDirectionSchema,
+  sourceCardId: v2UuidSchema.nullable().optional(),
+  sourceCardTypeId: v2UuidSchema.nullable().optional(),
+  sourceCardTypeKey: z.string().trim().min(1).nullable().optional(),
+  sourceFieldPath: z.string().trim().min(1),
+  onMissing: v2LinkedFieldOnMissingSchema,
+  onMultiple: v2LinkedFieldOnMultipleSchema,
+  status: z.literal("active"),
+  createdAt: v2TimestampSchema,
+  updatedAt: v2TimestampSchema
+});
+
+export const v2CreateLinkedFieldBindingBodySchema = z
+  .object({
+    targetCardId: v2UuidSchema,
+    targetField: z.string().trim().min(1),
+    sourceMode: v2LinkedFieldSourceModeSchema,
+    direction: v2LinkedFieldDirectionSchema,
+    sourceCardId: v2UuidSchema.nullable().optional(),
+    sourceCardTypeId: v2UuidSchema.nullable().optional(),
+    sourceCardTypeKey: z.string().trim().min(1).nullable().optional(),
+    sourceFieldPath: z.string().trim().min(1),
+    onMissing: v2LinkedFieldOnMissingSchema.default("empty"),
+    onMultiple: v2LinkedFieldOnMultipleSchema.default("warning")
+  })
+  .strict();
+
+export const v2UpdateLinkedFieldBindingBodySchema = z
+  .object({
+    targetCardId: v2UuidSchema.optional(),
+    targetField: z.string().trim().min(1).optional(),
+    sourceMode: v2LinkedFieldSourceModeSchema.optional(),
+    direction: v2LinkedFieldDirectionSchema.optional(),
+    sourceCardId: v2UuidSchema.nullable().optional(),
+    sourceCardTypeId: v2UuidSchema.nullable().optional(),
+    sourceCardTypeKey: z.string().trim().min(1).nullable().optional(),
+    sourceFieldPath: z.string().trim().min(1).optional(),
+    onMissing: v2LinkedFieldOnMissingSchema.optional(),
+    onMultiple: v2LinkedFieldOnMultipleSchema.optional()
+  })
+  .strict();
+
+export const v2LinkedFieldBindingListResponseSchema = z.object({
+  fieldBindings: z.array(v2LinkedFieldBindingSchema)
+});
+
 export const v2BoardDetailSchema = z.object({
   workspace: v2WorkspaceSchema,
   project: v2ProjectSchema,
@@ -334,6 +392,24 @@ export const v2RunDryRunParamsSchema = z.object({
   boardId: v2UuidSchema
 });
 
+export const v2ListLinkedFieldBindingsParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2CreateLinkedFieldBindingParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2UpdateLinkedFieldBindingParamsSchema = z.object({
+  boardId: v2UuidSchema,
+  bindingId: v2UuidSchema
+});
+
+export const v2DeleteLinkedFieldBindingParamsSchema = z.object({
+  boardId: v2UuidSchema,
+  bindingId: v2UuidSchema
+});
+
 export const v2RunDryRunBodySchema = z
   .object({
     startCardId: v2UuidSchema.optional()
@@ -416,6 +492,32 @@ export const v2ApiContracts = {
     params: v2RunDryRunParamsSchema,
     body: v2RunDryRunBodySchema,
     response: v2DryRunResultSchema
+  },
+  listLinkedFieldBindings: {
+    method: "GET",
+    path: "/v2/boards/{boardId}/field-bindings",
+    params: v2ListLinkedFieldBindingsParamsSchema,
+    response: v2LinkedFieldBindingListResponseSchema
+  },
+  createLinkedFieldBinding: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/field-bindings",
+    params: v2CreateLinkedFieldBindingParamsSchema,
+    body: v2CreateLinkedFieldBindingBodySchema,
+    response: v2LinkedFieldBindingSchema
+  },
+  updateLinkedFieldBinding: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}/field-bindings/{bindingId}",
+    params: v2UpdateLinkedFieldBindingParamsSchema,
+    body: v2UpdateLinkedFieldBindingBodySchema,
+    response: v2LinkedFieldBindingSchema
+  },
+  deleteLinkedFieldBinding: {
+    method: "DELETE",
+    path: "/v2/boards/{boardId}/field-bindings/{bindingId}",
+    params: v2DeleteLinkedFieldBindingParamsSchema,
+    response: v2DeleteResultSchema
   }
 } as const;
 
@@ -436,6 +538,7 @@ export const V2CardAttachmentSchema = v2CardAttachmentSchema;
 export const V2ConnectionFileSchema = v2ConnectionFileSchema;
 export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
 export const V2ConnectionVisualStyleSchema = v2ConnectionVisualStyleSchema;
+export const V2LinkedFieldBindingSchema = v2LinkedFieldBindingSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -466,11 +569,17 @@ export type V2CardFile = z.infer<typeof v2CardFileSchema>;
 export type V2CardAttachment = z.infer<typeof v2CardAttachmentSchema>;
 export type V2ConnectionFile = z.infer<typeof v2ConnectionFileSchema>;
 export type V2ConnectionAttachment = z.infer<typeof v2ConnectionAttachmentSchema>;
+export type V2LinkedFieldSourceMode = z.infer<typeof v2LinkedFieldSourceModeSchema>;
+export type V2LinkedFieldDirection = z.infer<typeof v2LinkedFieldDirectionSchema>;
+export type V2LinkedFieldBinding = z.infer<typeof v2LinkedFieldBindingSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;
+export type V2CreateLinkedFieldBindingInput = z.infer<typeof v2CreateLinkedFieldBindingBodySchema>;
+export type V2UpdateLinkedFieldBindingInput = z.infer<typeof v2UpdateLinkedFieldBindingBodySchema>;
+export type V2LinkedFieldBindingListResponse = z.infer<typeof v2LinkedFieldBindingListResponseSchema>;
 export type V2RunDryRunInput = z.infer<typeof v2RunDryRunBodySchema>;
 export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
 export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
@@ -478,4 +587,6 @@ export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionRequest = z.input<typeof v2UpdateConnectionBodySchema>;
+export type V2CreateLinkedFieldBindingRequest = z.input<typeof v2CreateLinkedFieldBindingBodySchema>;
+export type V2UpdateLinkedFieldBindingRequest = z.input<typeof v2UpdateLinkedFieldBindingBodySchema>;
 export type V2RunDryRunRequest = z.input<typeof v2RunDryRunBodySchema>;

@@ -30,6 +30,62 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get("/v2/boards/:boardId/field-bindings", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.listLinkedFieldBindings(request.requestContext, boardId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/boards/:boardId/field-bindings", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      const binding = await service.createLinkedFieldBinding(
+        request.requestContext,
+        boardId,
+        request.body as any
+      );
+      return reply.code(201).send(binding);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.patch("/v2/boards/:boardId/field-bindings/:bindingId", async (request, reply) => {
+    try {
+      const { boardId, bindingId } = request.params as {
+        boardId: string;
+        bindingId: string;
+      };
+      return await service.updateLinkedFieldBinding(
+        request.requestContext,
+        boardId,
+        bindingId,
+        request.body as any
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.delete("/v2/boards/:boardId/field-bindings/:bindingId", async (request, reply) => {
+    try {
+      const { boardId, bindingId } = request.params as {
+        boardId: string;
+        bindingId: string;
+      };
+      return await service.deleteLinkedFieldBinding(
+        request.requestContext,
+        boardId,
+        bindingId
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.post("/v2/boards/:boardId/run/dry-run", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

@@ -1,13 +1,19 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Link2, X } from "lucide-react";
-import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
+import { Link2, Pencil, X } from "lucide-react";
+import type {
+  V2Card,
+  V2CardType,
+  V2Connection,
+  V2CreateLinkedFieldBindingRequest,
+  V2LinkedFieldBinding,
+  V2UpdateLinkedFieldBindingRequest,
+} from "@yadraw/shared";
 import {
   formatLinkedFieldValue,
   resolveV2LinkedFieldDrafts,
   type V2LinkedFieldDirection,
-  type V2LinkedFieldDraft,
 } from "./v2-linked-fields";
 
 type V2LinkedFieldsPreviewProps = {
@@ -18,15 +24,13 @@ type V2LinkedFieldsPreviewProps = {
   cardById: Map<string, V2Card>;
   allCards: V2Card[];
   allConnections: V2Connection[];
-  drafts: V2LinkedFieldDraft[];
-  onAddDraft: (draft: V2LinkedFieldDraft) => void;
-  onRemoveDraft: (draftId: string) => void;
+  bindings: V2LinkedFieldBinding[];
+  isLoading: boolean;
+  error: string | null;
+  onCreateBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
+  onUpdateBinding: (bindingId: string, input: V2UpdateLinkedFieldBindingRequest) => Promise<void>;
+  onDeleteBinding: (bindingId: string) => Promise<void>;
 };
-
-function createLinkedFieldId(): string {
-  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
-  return `linked-field-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function connectedCardForConnection(
   connection: V2Connection,
@@ -36,9 +40,10 @@ function connectedCardForConnection(
 }
 
 function dataFieldOptions(card: V2Card | null): string[] {
-  return Object.keys(card?.data ?? {})
+  const fields = Object.keys(card?.data ?? {})
     .sort((left, right) => left.localeCompare(right))
     .map((key) => `data.${key}`);
+  return ["title", "description", ...fields];
 }
 
 export function V2LinkedFieldsPreview({
@@ -49,24 +54,29 @@ export function V2LinkedFieldsPreview({
   cardById,
   allCards,
   allConnections,
-  drafts,
-  onAddDraft,
-  onRemoveDraft,
+  bindings,
+  isLoading,
+  error,
+  onCreateBinding,
+  onUpdateBinding,
+  onDeleteBinding,
 }: V2LinkedFieldsPreviewProps) {
   const [targetField, setTargetField] = useState("");
   const [sourceMode, setSourceMode] = useState<"exactCard" | "connectedCard">("exactCard");
   const [direction, setDirection] = useState<V2LinkedFieldDirection>("incoming");
   const [sourceCardId, setSourceCardId] = useState("");
-  const [sourceFieldPath, setSourceFieldPath] = useState("data.inn");
+  const [sourceFieldPath, setSourceFieldPath] = useState("data.field");
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [editingBindingId, setEditingBindingId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const cardTypeById = useMemo(
     () => new Map(cardTypes.map((cardType) => [cardType.id, cardType])),
     [cardTypes]
   );
-  const targetDrafts = drafts.filter((draft) => draft.targetCardId === card.id);
+  const targetBindings = bindings.filter((binding) => binding.targetCardId === card.id);
   const resolvedFields = resolveV2LinkedFieldDrafts({
-    drafts: targetDrafts,
+    bindings: targetBindings,
     targetCard: card,
     cards: allCards,
     connections: allConnections,
@@ -81,14 +91,34 @@ export function V2LinkedFieldsPreview({
   const sourceOptions = dataFieldOptions(selectedSourceCard);
   const targetKeyWarning =
     targetField.trim() && Object.prototype.hasOwnProperty.call(card.data ?? {}, targetField.trim())
-      ? "This key already exists in stored card data. Preview will not overwrite it."
+      ? "This key already exists in stored card data. Linked field will not overwrite it."
       : null;
   const dynamicModeWarning =
     sourceMode === "connectedCard" && selectedSourceCard && !selectedSourceType
       ? "Dynamic mode needs a stable source card type. Use exact card mode for now."
       : null;
 
-  function handleAddDraft() {
+  function resetForm() {
+    setTargetField("");
+    setSourceMode("exactCard");
+    setDirection("incoming");
+    setSourceCardId("");
+    setSourceFieldPath("data.field");
+    setEditingBindingId(null);
+    setDraftError(null);
+  }
+
+  function beginEdit(binding: V2LinkedFieldBinding) {
+    setTargetField(binding.targetField);
+    setSourceMode(binding.sourceMode);
+    setDirection(binding.direction);
+    setSourceCardId(binding.sourceCardId ?? "");
+    setSourceFieldPath(binding.sourceFieldPath);
+    setEditingBindingId(binding.id);
+    setDraftError(null);
+  }
+
+  async function handleSaveBinding() {
     const normalizedTargetField = targetField.trim();
     const normalizedSourceFieldPath = sourceFieldPath.trim();
     const sourceCard = sourceCardId ? cardById.get(sourceCardId) ?? null : connectedCards[0] ?? null;
@@ -111,8 +141,7 @@ export function V2LinkedFieldsPreview({
       return;
     }
 
-    onAddDraft({
-      id: createLinkedFieldId(),
+    const input = {
       targetCardId: card.id,
       targetField: normalizedTargetField,
       direction,
@@ -123,26 +152,46 @@ export function V2LinkedFieldsPreview({
       sourceMode,
       onMissing: "empty",
       onMultiple: "warning",
-    });
+    } satisfies V2CreateLinkedFieldBindingRequest;
 
-    setTargetField("");
+    setIsSaving(true);
     setDraftError(null);
+    try {
+      if (editingBindingId) {
+        await onUpdateBinding(editingBindingId, input);
+      } else {
+        await onCreateBinding(input);
+      }
+      resetForm();
+    } catch {
+      setDraftError(editingBindingId ? "Could not save linked field changes." : "Could not save linked field.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
     <section className="v2InspectorSection v2LinkedFieldsSection">
       <div className="v2InspectorSectionHeader">
-        <h3>Linked fields preview</h3>
-        <span className="v2LinkedFieldsBadge">Preview only - not saved</span>
+        <h3>Linked fields</h3>
+        <span className="v2LinkedFieldsBadge">Saved rule - resolved live</span>
       </div>
 
       <div className="v2LinkedFieldsBuilder">
+        <div className="v2LinkedFieldDraftHeader">
+          <span>{editingBindingId ? "Editing saved rule" : "Draft - not saved"}</span>
+          {editingBindingId ? (
+            <button type="button" onClick={resetForm}>
+              Cancel edit
+            </button>
+          ) : null}
+        </div>
         <label className="v2LinkedFieldControl">
           <span>Target field</span>
           <input
             className="v2InspectorDataValue"
             value={targetField}
-            placeholder="supplierInn"
+            placeholder="linkedField"
             onChange={(event) => {
               setTargetField(event.target.value);
               setDraftError(null);
@@ -207,7 +256,7 @@ export function V2LinkedFieldsPreview({
             className="v2InspectorDataValue"
             value={sourceFieldPath}
             list={`v2-linked-fields-${card.id}`}
-            placeholder="data.inn"
+            placeholder="data.field"
             onChange={(event) => {
               setSourceFieldPath(event.target.value);
               setDraftError(null);
@@ -228,38 +277,56 @@ export function V2LinkedFieldsPreview({
         {targetKeyWarning ? <p className="v2LinkedFieldWarning">{targetKeyWarning}</p> : null}
         {dynamicModeWarning ? <p className="v2LinkedFieldWarning">{dynamicModeWarning}</p> : null}
         {draftError ? <p className="v2LinkedFieldError">{draftError}</p> : null}
+        {error ? <p className="v2LinkedFieldError">{error}</p> : null}
 
-        <button type="button" className="v2LinkedFieldAddButton" onClick={handleAddDraft}>
+        <button
+          type="button"
+          className="v2LinkedFieldAddButton"
+          disabled={isSaving || isLoading}
+          onClick={() => void handleSaveBinding()}
+        >
           <Link2 size={14} strokeWidth={2.3} />
-          <span>Add preview field</span>
+          <span>{editingBindingId ? "Save changes" : "Add linked field"}</span>
         </button>
       </div>
 
-      {targetDrafts.length === 0 ? (
-        <p className="v2InspectorEmpty">No linked field previews</p>
+      {isLoading ? (
+        <p className="v2InspectorEmpty">Loading linked fields...</p>
+      ) : targetBindings.length === 0 ? (
+        <p className="v2InspectorEmpty">No linked fields</p>
       ) : (
         <div className="v2LinkedFieldResultList">
-          {targetDrafts.map((draft) => {
-            const resolved = resolvedFields.find((field) => field.bindingId === draft.id);
+          {targetBindings.map((binding) => {
+            const resolved = resolvedFields.find((field) => field.bindingId === binding.id);
             return (
-              <div key={draft.id} className="v2LinkedFieldResultRow">
+              <div key={binding.id} className="v2LinkedFieldResultRow">
                 <div className="v2LinkedFieldResultText">
-                  <strong>{draft.targetField}</strong>
+                  <strong>{binding.targetField}</strong>
                   <span>{formatLinkedFieldValue(resolved?.value)}</span>
                   <em>
-                    {draft.sourceMode === "connectedCard" ? "Dynamic" : "Exact"} · {draft.direction} ·{" "}
-                    {draft.sourceFieldPath}
+                    {binding.sourceMode === "connectedCard" ? "Dynamic" : "Exact"} · {binding.direction} ·{" "}
+                    {binding.sourceFieldPath}
                   </em>
                   {resolved?.message ? <p>{resolved.message}</p> : null}
                 </div>
-                <button
-                  type="button"
-                  className="v2InspectorDataDeleteButton"
-                  aria-label="Remove linked field preview"
-                  onClick={() => onRemoveDraft(draft.id)}
-                >
-                  <X size={14} strokeWidth={2.2} />
-                </button>
+                <div className="v2LinkedFieldRowActions">
+                  <button
+                    type="button"
+                    className="v2InspectorDataDeleteButton"
+                    aria-label="Edit linked field"
+                    onClick={() => beginEdit(binding)}
+                  >
+                    <Pencil size={14} strokeWidth={2.2} />
+                  </button>
+                  <button
+                    type="button"
+                    className="v2InspectorDataDeleteButton"
+                    aria-label="Remove linked field"
+                    onClick={() => void onDeleteBinding(binding.id)}
+                  >
+                    <X size={14} strokeWidth={2.2} />
+                  </button>
+                </div>
               </div>
             );
           })}

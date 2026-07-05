@@ -4315,6 +4315,31 @@ button:disabled {
   background: #fff;
 }
 
+.v2LinkedFieldDraftHeader {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.v2LinkedFieldDraftHeader span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.v2LinkedFieldDraftHeader button {
+  border: 0;
+  background: transparent;
+  color: var(--v2-inspector-accent);
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .v2LinkedFieldControl {
   display: grid;
   gap: 5px;
@@ -4377,6 +4402,11 @@ button:disabled {
   outline: 0;
 }
 
+.v2LinkedFieldAddButton:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
 .v2LinkedFieldResultList {
   display: grid;
   gap: 7px;
@@ -4384,7 +4414,7 @@ button:disabled {
 
 .v2LinkedFieldResultRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
   min-width: 0;
@@ -4392,6 +4422,11 @@ button:disabled {
   border: 1px solid #e8edf5;
   border-radius: 12px;
   background: #fff;
+}
+
+.v2LinkedFieldRowActions {
+  display: flex;
+  gap: 6px;
 }
 
 .v2LinkedFieldResultText {

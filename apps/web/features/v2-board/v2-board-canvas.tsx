@@ -29,6 +29,7 @@ import type {
   V2CardType,
   V2CardVisualStyle,
   V2DryRunResult,
+  V2LinkedFieldBinding,
 } from "@yadraw/shared";
 import {
   V2_CARD_MIN_SIZE,
@@ -54,12 +55,15 @@ import {
   deleteV2Card,
   duplicateV2Card,
   runV2BoardDryRun,
+  listV2LinkedFieldBindings,
+  createV2LinkedFieldBinding,
+  updateV2LinkedFieldBinding,
+  deleteV2LinkedFieldBinding,
   V2ApiError,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
-import type { V2LinkedFieldDraft } from "./v2-linked-fields";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -334,7 +338,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-  const [linkedFieldDrafts, setLinkedFieldDrafts] = useState<V2LinkedFieldDraft[]>([]);
+  const [linkedFieldBindings, setLinkedFieldBindings] = useState<V2LinkedFieldBinding[]>([]);
+  const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
+  const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
   const cardActionLockRef = useRef<PendingCardAction>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
@@ -371,6 +377,31 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   useEffect(() => {
     connectionRecordsRef.current = connectionRecords;
   }, [connectionRecords]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLinkedFieldBindingsLoading(true);
+    setLinkedFieldBindingsError(null);
+    listV2LinkedFieldBindings(board.id)
+      .then((bindings) => {
+        if (cancelled) return;
+        setLinkedFieldBindings(bindings);
+      })
+      .catch((err) => {
+        console.error("Failed to load linked field bindings:", err);
+        if (cancelled) return;
+        setLinkedFieldBindingsError("Linked fields could not be loaded.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLinkedFieldBindingsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [board.id]);
 
   const nodeTypes = useMemo(
     () => ({ v2Card: V2CardNodeComponent }),
@@ -765,11 +796,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
               connection.sourceCardId !== cardId && connection.targetCardId !== cardId
           )
         );
-        setLinkedFieldDrafts((current) =>
-          current.filter(
-            (draft) => draft.targetCardId !== cardId && draft.sourceCardId !== cardId
-          )
-        );
         setSelectedCardId((current) => (current === cardId ? null : current));
         setSelectedConnectionId(null);
         setVisualEditingCardId((current) => (current === cardId ? null : current));
@@ -842,6 +868,58 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setIsDryRunRunning(false);
     }
   }, [board.id, selectedCardId]);
+
+  const handleCreateLinkedFieldBinding = useCallback(
+    async (input: Parameters<typeof createV2LinkedFieldBinding>[1]) => {
+      setLinkedFieldBindingsError(null);
+      try {
+        const created = await createV2LinkedFieldBinding(board.id, input);
+        setLinkedFieldBindings((current) => [...current, created]);
+      } catch (err) {
+        console.error("Failed to create linked field binding:", err);
+        setLinkedFieldBindingsError("Linked field could not be saved.");
+        throw err;
+      }
+    },
+    [board.id]
+  );
+
+  const handleUpdateLinkedFieldBinding = useCallback(
+    async (
+      bindingId: string,
+      input: Parameters<typeof updateV2LinkedFieldBinding>[2]
+    ) => {
+      setLinkedFieldBindingsError(null);
+      try {
+        const updated = await updateV2LinkedFieldBinding(board.id, bindingId, input);
+        setLinkedFieldBindings((current) =>
+          current.map((binding) => (binding.id === bindingId ? updated : binding))
+        );
+      } catch (err) {
+        console.error("Failed to update linked field binding:", err);
+        setLinkedFieldBindingsError("Linked field changes could not be saved.");
+        throw err;
+      }
+    },
+    [board.id]
+  );
+
+  const handleDeleteLinkedFieldBinding = useCallback(
+    async (bindingId: string) => {
+      setLinkedFieldBindingsError(null);
+      try {
+        await deleteV2LinkedFieldBinding(board.id, bindingId);
+        setLinkedFieldBindings((current) =>
+          current.filter((binding) => binding.id !== bindingId)
+        );
+      } catch (err) {
+        console.error("Failed to delete linked field binding:", err);
+        setLinkedFieldBindingsError("Linked field could not be removed.");
+        throw err;
+      }
+    },
+    [board.id]
+  );
 
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
@@ -1348,18 +1426,17 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           cardById={cardById}
           allCards={boardCards}
           allConnections={connectionRecords}
-          linkedFieldDrafts={linkedFieldDrafts}
+          linkedFieldBindings={linkedFieldBindings}
+          linkedFieldBindingsLoading={linkedFieldBindingsLoading}
+          linkedFieldBindingsError={linkedFieldBindingsError}
           saveStatus={saveStatus}
           pendingAction={pendingCardAction?.cardId === selectedCard.id ? pendingCardAction.action : null}
           actionError={cardActionError?.cardId === selectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
-          onAddLinkedFieldDraft={(draft) => {
-            setLinkedFieldDrafts((current) => [...current, draft]);
-          }}
-          onRemoveLinkedFieldDraft={(draftId) => {
-            setLinkedFieldDrafts((current) => current.filter((draft) => draft.id !== draftId));
-          }}
+          onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
+          onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}
+          onDeleteLinkedFieldBinding={handleDeleteLinkedFieldBinding}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}

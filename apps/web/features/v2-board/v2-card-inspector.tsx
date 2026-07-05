@@ -1,7 +1,14 @@
 "use client";
 
 import { Copy, Database, Trash2, X } from "lucide-react";
-import type { V2Card, V2CardType, V2Connection } from "@yadraw/shared";
+import type {
+  V2Card,
+  V2CardType,
+  V2Connection,
+  V2CreateLinkedFieldBindingRequest,
+  V2LinkedFieldBinding,
+  V2UpdateLinkedFieldBindingRequest,
+} from "@yadraw/shared";
 import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
 import { V2CardBasicsSection } from "./v2-card-basics-section";
@@ -10,7 +17,6 @@ import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
-import type { V2LinkedFieldDraft } from "./v2-linked-fields";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -21,7 +27,9 @@ type V2CardInspectorProps = {
   cardById: Map<string, V2Card>;
   allCards: V2Card[];
   allConnections: V2Connection[];
-  linkedFieldDrafts: V2LinkedFieldDraft[];
+  linkedFieldBindings: V2LinkedFieldBinding[];
+  linkedFieldBindingsLoading: boolean;
+  linkedFieldBindingsError: string | null;
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
   actionError: string | null;
@@ -33,8 +41,12 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
-  onAddLinkedFieldDraft: (draft: V2LinkedFieldDraft) => void;
-  onRemoveLinkedFieldDraft: (draftId: string) => void;
+  onCreateLinkedFieldBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
+  onUpdateLinkedFieldBinding: (
+    bindingId: string,
+    input: V2UpdateLinkedFieldBindingRequest
+  ) => Promise<void>;
+  onDeleteLinkedFieldBinding: (bindingId: string) => Promise<void>;
   onDuplicateCard: (cardId: string) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
   onClose: () => void;
@@ -49,14 +61,17 @@ export function V2CardInspector({
   cardById,
   allCards,
   allConnections,
-  linkedFieldDrafts,
+  linkedFieldBindings,
+  linkedFieldBindingsLoading,
+  linkedFieldBindingsError,
   saveStatus,
   pendingAction,
   actionError,
   onUpdateCardBasics,
   onUpdateCardData,
-  onAddLinkedFieldDraft,
-  onRemoveLinkedFieldDraft,
+  onCreateLinkedFieldBinding,
+  onUpdateLinkedFieldBinding,
+  onDeleteLinkedFieldBinding,
   onDuplicateCard,
   onDeleteCard,
   onClose,
@@ -144,9 +159,12 @@ export function V2CardInspector({
           cardById={cardById}
           allCards={allCards}
           allConnections={allConnections}
-          drafts={linkedFieldDrafts}
-          onAddDraft={onAddLinkedFieldDraft}
-          onRemoveDraft={onRemoveLinkedFieldDraft}
+          bindings={linkedFieldBindings}
+          isLoading={linkedFieldBindingsLoading}
+          error={linkedFieldBindingsError}
+          onCreateBinding={onCreateLinkedFieldBinding}
+          onUpdateBinding={onUpdateLinkedFieldBinding}
+          onDeleteBinding={onDeleteLinkedFieldBinding}
         />
         <V2CardAttachmentsSection cardId={card.id} />
         <V2CardConnectionsSection

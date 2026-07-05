@@ -12,10 +12,14 @@ import {
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
+  v2CreateLinkedFieldBindingBodySchema,
   v2DryRunResultSchema,
   v2FileProcessingStatusSchema,
   v2FileSchema,
+  v2LinkedFieldBindingSchema,
+  v2LinkedFieldBindingListResponseSchema,
   v2RunDryRunBodySchema,
+  v2UpdateLinkedFieldBindingBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateCardBodySchema
 } from "./v2.js";
@@ -32,6 +36,7 @@ const connectionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const fileId = "77777777-7777-4777-8777-777777777777";
 const cardFileId = "88888888-8888-4888-8888-888888888888";
 const connectionFileId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const bindingId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("v2 API contracts", () => {
   it("parses the minimal board detail DTO", () => {
@@ -245,6 +250,8 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
     expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
+    expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
+    expect(v2ApiContracts.updateLinkedFieldBinding.body).toBe(v2UpdateLinkedFieldBindingBodySchema);
   });
 
   it("parses dry-run requests and results", () => {
@@ -272,6 +279,89 @@ describe("v2 API contracts", () => {
       mode: "dry-run",
       steps: [{ status: "would_run" }]
     });
+  });
+
+  it("parses generic linked field bindings", () => {
+    const binding = v2LinkedFieldBindingSchema.parse({
+      id: bindingId,
+      workspaceId,
+      boardId,
+      targetCardId,
+      targetField: "supplierPhone",
+      sourceMode: "connectedCard",
+      direction: "incoming",
+      sourceCardId: null,
+      sourceCardTypeId: cardTypeId,
+      sourceCardTypeKey: "source",
+      sourceFieldPath: "data.phone",
+      onMissing: "empty",
+      onMultiple: "warning",
+      status: "active",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    expect(binding).toMatchObject({
+      targetField: "supplierPhone",
+      sourceFieldPath: "data.phone",
+      sourceMode: "connectedCard"
+    });
+
+    expect(
+      v2LinkedFieldBindingListResponseSchema.parse({ fieldBindings: [binding] })
+    ).toMatchObject({
+      fieldBindings: [{ id: bindingId }]
+    });
+  });
+
+  it("accepts arbitrary supported source field paths for linked bindings", () => {
+    expect(
+      v2CreateLinkedFieldBindingBodySchema.parse({
+        targetCardId,
+        targetField: "assigneeName",
+        sourceMode: "exactCard",
+        direction: "incoming",
+        sourceCardId: cardId,
+        sourceFieldPath: "title"
+      })
+    ).toMatchObject({
+      targetField: "assigneeName",
+      sourceFieldPath: "title",
+      onMissing: "empty",
+      onMultiple: "warning"
+    });
+
+    expect(
+      v2UpdateLinkedFieldBindingBodySchema.parse({
+        targetField: "customerCity",
+        sourceFieldPath: "data.address.city"
+      })
+    ).toEqual({
+      targetField: "customerCity",
+      sourceFieldPath: "data.address.city"
+    });
+  });
+
+  it("rejects empty linked field targets and source paths", () => {
+    expect(() =>
+      v2CreateLinkedFieldBindingBodySchema.parse({
+        targetCardId,
+        targetField: "",
+        sourceMode: "connectedCard",
+        direction: "incoming",
+        sourceFieldPath: "data.phone"
+      })
+    ).toThrow();
+
+    expect(() =>
+      v2CreateLinkedFieldBindingBodySchema.parse({
+        targetCardId,
+        targetField: "supplierPhone",
+        sourceMode: "connectedCard",
+        direction: "incoming",
+        sourceFieldPath: ""
+      })
+    ).toThrow();
   });
 });
 

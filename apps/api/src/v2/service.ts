@@ -2,12 +2,15 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type V2CardAttachment,
   type V2ConnectionAttachment,
+  type V2CreateLinkedFieldBindingRequest,
   v2CreateCardBodySchema,
   v2CreateConnectionBodySchema,
+  v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
   v2RunDryRunBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
+  v2UpdateLinkedFieldBindingBodySchema,
   type V2BoardDetail,
   type V2Card,
   type V2CardType,
@@ -15,9 +18,11 @@ import {
   type V2CreateCardRequest,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
+  type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
   type V2UpdateCardRequest,
-  type V2UpdateConnectionRequest
+  type V2UpdateConnectionRequest,
+  type V2UpdateLinkedFieldBindingRequest
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
@@ -52,6 +57,23 @@ export type V2BoardService = {
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
   runBoardDryRun(context: RequestContext, boardId: string, input?: V2RunDryRunRequest): Promise<V2DryRunResult>;
+  listLinkedFieldBindings(context: RequestContext, boardId: string): Promise<{ fieldBindings: V2LinkedFieldBinding[] }>;
+  createLinkedFieldBinding(
+    context: RequestContext,
+    boardId: string,
+    input: V2CreateLinkedFieldBindingRequest
+  ): Promise<V2LinkedFieldBinding>;
+  updateLinkedFieldBinding(
+    context: RequestContext,
+    boardId: string,
+    bindingId: string,
+    input: V2UpdateLinkedFieldBindingRequest
+  ): Promise<V2LinkedFieldBinding>;
+  deleteLinkedFieldBinding(
+    context: RequestContext,
+    boardId: string,
+    bindingId: string
+  ): Promise<{ deleted: true; id: string }>;
   createCard(context: RequestContext, boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
   duplicateCard(context: RequestContext, cardId: string): Promise<V2Card>;
   updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
@@ -266,6 +288,84 @@ export function createV2BoardService(
     };
   }
 
+  function requireLinkedFieldBindingRepository(): {
+    listLinkedFieldBindings(boardId: string): Promise<V2LinkedFieldBinding[]>;
+    getLinkedFieldBinding(bindingId: string): Promise<V2LinkedFieldBinding | null>;
+    createLinkedFieldBinding(input: Parameters<NonNullable<V2Repository["createLinkedFieldBinding"]>>[0]): Promise<V2LinkedFieldBinding>;
+    updateLinkedFieldBinding(
+      bindingId: string,
+      input: Parameters<NonNullable<V2Repository["updateLinkedFieldBinding"]>>[1]
+    ): Promise<V2LinkedFieldBinding | null>;
+    deleteLinkedFieldBinding(bindingId: string): Promise<boolean>;
+  } {
+    if (
+      !repository.listLinkedFieldBindings ||
+      !repository.getLinkedFieldBinding ||
+      !repository.createLinkedFieldBinding ||
+      !repository.updateLinkedFieldBinding ||
+      !repository.deleteLinkedFieldBinding
+    ) {
+      throw new V2ServiceError("conflict", "V2 linked field binding repository is not available");
+    }
+
+    return {
+      listLinkedFieldBindings: repository.listLinkedFieldBindings.bind(repository),
+      getLinkedFieldBinding: repository.getLinkedFieldBinding.bind(repository),
+      createLinkedFieldBinding: repository.createLinkedFieldBinding.bind(repository),
+      updateLinkedFieldBinding: repository.updateLinkedFieldBinding.bind(repository),
+      deleteLinkedFieldBinding: repository.deleteLinkedFieldBinding.bind(repository)
+    };
+  }
+
+  async function requireBoardForAccess(
+    context: RequestContext,
+    boardId: string,
+    accessLevel: V2AccessLevel
+  ) {
+    const board = await repository.getBoard(boardId);
+    if (!board) {
+      notFound("Board not found");
+    }
+    await authorizeWorkspace(context, board.workspaceId, accessLevel);
+    return board;
+  }
+
+  async function requireCardOnBoard(cardId: string, boardId: string, label: string): Promise<V2Card> {
+    const card = await repository.getCard(cardId);
+    if (!card || card.boardId !== boardId) {
+      notFound(`${label} card not found on board`);
+    }
+    return card;
+  }
+
+  async function validateLinkedFieldBindingInput(
+    boardId: string,
+    workspaceId: string,
+    input: {
+      targetCardId: string;
+      sourceMode: "exactCard" | "connectedCard";
+      sourceCardId?: string | null;
+      sourceCardTypeId?: string | null;
+    }
+  ) {
+    await requireCardOnBoard(input.targetCardId, boardId, "Target");
+
+    if (input.sourceMode === "exactCard" && !input.sourceCardId) {
+      validationFailed("Exact card mode requires sourceCardId");
+    }
+
+    if (input.sourceCardId) {
+      await requireCardOnBoard(input.sourceCardId, boardId, "Source");
+    }
+
+    if (input.sourceCardTypeId) {
+      const cardType = await repository.getCardType(input.sourceCardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        validationFailed("Source card type does not belong to the board workspace");
+      }
+    }
+  }
+
   return {
     async getBoard(context, boardId) {
       const board = await repository.getBoardDetail(boardId);
@@ -280,6 +380,86 @@ export function createV2BoardService(
     async listCardTypes(context, workspaceId) {
       await authorizeWorkspace(context, workspaceId, "read");
       return { cardTypes: await repository.listCardTypes(workspaceId) };
+    },
+
+    async listLinkedFieldBindings(context, boardId) {
+      await requireBoardForAccess(context, boardId, "read");
+      const bindingRepository = requireLinkedFieldBindingRepository();
+      return {
+        fieldBindings: await bindingRepository.listLinkedFieldBindings(boardId)
+      };
+    },
+
+    async createLinkedFieldBinding(context, boardId, rawInput) {
+      const parsedInput = v2CreateLinkedFieldBindingBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid linked field binding payload");
+      }
+      const input = parsedInput.data;
+      const board = await requireBoardForAccess(context, boardId, "write");
+      await validateLinkedFieldBindingInput(board.id, board.workspaceId, input);
+      const bindingRepository = requireLinkedFieldBindingRepository();
+
+      return bindingRepository.createLinkedFieldBinding({
+        workspaceId: board.workspaceId,
+        boardId: board.id,
+        targetCardId: input.targetCardId,
+        targetField: input.targetField,
+        sourceMode: input.sourceMode,
+        direction: input.direction,
+        sourceCardId: input.sourceCardId ?? null,
+        sourceCardTypeId: input.sourceCardTypeId ?? null,
+        sourceCardTypeKey: input.sourceCardTypeKey ?? null,
+        sourceFieldPath: input.sourceFieldPath,
+        onMissing: input.onMissing,
+        onMultiple: input.onMultiple,
+        status: "active"
+      });
+    },
+
+    async updateLinkedFieldBinding(context, boardId, bindingId, rawInput) {
+      const parsedInput = v2UpdateLinkedFieldBindingBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid linked field binding update payload");
+      }
+      const input = parsedInput.data;
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const bindingRepository = requireLinkedFieldBindingRepository();
+      const existing = await bindingRepository.getLinkedFieldBinding(bindingId);
+      if (!existing || existing.boardId !== board.id) {
+        notFound("Linked field binding not found");
+      }
+
+      const next = {
+        targetCardId: input.targetCardId ?? existing.targetCardId,
+        sourceMode: input.sourceMode ?? existing.sourceMode,
+        sourceCardId: input.sourceCardId !== undefined ? input.sourceCardId : existing.sourceCardId ?? null,
+        sourceCardTypeId:
+          input.sourceCardTypeId !== undefined ? input.sourceCardTypeId : existing.sourceCardTypeId ?? null
+      };
+      await validateLinkedFieldBindingInput(board.id, board.workspaceId, next);
+
+      const updated = await bindingRepository.updateLinkedFieldBinding(bindingId, input);
+      if (!updated) {
+        notFound("Linked field binding not found");
+      }
+
+      return updated;
+    },
+
+    async deleteLinkedFieldBinding(context, boardId, bindingId) {
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const bindingRepository = requireLinkedFieldBindingRepository();
+      const existing = await bindingRepository.getLinkedFieldBinding(bindingId);
+      if (!existing || existing.boardId !== board.id) {
+        notFound("Linked field binding not found");
+      }
+      const deleted = await bindingRepository.deleteLinkedFieldBinding(bindingId);
+      if (!deleted) {
+        notFound("Linked field binding not found");
+      }
+
+      return { deleted: true, id: bindingId };
     },
 
     async runBoardDryRun(context, boardId, rawInput = {}) {

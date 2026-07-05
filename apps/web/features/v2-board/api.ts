@@ -5,8 +5,12 @@ import type {
   V2Connection,
   V2ConnectionAttachment,
   V2ConnectionVisualStyle,
+  V2CreateLinkedFieldBindingRequest,
   V2CreateCardRequest,
   V2DryRunResult,
+  V2LinkedFieldBinding,
+  V2LinkedFieldBindingListResponse,
+  V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
 
 export class V2ApiError extends Error {
@@ -260,6 +264,94 @@ export async function runV2BoardDryRun(
     );
   }
   return response.json() as Promise<V2DryRunResult>;
+}
+
+export async function listV2LinkedFieldBindings(
+  boardId: string
+): Promise<V2LinkedFieldBinding[]> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/field-bindings`,
+    { method: "GET", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Linked field bindings request failed with ${response.status}`,
+      body
+    );
+  }
+  const data = (await response.json()) as V2LinkedFieldBindingListResponse;
+  return data.fieldBindings;
+}
+
+export async function createV2LinkedFieldBinding(
+  boardId: string,
+  input: V2CreateLinkedFieldBindingRequest
+): Promise<V2LinkedFieldBinding> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/field-bindings`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Linked field binding creation failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2LinkedFieldBinding>;
+}
+
+export async function updateV2LinkedFieldBinding(
+  boardId: string,
+  bindingId: string,
+  input: V2UpdateLinkedFieldBindingRequest
+): Promise<V2LinkedFieldBinding> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/field-bindings/${encodeURIComponent(bindingId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Linked field binding update failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2LinkedFieldBinding>;
+}
+
+export async function deleteV2LinkedFieldBinding(
+  boardId: string,
+  bindingId: string
+): Promise<void> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/field-bindings/${encodeURIComponent(bindingId)}`,
+    { method: "DELETE", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Linked field binding deletion failed with ${response.status}`,
+      body
+    );
+  }
 }
 
 export async function deleteV2Connection(

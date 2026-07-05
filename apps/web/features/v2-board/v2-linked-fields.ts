@@ -7,13 +7,19 @@ export type V2LinkedFieldDraft = {
   targetCardId: string;
   targetField: string;
   direction: V2LinkedFieldDirection;
-  sourceCardId?: string;
+  sourceCardId?: string | null;
   sourceCardTypeId?: string | null;
   sourceCardTypeKey?: string | null;
   sourceFieldPath: string;
   sourceMode: "exactCard" | "connectedCard";
   onMissing: "empty";
   onMultiple: "warning";
+};
+
+export type V2LinkedFieldBindingLike = V2LinkedFieldDraft & {
+  status?: "active";
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type V2ResolvedLinkedField = {
@@ -30,7 +36,7 @@ export type V2ResolvedLinkedField = {
 };
 
 type ResolveLinkedFieldsInput = {
-  drafts: V2LinkedFieldDraft[];
+  bindings: V2LinkedFieldBindingLike[];
   targetCard: V2Card;
   cards: V2Card[];
   connections: V2Connection[];
@@ -64,7 +70,7 @@ function readPath(sourceCard: V2Card, path: string): { found: true; value: unkno
 }
 
 function emptyResult(
-  draft: V2LinkedFieldDraft,
+  draft: V2LinkedFieldBindingLike,
   status: V2ResolvedLinkedField["status"],
   message: string
 ): V2ResolvedLinkedField {
@@ -78,7 +84,7 @@ function emptyResult(
 }
 
 function resolveFromCard(
-  draft: V2LinkedFieldDraft,
+  draft: V2LinkedFieldBindingLike,
   sourceCard: V2Card | undefined
 ): V2ResolvedLinkedField {
   if (!sourceCard) {
@@ -103,7 +109,7 @@ function resolveFromCard(
 }
 
 export function resolveV2LinkedFieldDrafts({
-  drafts,
+  bindings,
   targetCard,
   cards,
   connections,
@@ -112,7 +118,7 @@ export function resolveV2LinkedFieldDrafts({
   const cardById = new Map(cards.map((card) => [card.id, card]));
   const cardTypeById = new Map(cardTypes.map((cardType) => [cardType.id, cardType]));
 
-  return drafts
+  return bindings
     .filter((draft) => draft.targetCardId === targetCard.id)
     .map((draft) => {
       if (!draft.targetField.trim()) {
