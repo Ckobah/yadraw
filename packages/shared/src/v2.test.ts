@@ -12,6 +12,7 @@ import {
   v2ConnectionFileSchema,
   v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
+  v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
   v2CreateLinkedFieldBindingBodySchema,
@@ -21,6 +22,7 @@ import {
   v2LinkedFieldBindingSchema,
   v2LinkedFieldBindingListResponseSchema,
   v2RunDryRunBodySchema,
+  v2UpdateCardTypeBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
@@ -345,10 +347,46 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.createCard.body).toBe(v2CreateCardBodySchema);
     expect(v2ApiContracts.updateCard.body).toBe(v2UpdateCardBodySchema);
     expect(v2ApiContracts.updateConnection.body).toBe(v2UpdateConnectionBodySchema);
+    expect(v2ApiContracts.createCardType.body).toBe(v2CreateCardTypeBodySchema);
+    expect(v2ApiContracts.updateCardType.body).toBe(v2UpdateCardTypeBodySchema);
     expect(v2ApiContracts.updateCardTypeSchema.body).toBe(v2UpdateCardTypeSchemaBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
     expect(v2ApiContracts.updateLinkedFieldBinding.body).toBe(v2UpdateLinkedFieldBindingBodySchema);
+  });
+
+  it("parses card type create and update requests", () => {
+    expect(
+      v2CreateCardTypeBodySchema.parse({
+        key: "supplier",
+        name: "Supplier",
+        description: "Provides parts",
+        schema: {
+          fields: [{ key: "phone", label: "Phone", type: "text" }]
+        }
+      })
+    ).toEqual({
+      key: "supplier",
+      name: "Supplier",
+      description: "Provides parts",
+      schema: {
+        fields: [{ key: "phone", label: "Phone", type: "text" }]
+      }
+    });
+
+    expect(
+      v2UpdateCardTypeBodySchema.parse({
+        name: "Updated supplier",
+        schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
+      })
+    ).toEqual({
+      name: "Updated supplier",
+      schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
+    });
+
+    expect(() => v2CreateCardTypeBodySchema.parse({ key: "", name: "Bad" })).toThrow();
+    expect(() => v2CreateCardTypeBodySchema.parse({ key: "BadKey", name: "Bad" })).toThrow();
+    expect(() => v2CreateCardTypeBodySchema.parse({ key: "supplier", name: "" })).toThrow();
   });
 
   it("parses card type schema update requests", () => {

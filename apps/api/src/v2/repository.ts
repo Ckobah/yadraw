@@ -25,6 +25,7 @@ import {
   type V2LinkedFieldBinding,
   type V2Project,
   type V2Size,
+  type V2UpdateCardTypeInput,
   type V2UpdateCardInput,
   type V2UpdateConnectionInput,
   type V2UpdateLinkedFieldBindingInput,
@@ -44,6 +45,14 @@ export type V2CreateCardRecordInput = {
   size: V2Size;
   status: V2CardStatus;
   visualStyle?: Record<string, unknown>;
+};
+
+export type V2CreateCardTypeRecordInput = {
+  workspaceId: string;
+  key: string;
+  name: string;
+  description: string;
+  schema: V2CardTypeSchema;
 };
 
 export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
@@ -108,6 +117,8 @@ export type V2Repository = {
   getBoard(boardId: string): Promise<V2Board | null>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
+  createCardType?(input: V2CreateCardTypeRecordInput): Promise<V2CardType>;
+  updateCardType?(cardTypeId: string, input: V2UpdateCardTypeInput): Promise<V2CardType | null>;
   updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
   getCard(cardId: string): Promise<V2Card | null>;
   createCard(input: V2CreateCardRecordInput): Promise<V2Card>;
@@ -675,6 +686,43 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     async getCardType(cardTypeId) {
       if (deletedCardTypeIds.has(cardTypeId)) return null;
       return cloneJson(state.cardTypes.find((cardType) => cardType.id === cardTypeId) ?? null);
+    },
+
+    async createCardType(input) {
+      const timestamp = nowIso();
+      const cardType = v2CardTypeSchema.parse({
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        key: input.key,
+        name: input.name,
+        description: input.description,
+        defaultData: {},
+        schema: cloneJson(input.schema),
+        defaultSize: { width: 300, height: 180 },
+        ports: [],
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+      state.cardTypes.push(cardType);
+      return cloneJson(cardType);
+    },
+
+    async updateCardType(cardTypeId, input) {
+      if (deletedCardTypeIds.has(cardTypeId)) return null;
+      const index = state.cardTypes.findIndex((cardType) => cardType.id === cardTypeId);
+      const existing = state.cardTypes[index];
+      if (index === -1 || !existing) return null;
+
+      const updated = v2CardTypeSchema.parse({
+        ...existing,
+        ...(input.key !== undefined ? { key: input.key } : {}),
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.schema !== undefined ? { schema: cloneJson(input.schema) } : {}),
+        updatedAt: nowIso()
+      });
+      state.cardTypes[index] = updated;
+      return cloneJson(updated);
     },
 
     async updateCardTypeSchema(cardTypeId, schema) {
@@ -1347,6 +1395,73 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           limit 1
         `,
         [cardTypeId]
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+
+      const ports = await loadPortsForCardTypes([cardTypeId]);
+      return cardTypeFromRow(row, ports.get(cardTypeId) ?? []);
+    },
+
+    async createCardType(input) {
+      const result = await pool.query(
+        `
+          insert into card_types (
+            workspace_id,
+            key,
+            name,
+            description,
+            schema
+          )
+          values ($1, $2, $3, $4, $5::jsonb)
+          returning *
+        `,
+        [
+          input.workspaceId,
+          input.key,
+          input.name,
+          input.description,
+          JSON.stringify(input.schema)
+        ]
+      );
+      const row = result.rows[0];
+      return cardTypeFromRow(row, []);
+    },
+
+    async updateCardType(cardTypeId, input) {
+      const existingResult = await pool.query(
+        `
+          select *
+          from card_types
+          where id = $1
+            and deleted_at is null
+          limit 1
+        `,
+        [cardTypeId]
+      );
+      const existingRow = existingResult.rows[0];
+      if (!existingRow) return null;
+      const existing = cardTypeFromRow(existingRow);
+
+      const result = await pool.query(
+        `
+          update card_types
+          set key = $2,
+              name = $3,
+              description = $4,
+              schema = $5::jsonb,
+              updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning *
+        `,
+        [
+          cardTypeId,
+          input.key ?? existing.key,
+          input.name ?? existing.name,
+          input.description ?? existing.description,
+          JSON.stringify(input.schema ?? existing.schema)
+        ]
       );
       const row = result.rows[0];
       if (!row) return null;

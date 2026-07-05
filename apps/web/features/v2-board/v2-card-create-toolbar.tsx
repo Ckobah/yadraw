@@ -12,11 +12,13 @@ type V2CardCreateToolbarProps = {
     cardType: V2CardType,
     position: V2Position
   ) => Promise<void>;
+  onManageCardTypes: (cardTypeId?: string | null) => void;
 };
 
 export function V2CardCreateToolbar({
   cardTypes,
   onCreateCard,
+  onManageCardTypes,
 }: V2CardCreateToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
   const [isOpen, setIsOpen] = useState(false);
@@ -88,6 +90,11 @@ export function V2CardCreateToolbar({
     } finally {
       setIsCreating(false);
     }
+  }
+
+  function handleManageCardTypes() {
+    setIsOpen(false);
+    onManageCardTypes(activeCardType?.id ?? null);
   }
 
   return (
@@ -172,8 +179,7 @@ export function V2CardCreateToolbar({
           <div className="v2CardTypePickerFooter">
             <button
               type="button"
-              disabled
-              title="Coming next: read-only type manager."
+              onClick={handleManageCardTypes}
             >
               Manage card types
             </button>

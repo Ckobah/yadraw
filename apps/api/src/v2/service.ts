@@ -2,8 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   type V2CardAttachment,
   type V2ConnectionAttachment,
+  type V2CreateCardTypeRequest,
   type V2CreateLinkedFieldBindingRequest,
   v2CreateCardBodySchema,
+  v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
@@ -21,7 +23,9 @@ import {
   type V2DryRunResult,
   type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
+  type V2UpdateCardTypeRequest,
   type V2UpdateCardRequest,
+  v2UpdateCardTypeBodySchema,
   type V2UpdateCardTypeSchemaRequest,
   type V2UpdateConnectionRequest,
   type V2UpdateLinkedFieldBindingRequest
@@ -58,6 +62,17 @@ export class V2ServiceError extends Error {
 export type V2BoardService = {
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
+  createCardType(
+    context: RequestContext,
+    boardId: string,
+    input: V2CreateCardTypeRequest
+  ): Promise<V2CardType>;
+  updateCardType(
+    context: RequestContext,
+    boardId: string,
+    cardTypeId: string,
+    input: V2UpdateCardTypeRequest
+  ): Promise<V2CardType>;
   updateCardTypeSchema(
     context: RequestContext,
     boardId: string,
@@ -326,13 +341,23 @@ export function createV2BoardService(
   }
 
   function requireCardTypeSchemaRepository(): {
+    createCardType(input: {
+      workspaceId: string;
+      key: string;
+      name: string;
+      description: string;
+      schema: V2CardType["schema"];
+    }): Promise<V2CardType>;
+    updateCardType(cardTypeId: string, input: V2UpdateCardTypeRequest): Promise<V2CardType | null>;
     updateCardTypeSchema(cardTypeId: string, schema: V2CardType["schema"]): Promise<V2CardType | null>;
   } {
-    if (!repository.updateCardTypeSchema) {
+    if (!repository.createCardType || !repository.updateCardType || !repository.updateCardTypeSchema) {
       throw new V2ServiceError("conflict", "V2 card type schema repository is not available");
     }
 
     return {
+      createCardType: repository.createCardType.bind(repository),
+      updateCardType: repository.updateCardType.bind(repository),
       updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository)
     };
   }
@@ -356,6 +381,17 @@ export function createV2BoardService(
       notFound(`${label} card not found on board`);
     }
     return card;
+  }
+
+  async function ensureCardTypeKeyUnique(
+    workspaceId: string,
+    key: string,
+    existingCardTypeId?: string
+  ) {
+    const cardTypes = await repository.listCardTypes(workspaceId);
+    if (cardTypes.some((cardType) => cardType.key === key && cardType.id !== existingCardTypeId)) {
+      throw new V2ServiceError("conflict", "Card type key already exists");
+    }
   }
 
   async function validateLinkedFieldBindingInput(
@@ -400,6 +436,53 @@ export function createV2BoardService(
     async listCardTypes(context, workspaceId) {
       await authorizeWorkspace(context, workspaceId, "read");
       return { cardTypes: await repository.listCardTypes(workspaceId) };
+    },
+
+    async createCardType(context, boardId, rawInput) {
+      const parsedInput = v2CreateCardTypeBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid card type payload");
+      }
+
+      const board = await requireBoardForAccess(context, boardId, "write");
+      await ensureCardTypeKeyUnique(board.workspaceId, parsedInput.data.key);
+
+      return requireCardTypeSchemaRepository().createCardType({
+        workspaceId: board.workspaceId,
+        key: parsedInput.data.key,
+        name: parsedInput.data.name,
+        description: parsedInput.data.description ?? "",
+        schema: parsedInput.data.schema
+      });
+    },
+
+    async updateCardType(context, boardId, cardTypeId, rawInput) {
+      const parsedInput = v2UpdateCardTypeBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid card type payload");
+      }
+
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType) {
+        notFound("Card type not found");
+      }
+      if (cardType.workspaceId !== board.workspaceId) {
+        validationFailed("Card type does not belong to the board workspace");
+      }
+      if (parsedInput.data.key !== undefined) {
+        await ensureCardTypeKeyUnique(board.workspaceId, parsedInput.data.key, cardType.id);
+      }
+
+      const updated = await requireCardTypeSchemaRepository().updateCardType(
+        cardType.id,
+        parsedInput.data
+      );
+      if (!updated) {
+        notFound("Card type not found");
+      }
+
+      return updated;
     },
 
     async updateCardTypeSchema(context, boardId, cardTypeId, rawInput) {

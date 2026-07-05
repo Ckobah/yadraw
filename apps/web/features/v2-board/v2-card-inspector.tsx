@@ -16,7 +16,6 @@ import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardAccentColor } from "./v2-card-node";
-import { V2CardTypeSchemaEditor } from "./v2-card-type-schema-editor";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 
 type V2CardInspectorProps = {
@@ -42,10 +41,7 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
-  onUpdateCardTypeSchema: (
-    cardTypeId: string,
-    schema: V2CardType["schema"]
-  ) => Promise<V2CardType>;
+  onManageCardType: (cardTypeId: string | null) => void;
   onCreateLinkedFieldBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
   onUpdateLinkedFieldBinding: (
     bindingId: string,
@@ -74,7 +70,7 @@ export function V2CardInspector({
   actionError,
   onUpdateCardBasics,
   onUpdateCardData,
-  onUpdateCardTypeSchema,
+  onManageCardType,
   onCreateLinkedFieldBinding,
   onUpdateLinkedFieldBinding,
   onDeleteLinkedFieldBinding,
@@ -110,6 +106,13 @@ export function V2CardInspector({
         <div className="v2InspectorHeaderText">
           <span>{cardType?.name ?? "Unknown type"}</span>
           <strong>{cardType?.key ?? "unknown"}</strong>
+          <button
+            type="button"
+            className="v2InspectorManageTypeButton"
+            onClick={() => onManageCardType(cardType?.id ?? null)}
+          >
+            Manage type
+          </button>
         </div>
         <div className="v2InspectorActions" aria-live="polite">
           <div className="v2InspectorActionRow">
@@ -151,10 +154,6 @@ export function V2CardInspector({
           card={card}
           saveStatus={saveStatus}
           onUpdateCardBasics={onUpdateCardBasics}
-        />
-        <V2CardTypeSchemaEditor
-          cardType={cardType}
-          onSave={onUpdateCardTypeSchema}
         />
         <V2CardDataSection
           card={card}

@@ -4341,6 +4341,230 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.v2InspectorManageTypeButton {
+  justify-self: start;
+  width: fit-content;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 28%, #d9e0ec);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--v2-inspector-accent);
+  font-size: 11px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.v2InspectorManageTypeButton:hover,
+.v2InspectorManageTypeButton:focus-visible {
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  outline: 0;
+}
+
+.v2ModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.v2CardTypeManager {
+  --v2-inspector-accent: #2657d9;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1080px, calc(100vw - 48px));
+  max-height: min(820px, calc(100vh - 48px));
+  min-height: 560px;
+  overflow: hidden;
+  border: 1px solid #d9e0ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.v2CardTypeManagerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e8edf5;
+  background: #f8fafc;
+}
+
+.v2CardTypeManagerHeader h2,
+.v2CardTypeManagerHeader p,
+.v2CardTypeManagerSectionHeader h3,
+.v2CardTypeManagerSectionHeader span,
+.v2CardTypeManagerFuture h3,
+.v2CardTypeManagerFuture p {
+  margin: 0;
+}
+
+.v2CardTypeManagerHeader h2 {
+  color: #182230;
+  font-size: 18px;
+  font-weight: 780;
+}
+
+.v2CardTypeManagerHeader p,
+.v2CardTypeManagerSectionHeader span,
+.v2CardTypeManagerFuture p {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.4;
+}
+
+.v2CardTypeManagerBody {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.v2CardTypeManagerList {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  border-right: 1px solid #e8edf5;
+  background: #fbfcfe;
+}
+
+.v2CardTypeManagerRow,
+.v2CardTypeManagerNewButton {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e4e7f0;
+  border-radius: 10px;
+  background: #fff;
+  color: #344054;
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2CardTypeManagerNewButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #2657d9;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v2CardTypeManagerRow strong,
+.v2CardTypeManagerRow span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardTypeManagerRow strong {
+  color: #1d2939;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v2CardTypeManagerRow span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 670;
+}
+
+.v2CardTypeManagerRow:hover,
+.v2CardTypeManagerNewButton:hover,
+.v2CardTypeManagerRow:focus-visible,
+.v2CardTypeManagerNewButton:focus-visible,
+.v2CardTypeManagerRowActive {
+  border-color: #a9bdf7;
+  background: #eef4ff;
+  outline: 0;
+}
+
+.v2CardTypeManagerEditor {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.v2CardTypeManagerSection,
+.v2CardTypeSchemaEditor,
+.v2CardTypeManagerFuture {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e4e7f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.v2CardTypeManagerSectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.v2CardTypeManagerSectionHeader h3,
+.v2CardTypeManagerFuture h3 {
+  color: #1d2939;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.v2CardTypeManagerDetailsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.v2CardTypeManagerDetailsGrid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v2CardTypeManagerDetailsGrid label > span {
+  color: #667085;
+  font-size: 10.5px;
+  font-weight: 720;
+  line-height: 1;
+}
+
+.v2CardTypeManagerDescription {
+  grid-column: 1 / -1;
+}
+
+.v2CardTypeManagerFuture {
+  background: #f8fafc;
+}
+
+.v2CardTypeManagerSuccess {
+  margin: 0;
+  color: #057647;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.v2CardTypeManagerActions {
+  justify-content: flex-end;
+}
+
 .v2CardTypeSchemaEditor {
   border-color: color-mix(in srgb, var(--v2-inspector-accent) 18%, #e4e7f0);
   background: color-mix(in srgb, var(--v2-inspector-accent) 4%, #fff);
@@ -4381,6 +4605,11 @@ button:disabled {
   font-size: 11px;
   font-weight: 760;
   cursor: pointer;
+}
+
+.v2SchemaEditButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
 }
 
 .v2SchemaEditButton:hover,
@@ -4497,6 +4726,27 @@ button:disabled {
 }
 
 @media (max-width: 560px) {
+  .v2ModalOverlay {
+    padding: 12px;
+  }
+
+  .v2CardTypeManager {
+    width: calc(100vw - 24px);
+    min-height: 0;
+    max-height: calc(100vh - 24px);
+  }
+
+  .v2CardTypeManagerBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .v2CardTypeManagerList {
+    max-height: 180px;
+    border-right: 0;
+    border-bottom: 1px solid #e8edf5;
+  }
+
+  .v2CardTypeManagerDetailsGrid,
   .v2SchemaFieldDraftGrid,
   .v2SchemaFieldDetailsGrid {
     grid-template-columns: minmax(0, 1fr);

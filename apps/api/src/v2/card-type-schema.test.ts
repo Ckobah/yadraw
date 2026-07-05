@@ -191,4 +191,141 @@ describe("v2 card type schema API", () => {
 
     await server.close();
   });
+
+  it("creates a card type with empty ports and schema fields", async () => {
+    const { server, seed, repository } = createSchemaServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/card-types`,
+      payload: {
+        key: "supplier",
+        name: "Supplier",
+        description: "Provides material data.",
+        schema: {
+          fields: [{ key: "phone", label: "Phone", type: "text" }]
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      key: "supplier",
+      name: "Supplier",
+      description: "Provides material data.",
+      defaultData: {},
+      defaultSize: { width: 300, height: 180 },
+      ports: [],
+      schema: { fields: [{ key: "phone", label: "Phone", type: "text" }] }
+    });
+
+    await expect(repository.getBoardDetail(seed.board.id)).resolves.toMatchObject({
+      cardTypes: expect.arrayContaining([
+        expect.objectContaining({ key: "supplier", name: "Supplier" })
+      ])
+    });
+
+    await server.close();
+  });
+
+  it("rejects duplicate card type key and empty create fields", async () => {
+    const { server, seed } = createSchemaServer();
+    const existing = seed.cardTypes[0]!;
+
+    const duplicate = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/card-types`,
+      payload: {
+        key: existing.key,
+        name: "Duplicate",
+        schema: { fields: [] }
+      }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ error: { code: "conflict" } });
+
+    for (const payload of [
+      { key: "", name: "Missing key", schema: { fields: [] } },
+      { key: "new_type", name: "", schema: { fields: [] } }
+    ]) {
+      const response = await server.inject({
+        method: "POST",
+        url: `/v2/boards/${seed.board.id}/card-types`,
+        payload
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: { code: "invalid_payload" } });
+    }
+
+    await server.close();
+  });
+
+  it("updates card type details and schema without mutating cards or defaults", async () => {
+    const { server, seed, repository } = createSchemaServer();
+    const cardType = seed.cardTypes[0]!;
+    const card = seed.cards.find((item) => item.cardTypeId === cardType.id)!;
+    const defaultData = structuredClone(cardType.defaultData);
+    const cardData = structuredClone(card.data);
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/card-types/${cardType.id}`,
+      payload: {
+        key: "updated_source",
+        name: "Updated Source",
+        description: "Updated description",
+        schema: {
+          fields: [{ key: "email", label: "Email", type: "text" }]
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: cardType.id,
+      key: "updated_source",
+      name: "Updated Source",
+      description: "Updated description",
+      defaultData,
+      schema: { fields: [{ key: "email", label: "Email", type: "text" }] }
+    });
+
+    const detail = await repository.getBoardDetail(seed.board.id);
+    const updatedType = detail!.cardTypes.find((item) => item.id === cardType.id)!;
+    const updatedCard = detail!.cards.find((item) => item.id === card.id)!;
+    expect(updatedType.defaultData).toEqual(defaultData);
+    expect(updatedCard.data).toEqual(cardData);
+
+    await server.close();
+  });
+
+  it("rejects invalid card type updates", async () => {
+    const { server, seed } = createSchemaServer();
+    const cardType = seed.cardTypes[0]!;
+    const otherType = seed.cardTypes[1]!;
+
+    for (const payload of [
+      { key: otherType.key },
+      { key: "" },
+      { name: "" },
+      {
+        schema: {
+          fields: [
+            { key: "phone", label: "Phone", type: "text" },
+            { key: "phone", label: "Duplicate", type: "number" }
+          ]
+        }
+      },
+      { schema: { fields: [{ key: "rating", label: "Rating", type: "formula" }] } }
+    ]) {
+      const response = await server.inject({
+        method: "PATCH",
+        url: `/v2/boards/${seed.board.id}/card-types/${cardType.id}`,
+        payload
+      });
+      expect([400, 409]).toContain(response.statusCode);
+    }
+
+    await server.close();
+  });
 });

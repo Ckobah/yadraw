@@ -43,6 +43,7 @@ import { V2ConnectorEdge, type V2ConnectorEdgeData } from "./v2-connector-edge";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
+  createV2CardType,
   createV2Card,
   updateV2CardPosition,
   updateV2CardSize,
@@ -59,12 +60,13 @@ import {
   createV2LinkedFieldBinding,
   updateV2LinkedFieldBinding,
   deleteV2LinkedFieldBinding,
-  updateV2CardTypeSchema,
+  updateV2CardType,
   V2ApiError,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
+import { V2CardTypeManager } from "./v2-card-type-manager";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -341,6 +343,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isCardTypeManagerOpen, setIsCardTypeManagerOpen] = useState(false);
+  const [cardTypeManagerInitialId, setCardTypeManagerInitialId] = useState<string | null>(null);
   const [linkedFieldBindings, setLinkedFieldBindings] = useState<V2LinkedFieldBinding[]>([]);
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
@@ -855,35 +859,67 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [board.id, board.workspaceId, cardTypeMap, setNodes]
   );
 
-  const handleUpdateCardTypeSchema = useCallback(
-    async (cardTypeId: string, schema: V2CardType["schema"]) => {
+  const applyCardTypeToState = useCallback(
+    (cardType: V2CardType) => {
+      setCardTypes((current) => {
+        const exists = current.some((item) => item.id === cardType.id);
+        return exists
+          ? current.map((item) => (item.id === cardType.id ? cardType : item))
+          : [...current, cardType];
+      });
+      setNodes((current) =>
+        current.map((node) => {
+          if (node.data.card.cardTypeId !== cardType.id) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              cardType,
+            },
+          };
+        })
+      );
+    },
+    [setNodes]
+  );
+
+  const handleOpenCardTypeManager = useCallback((cardTypeId?: string | null) => {
+    setCardTypeManagerInitialId(cardTypeId ?? null);
+    setIsCardTypeManagerOpen(true);
+  }, []);
+
+  const handleCreateCardType = useCallback(
+    async (input: Parameters<typeof createV2CardType>[1]) => {
       setSaveStatus("saving");
       try {
-        const updated = await updateV2CardTypeSchema(board.id, cardTypeId, schema);
-        setCardTypes((current) =>
-          current.map((cardType) => (cardType.id === updated.id ? updated : cardType))
-        );
-        setNodes((current) =>
-          current.map((node) => {
-            if (node.data.card.cardTypeId !== updated.id) return node;
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                cardType: updated,
-              },
-            };
-          })
-        );
+        const created = await createV2CardType(board.id, input);
+        applyCardTypeToState(created);
         setSaveStatus("saved");
-        return updated;
+        return created;
       } catch (error) {
-        console.error("Failed to update card type schema:", error);
+        console.error("Failed to create card type:", error);
         setSaveStatus("error");
         throw error;
       }
     },
-    [board.id, setNodes]
+    [applyCardTypeToState, board.id]
+  );
+
+  const handleUpdateCardType = useCallback(
+    async (cardTypeId: string, input: Parameters<typeof updateV2CardType>[2]) => {
+      setSaveStatus("saving");
+      try {
+        const updated = await updateV2CardType(board.id, cardTypeId, input);
+        applyCardTypeToState(updated);
+        setSaveStatus("saved");
+        return updated;
+      } catch (error) {
+        console.error("Failed to update card type:", error);
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [applyCardTypeToState, board.id]
   );
 
   const handleRunDryRun = useCallback(async () => {
@@ -1377,6 +1413,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         <V2CardCreateToolbar
           cardTypes={cardTypes}
           onCreateCard={handleCreateCard}
+          onManageCardTypes={handleOpenCardTypeManager}
         />
         <div className="v2RunToolbar nodrag nopan">
           <button
@@ -1471,7 +1508,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}
           onDeleteLinkedFieldBinding={handleDeleteLinkedFieldBinding}
-          onUpdateCardTypeSchema={handleUpdateCardTypeSchema}
+          onManageCardType={handleOpenCardTypeManager}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
           onClose={() => setSelectedCardId(null)}
@@ -1484,6 +1521,15 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
           onClose={() => setSelectedConnectionId(null)}
+        />
+      ) : null}
+      {isCardTypeManagerOpen ? (
+        <V2CardTypeManager
+          cardTypes={cardTypes}
+          initialCardTypeId={cardTypeManagerInitialId}
+          onCreateCardType={handleCreateCardType}
+          onUpdateCardType={handleUpdateCardType}
+          onClose={() => setIsCardTypeManagerOpen(false)}
         />
       ) : null}
     </>

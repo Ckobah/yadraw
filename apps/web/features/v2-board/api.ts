@@ -8,10 +8,12 @@ import type {
   V2ConnectionAttachment,
   V2ConnectionVisualStyle,
   V2CreateLinkedFieldBindingRequest,
+  V2CreateCardTypeRequest,
   V2CreateCardRequest,
   V2DryRunResult,
   V2LinkedFieldBinding,
   V2LinkedFieldBindingListResponse,
+  V2UpdateCardTypeRequest,
   V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
 
@@ -187,6 +189,55 @@ export async function deleteV2Card(cardId: string): Promise<void> {
       body
     );
   }
+}
+
+export async function createV2CardType(
+  boardId: string,
+  input: V2CreateCardTypeRequest
+): Promise<V2CardType> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/card-types`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card type creation failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CardType>;
+}
+
+export async function updateV2CardType(
+  boardId: string,
+  cardTypeId: string,
+  input: V2UpdateCardTypeRequest
+): Promise<V2CardType> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/card-types/${encodeURIComponent(cardTypeId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card type update failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CardType>;
 }
 
 export async function updateV2CardTypeSchema(

@@ -30,6 +30,37 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.post("/v2/boards/:boardId/card-types", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      const cardType = await service.createCardType(
+        request.requestContext,
+        boardId,
+        request.body as any
+      );
+      return reply.code(201).send(cardType);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.patch("/v2/boards/:boardId/card-types/:cardTypeId", async (request, reply) => {
+    try {
+      const { boardId, cardTypeId } = request.params as {
+        boardId: string;
+        cardTypeId: string;
+      };
+      return await service.updateCardType(
+        request.requestContext,
+        boardId,
+        cardTypeId,
+        request.body as any
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.patch("/v2/boards/:boardId/card-types/:cardTypeId/schema", async (request, reply) => {
     try {
       const { boardId, cardTypeId } = request.params as {

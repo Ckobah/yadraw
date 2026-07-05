@@ -361,6 +361,33 @@ export const v2ListCardTypesParamsSchema = z.object({
   workspaceId: v2UuidSchema
 });
 
+export const v2CreateCardTypeParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2CreateCardTypeBodySchema = z
+  .object({
+    key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
+    name: z.string().trim().min(1),
+    description: z.string().optional(),
+    schema: v2CardTypeDefinitionSchema.default({ fields: [] })
+  })
+  .strict();
+
+export const v2UpdateCardTypeParamsSchema = z.object({
+  boardId: v2UuidSchema,
+  cardTypeId: v2UuidSchema
+});
+
+export const v2UpdateCardTypeBodySchema = z
+  .object({
+    key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/).optional(),
+    name: z.string().trim().min(1).optional(),
+    description: z.string().optional(),
+    schema: v2CardTypeDefinitionSchema.optional()
+  })
+  .strict();
+
 export const v2UpdateCardTypeSchemaParamsSchema = z.object({
   boardId: v2UuidSchema,
   cardTypeId: v2UuidSchema
@@ -499,6 +526,20 @@ export const v2ApiContracts = {
     path: "/v2/workspaces/{workspaceId}/card-types",
     params: v2ListCardTypesParamsSchema,
     response: z.object({ cardTypes: z.array(v2CardTypeSchema) })
+  },
+  createCardType: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/card-types",
+    params: v2CreateCardTypeParamsSchema,
+    body: v2CreateCardTypeBodySchema,
+    response: v2CardTypeSchema
+  },
+  updateCardType: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}/card-types/{cardTypeId}",
+    params: v2UpdateCardTypeParamsSchema,
+    body: v2UpdateCardTypeBodySchema,
+    response: v2CardTypeSchema
   },
   updateCardTypeSchema: {
     method: "PATCH",
@@ -639,6 +680,8 @@ export type V2LinkedFieldSourceMode = z.infer<typeof v2LinkedFieldSourceModeSche
 export type V2LinkedFieldDirection = z.infer<typeof v2LinkedFieldDirectionSchema>;
 export type V2LinkedFieldBinding = z.infer<typeof v2LinkedFieldBindingSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
+export type V2CreateCardTypeInput = z.infer<typeof v2CreateCardTypeBodySchema>;
+export type V2UpdateCardTypeInput = z.infer<typeof v2UpdateCardTypeBodySchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaInput = z.infer<typeof v2UpdateCardTypeSchemaBodySchema>;
@@ -650,6 +693,8 @@ export type V2LinkedFieldBindingListResponse = z.infer<typeof v2LinkedFieldBindi
 export type V2RunDryRunInput = z.infer<typeof v2RunDryRunBodySchema>;
 export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
 export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
+export type V2CreateCardTypeRequest = z.input<typeof v2CreateCardTypeBodySchema>;
+export type V2UpdateCardTypeRequest = z.input<typeof v2UpdateCardTypeBodySchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaRequest = z.input<typeof v2UpdateCardTypeSchemaBodySchema>;
