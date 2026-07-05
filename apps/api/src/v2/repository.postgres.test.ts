@@ -119,13 +119,15 @@ describePostgres("v2 Postgres repository", () => {
       workspace: { id: seedIds.workspace },
       board: { id: seedIds.board },
       cardTypes: expect.arrayContaining([
-        expect.objectContaining({ id: seedIds.sourceType, key: "source" }),
-        expect.objectContaining({ id: seedIds.taskType, key: "task" })
+        expect.objectContaining({ id: seedIds.sourceType, key: "source", schema: { fields: [] } }),
+        expect.objectContaining({ id: seedIds.taskType, key: "task", schema: { fields: [] } })
       ])
     });
 
     await expect(service.listCardTypes(ownerContext, seedIds.workspace)).resolves.toMatchObject({
-      cardTypes: expect.arrayContaining([expect.objectContaining({ id: seedIds.sourceType })])
+      cardTypes: expect.arrayContaining([
+        expect.objectContaining({ id: seedIds.sourceType, schema: { fields: [] } })
+      ])
     });
 
     const source = await service.createCard(ownerContext, seedIds.board, {

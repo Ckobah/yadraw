@@ -140,10 +140,21 @@ describe("v2 board service", () => {
     const service = createV2BoardService(createV2MemoryRepository(seed));
 
     await expect(service.getBoard(viewerContext, seed.board.id)).resolves.toMatchObject({
-      board: { id: seed.board.id }
+      board: { id: seed.board.id },
+      cardTypes: expect.arrayContaining([
+        expect.objectContaining({
+          id: sourceType.id,
+          schema: { fields: [] }
+        })
+      ])
     });
     await expect(service.listCardTypes(viewerContext, seed.workspace.id)).resolves.toMatchObject({
-      cardTypes: expect.arrayContaining([expect.objectContaining({ id: sourceType.id })])
+      cardTypes: expect.arrayContaining([
+        expect.objectContaining({
+          id: sourceType.id,
+          schema: { fields: [] }
+        })
+      ])
     });
     await expect(
       service.createCard(viewerContext, seed.board.id, {

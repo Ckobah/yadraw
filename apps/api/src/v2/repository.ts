@@ -271,6 +271,7 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
     name: String(row.name),
     description: String(row.description ?? ""),
     defaultData: asObject(row.default_data),
+    schema: asObject(row.schema ?? { fields: [] }),
     defaultSize: {
       width: Number(row.default_width),
       height: Number(row.default_height)
@@ -398,6 +399,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       name: "Source",
       description: "Provides input data.",
       defaultData: { kind: "source" },
+      schema: { fields: [] },
       defaultSize: { width: 196, height: 122 },
       ports: [
         {
@@ -424,6 +426,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       name: "Task",
       description: "Transforms input data.",
       defaultData: { kind: "task" },
+      schema: { fields: [] },
       defaultSize: { width: 196, height: 122 },
       ports: [
         {

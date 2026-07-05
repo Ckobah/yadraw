@@ -4,6 +4,8 @@ import {
   v2BoardDetailSchema,
   v2CardAttachmentSchema,
   v2CardFileSchema,
+  v2CardTypeDefinitionSchema,
+  v2CardTypeSchema as v2CardTypeEntitySchema,
   v2CardSchema,
   v2CardVisualStyleSchema,
   v2ConnectionAttachmentSchema,
@@ -39,6 +41,33 @@ const connectionFileId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const bindingId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
 describe("v2 API contracts", () => {
+  const baseCardType = {
+    id: cardTypeId,
+    workspaceId,
+    key: "source",
+    name: "Source",
+    description: "Provides input data.",
+    defaultData: { kind: "source" },
+    defaultSize: { width: 280, height: 160 },
+    ports: [
+      {
+        id: portId,
+        workspaceId,
+        cardTypeId,
+        key: "payload",
+        label: "Payload",
+        direction: "output",
+        dataType: "json",
+        required: true,
+        sortOrder: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      }
+    ],
+    createdAt: timestamp,
+    updatedAt: timestamp
+  } as const;
+
   it("parses the minimal board detail DTO", () => {
     expect(
       v2BoardDetailSchema.parse({
@@ -67,30 +96,8 @@ describe("v2 API contracts", () => {
         },
         cardTypes: [
           {
-            id: cardTypeId,
-            workspaceId,
-            key: "source",
-            name: "Source",
-            description: "Provides input data.",
-            defaultData: { kind: "source" },
-            defaultSize: { width: 280, height: 160 },
-            ports: [
-              {
-                id: portId,
-                workspaceId,
-                cardTypeId,
-                key: "payload",
-                label: "Payload",
-                direction: "output",
-                dataType: "json",
-                required: true,
-                sortOrder: 0,
-                createdAt: timestamp,
-                updatedAt: timestamp
-              }
-            ],
-            createdAt: timestamp,
-            updatedAt: timestamp
+            ...baseCardType,
+            schema: { fields: [] }
           }
         ],
         cards: [],
@@ -100,6 +107,94 @@ describe("v2 API contracts", () => {
       workspace: { id: workspaceId },
       board: { id: boardId },
       cardTypes: [{ key: "source" }]
+    });
+  });
+
+  it("parses empty card type schema", () => {
+    expect(v2CardTypeDefinitionSchema.parse({ fields: [] })).toEqual({ fields: [] });
+  });
+
+  it("parses supported card type field schema types", () => {
+    expect(
+      v2CardTypeDefinitionSchema.parse({
+        fields: [
+          { key: "name", label: "Name", type: "text", required: true },
+          { key: "amount", label: "Amount", type: "number" },
+          { key: "active", label: "Active", type: "boolean" },
+          {
+            key: "status",
+            label: "Status",
+            type: "select",
+            options: [
+              { value: "draft", label: "Draft" },
+              { value: "ready", label: "Ready" }
+            ]
+          },
+          { key: "payload", label: "Payload", type: "json" },
+          { key: "dueDate", label: "Due date", type: "date" }
+        ]
+      })
+    ).toMatchObject({
+      fields: [
+        { key: "name", type: "text" },
+        { key: "amount", type: "number" },
+        { key: "active", type: "boolean" },
+        { key: "status", type: "select" },
+        { key: "payload", type: "json" },
+        { key: "dueDate", type: "date" }
+      ]
+    });
+  });
+
+  it("defaults card type field labels from keys", () => {
+    expect(
+      v2CardTypeDefinitionSchema.parse({
+        fields: [{ key: "name", type: "text" }]
+      })
+    ).toEqual({
+      fields: [{ key: "name", label: "name", type: "text" }]
+    });
+  });
+
+  it("rejects invalid card type field schema", () => {
+    expect(() =>
+      v2CardTypeDefinitionSchema.parse({
+        fields: [{ key: "name", label: "Name", type: "formula" }]
+      })
+    ).toThrow();
+
+    expect(() =>
+      v2CardTypeDefinitionSchema.parse({
+        fields: [{ key: "", label: "Name", type: "text" }]
+      })
+    ).toThrow();
+  });
+
+  it("rejects duplicate card type field keys", () => {
+    expect(() =>
+      v2CardTypeDefinitionSchema.parse({
+        fields: [
+          { key: "name", label: "Name", type: "text" },
+          { key: "name", label: "Display name", type: "text" }
+        ]
+      })
+    ).toThrow();
+  });
+
+  it("parses card type schema on V2CardType and defaults missing schema", () => {
+    expect(
+      v2CardTypeEntitySchema.parse({
+        ...baseCardType,
+        schema: {
+          fields: [{ key: "name", label: "Name", type: "text" }]
+        }
+      })
+    ).toMatchObject({
+      schema: { fields: [{ key: "name", label: "Name", type: "text" }] }
+    });
+
+    expect(v2CardTypeEntitySchema.parse(baseCardType)).toMatchObject({
+      schema: { fields: [] }
     });
   });
 

@@ -29,6 +29,7 @@ export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
 export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
+export const v2CardTypeFieldTypeSchema = z.enum(["text", "number", "boolean", "select", "json", "date"]);
 export const v2LinkedFieldSourceModeSchema = z.enum(["exactCard", "connectedCard"]);
 export const v2LinkedFieldDirectionSchema = z.enum(["incoming", "outgoing"]);
 export const v2LinkedFieldOnMissingSchema = z.enum(["empty"]);
@@ -130,6 +131,47 @@ export const v2CardTypePortSchema = z.object({
   updatedAt: v2TimestampSchema
 });
 
+export const v2CardTypeFieldOptionSchema = z.object({
+  value: z.string().trim().min(1),
+  label: z.string().trim().min(1)
+});
+
+export const v2CardTypeFieldSchema = z
+  .object({
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1).optional(),
+    type: v2CardTypeFieldTypeSchema,
+    required: z.boolean().optional(),
+    description: z.string().optional(),
+    placeholder: z.string().optional(),
+    defaultValue: z.unknown().optional(),
+    options: z.array(v2CardTypeFieldOptionSchema).optional()
+  })
+  .strict()
+  .transform((field) => ({
+    ...field,
+    label: field.label ?? field.key
+  }));
+
+export const v2CardTypeDefinitionSchema = z
+  .object({
+    fields: z.array(v2CardTypeFieldSchema).default([])
+  })
+  .strict()
+  .superRefine((schema, context) => {
+    const seenKeys = new Set<string>();
+    for (const field of schema.fields) {
+      if (seenKeys.has(field.key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["fields"],
+          message: `Duplicate field key: ${field.key}`
+        });
+      }
+      seenKeys.add(field.key);
+    }
+  });
+
 export const v2CardTypeSchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
@@ -137,6 +179,7 @@ export const v2CardTypeSchema = z.object({
   name: z.string().min(1),
   description: z.string(),
   defaultData: v2JsonObjectSchema,
+  schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
   defaultSize: v2SizeSchema,
   ports: z.array(v2CardTypePortSchema),
   createdAt: v2TimestampSchema,
@@ -539,6 +582,7 @@ export const V2ConnectionFileSchema = v2ConnectionFileSchema;
 export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
 export const V2ConnectionVisualStyleSchema = v2ConnectionVisualStyleSchema;
 export const V2LinkedFieldBindingSchema = v2LinkedFieldBindingSchema;
+export const V2CardTypeDefinitionSchema = v2CardTypeDefinitionSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -555,6 +599,10 @@ export type V2FileProcessingStatus = z.infer<typeof v2FileProcessingStatusSchema
 export type V2ConnectorSlotType = z.infer<typeof v2ConnectorSlotTypeSchema>;
 export type V2ConnectorSlotSide = z.infer<typeof v2ConnectorSlotSideSchema>;
 export type V2ConnectorSlot = z.infer<typeof v2ConnectorSlotSchema>;
+export type V2CardTypeFieldType = z.infer<typeof v2CardTypeFieldTypeSchema>;
+export type V2CardTypeFieldOption = z.infer<typeof v2CardTypeFieldOptionSchema>;
+export type V2CardTypeFieldSchema = z.infer<typeof v2CardTypeFieldSchema>;
+export type V2CardTypeSchema = z.infer<typeof v2CardTypeDefinitionSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;

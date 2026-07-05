@@ -292,6 +292,7 @@ function fallbackCardType(card: V2Card, workspaceId: string): V2CardType {
     name: "Unknown",
     description: "",
     defaultData: {},
+    schema: { fields: [] },
     defaultSize: { width: 200, height: 120 },
     ports: [],
     createdAt: "",
