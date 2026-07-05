@@ -25,6 +25,7 @@ type V2LinkedFieldsPreviewProps = {
   allCards: V2Card[];
   allConnections: V2Connection[];
   bindings: V2LinkedFieldBinding[];
+  schemaFieldKeys?: string[];
   isLoading: boolean;
   error: string | null;
   onCreateBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
@@ -98,6 +99,7 @@ export function V2LinkedFieldsPreview({
   allCards,
   allConnections,
   bindings,
+  schemaFieldKeys = [],
   isLoading,
   error,
   onCreateBinding,
@@ -119,6 +121,7 @@ export function V2LinkedFieldsPreview({
     [cardTypes]
   );
   const targetBindings = bindings.filter((binding) => binding.targetCardId === card.id);
+  const schemaFieldKeySet = new Set(schemaFieldKeys);
   const resolvedFields = resolveV2LinkedFieldDrafts({
     bindings: targetBindings,
     targetCard: card,
@@ -163,7 +166,9 @@ export function V2LinkedFieldsPreview({
       } => Boolean(item)),
   };
   const targetKeyWarning =
-    targetField.trim() && Object.prototype.hasOwnProperty.call(card.data ?? {}, targetField.trim())
+    targetField.trim() && schemaFieldKeySet.has(targetField.trim())
+      ? "This linked field target matches a stored schema field. Stored data and linked value are separate."
+      : targetField.trim() && Object.prototype.hasOwnProperty.call(card.data ?? {}, targetField.trim())
       ? "This key already exists in stored card data. Linked field will not overwrite it."
       : null;
   const duplicateTargetWarning =
@@ -553,6 +558,11 @@ export function V2LinkedFieldsPreview({
                     {binding.sourceMode === "connectedCard" ? "Dynamic" : "Exact"} · {binding.direction} ·{" "}
                     {binding.sourceFieldPath}
                   </em>
+                  {schemaFieldKeySet.has(binding.targetField) ? (
+                    <p>
+                      This linked field target matches a stored schema field. Stored data and linked value are separate.
+                    </p>
+                  ) : null}
                   {resolved?.message ? <p>{resolved.message}</p> : null}
                 </div>
                 <div className="v2LinkedFieldRowActions">

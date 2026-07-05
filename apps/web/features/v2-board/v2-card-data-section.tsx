@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import type { V2Card } from "@yadraw/shared";
+import type { V2Card, V2CardType } from "@yadraw/shared";
 import {
   createDataDraftFromRecord,
   createLocalFieldId,
+  createSchemaDraftFromData,
   normalizeDataDraftForCompare,
+  normalizeSchemaDraftForCompare,
+  splitSchemaAndExtraData,
   validateAndBuildDataRecord,
+  validateAndBuildSchemaDataRecord,
   type DataFieldDraft,
   type DataFieldType,
   type SaveStatus,
+  type SchemaFieldDraft,
 } from "./v2-card-inspector-helpers";
 
 type V2CardDataSectionProps = {
   card: V2Card;
+  cardType: V2CardType | null;
   saveStatus: SaveStatus;
   onUpdateCardData: (
     cardId: string,
@@ -24,26 +30,58 @@ type V2CardDataSectionProps = {
 
 export function V2CardDataSection({
   card,
+  cardType,
   saveStatus,
   onUpdateCardData,
 }: V2CardDataSectionProps) {
+  const schemaFields = cardType?.schema?.fields ?? [];
+  const hasSchemaFields = schemaFields.length > 0;
+  const { schemaKeys, extraData } = splitSchemaAndExtraData(schemaFields, card.data);
+  const dataRecordForDraft = hasSchemaFields ? extraData : card.data;
   const [dataDraftFields, setDataDraftFields] = useState<DataFieldDraft[]>(
-    () => createDataDraftFromRecord(card.data)
+    () => createDataDraftFromRecord(dataRecordForDraft)
+  );
+  const [schemaDraftFields, setSchemaDraftFields] = useState<SchemaFieldDraft[]>(
+    () => createSchemaDraftFromData(schemaFields, card.data)
   );
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
+  const [schemaFieldErrors, setSchemaFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDataDraftFields(createDataDraftFromRecord(card.data));
+    const nextSplit = splitSchemaAndExtraData(schemaFields, card.data);
+    setDataDraftFields(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : card.data));
+    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, card.data));
     setDataFieldErrors({});
+    setSchemaFieldErrors({});
     setDataError(null);
-  }, [card.id, card.data]);
+  }, [card.id, card.data, hasSchemaFields, schemaFields]);
 
   const dataBaseline = normalizeDataDraftForCompare(
-    createDataDraftFromRecord(card.data)
+    createDataDraftFromRecord(dataRecordForDraft)
+  );
+  const schemaBaseline = normalizeSchemaDraftForCompare(
+    createSchemaDraftFromData(schemaFields, card.data)
   );
   const hasDataChanges =
-    normalizeDataDraftForCompare(dataDraftFields) !== dataBaseline;
+    normalizeDataDraftForCompare(dataDraftFields) !== dataBaseline ||
+    normalizeSchemaDraftForCompare(schemaDraftFields) !== schemaBaseline;
+
+  function updateSchemaField(
+    fieldId: string,
+    patch: Partial<Pick<SchemaFieldDraft, "value">>
+  ) {
+    setSchemaDraftFields((current) =>
+      current.map((field) => (field.id === fieldId ? { ...field, ...patch } : field))
+    );
+    setSchemaFieldErrors((current) => {
+      if (!current[fieldId]) return current;
+      const next = { ...current };
+      delete next[fieldId];
+      return next;
+    });
+    setDataError(null);
+  }
 
   function updateDataField(
     fieldId: string,
@@ -108,143 +146,257 @@ export function V2CardDataSection({
   }
 
   function cancelDataDraft() {
-    setDataDraftFields(createDataDraftFromRecord(card.data));
+    const nextSplit = splitSchemaAndExtraData(schemaFields, card.data);
+    setDataDraftFields(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : card.data));
+    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, card.data));
     setDataFieldErrors({});
+    setSchemaFieldErrors({});
     setDataError(null);
   }
 
   async function saveDataDraft() {
-    const parsed = validateAndBuildDataRecord(dataDraftFields);
+    const parsedSchema = hasSchemaFields
+      ? validateAndBuildSchemaDataRecord(schemaDraftFields)
+      : { ok: true as const, data: {} };
+    const parsed = validateAndBuildDataRecord(
+      dataDraftFields,
+      hasSchemaFields ? { reservedKeys: schemaKeys } : {}
+    );
+    if (!parsedSchema.ok) {
+      setSchemaFieldErrors(parsedSchema.errors);
+    } else {
+      setSchemaFieldErrors({});
+    }
     if (!parsed.ok) {
       setDataFieldErrors(parsed.errors);
       setDataError("Fix data errors");
       return;
+    } else {
+      setDataFieldErrors({});
     }
 
-    setDataFieldErrors({});
+    if (!parsedSchema.ok) {
+      setDataError("Fix schema field errors");
+      return;
+    }
+
     setDataError(null);
     try {
-      await onUpdateCardData(card.id, parsed.data);
+      await onUpdateCardData(card.id, {
+        ...parsedSchema.data,
+        ...parsed.data,
+      });
     } catch {
       setDataError("Could not save data");
     }
   }
 
   return (
-    <section className="v2InspectorSection">
-      <h3>Data</h3>
-      {dataDraftFields.length === 0 ? (
-        <p className="v2InspectorEmpty">No data</p>
-      ) : (
-        <div className="v2InspectorDataEditor">
-          {dataDraftFields.map((field) => (
-            <div key={field.id} className="v2InspectorDataRow">
-              <div className="v2InspectorDataRowGrid">
-                <input
-                  className="v2InspectorDataKeyInput"
-                  value={field.key}
-                  placeholder="key"
-                  aria-label="Data field key"
-                  onChange={(event) =>
-                    updateDataField(field.id, { key: event.target.value })
-                  }
-                />
-                <select
-                  className="v2InspectorDataTypeSelect"
-                  value={field.type}
-                  aria-label="Data field type"
-                  onChange={(event) =>
-                    updateDataField(field.id, {
-                      type: event.target.value as DataFieldType,
-                    })
-                  }
-                >
-                  <option value="text">text</option>
-                  <option value="number">number</option>
-                  <option value="boolean">boolean</option>
-                  <option value="json">json</option>
-                </select>
-                <button
-                  type="button"
-                  className="v2InspectorDataDeleteButton"
-                  aria-label="Delete data field"
-                  onClick={() => deleteDataField(field.id)}
-                >
-                  <X size={14} strokeWidth={2.2} />
-                </button>
+    <>
+      {hasSchemaFields ? (
+        <section className="v2InspectorSection">
+          <h3>Schema fields</h3>
+          <div className="v2InspectorDataEditor">
+            {schemaDraftFields.map((field) => (
+              <div key={field.id} className="v2InspectorDataRow">
+                <div className="v2InspectorSchemaFieldHeader">
+                  <div>
+                    <strong>{field.label}</strong>
+                    <span>{field.key}</span>
+                  </div>
+                  {field.required ? <em>Required</em> : null}
+                </div>
+                {field.description ? (
+                  <p className="v2InspectorSchemaFieldDescription">{field.description}</p>
+                ) : null}
+                <SchemaFieldInput field={field} onChange={updateSchemaField} />
+                {schemaFieldErrors[field.id] ? (
+                  <p className="v2InspectorDataError">{schemaFieldErrors[field.id]}</p>
+                ) : null}
               </div>
-              {field.type === "json" ? (
-                <textarea
-                  className="v2InspectorDataValue v2InspectorDataJsonValue"
-                  value={field.value}
-                  placeholder='{"source":"manual"}'
-                  aria-label="Data field JSON value"
-                  onChange={(event) =>
-                    updateDataField(field.id, { value: event.target.value })
-                  }
-                />
-              ) : field.type === "boolean" ? (
-                <select
-                  className="v2InspectorDataValue"
-                  value={field.value === "true" ? "true" : "false"}
-                  aria-label="Data field boolean value"
-                  onChange={(event) =>
-                    updateDataField(field.id, { value: event.target.value })
-                  }
-                >
-                  <option value="true">true</option>
-                  <option value="false">false</option>
-                </select>
-              ) : (
-                <input
-                  className="v2InspectorDataValue"
-                  type={field.type === "number" ? "number" : "text"}
-                  value={field.value}
-                  placeholder={field.type === "number" ? "0" : "value"}
-                  aria-label="Data field value"
-                  onChange={(event) =>
-                    updateDataField(field.id, { value: event.target.value })
-                  }
-                />
-              )}
-              {dataFieldErrors[field.id] ? (
-                <p className="v2InspectorDataError">{dataFieldErrors[field.id]}</p>
-              ) : null}
-            </div>
-          ))}
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="v2InspectorSection">
+        <h3>{hasSchemaFields ? "Extra data" : "Data"}</h3>
+        {dataDraftFields.length === 0 ? (
+          <p className="v2InspectorEmpty">{hasSchemaFields ? "No extra data" : "No data"}</p>
+        ) : (
+          <div className="v2InspectorDataEditor">
+            {dataDraftFields.map((field) => (
+              <div key={field.id} className="v2InspectorDataRow">
+                <div className="v2InspectorDataRowGrid">
+                  <input
+                    className="v2InspectorDataKeyInput"
+                    value={field.key}
+                    placeholder="key"
+                    aria-label="Data field key"
+                    onChange={(event) =>
+                      updateDataField(field.id, { key: event.target.value })
+                    }
+                  />
+                  <select
+                    className="v2InspectorDataTypeSelect"
+                    value={field.type}
+                    aria-label="Data field type"
+                    onChange={(event) =>
+                      updateDataField(field.id, {
+                        type: event.target.value as DataFieldType,
+                      })
+                    }
+                  >
+                    <option value="text">text</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                    <option value="json">json</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="v2InspectorDataDeleteButton"
+                    aria-label="Delete data field"
+                    onClick={() => deleteDataField(field.id)}
+                  >
+                    <X size={14} strokeWidth={2.2} />
+                  </button>
+                </div>
+                {field.type === "json" ? (
+                  <textarea
+                    className="v2InspectorDataValue v2InspectorDataJsonValue"
+                    value={field.value}
+                    placeholder='{"source":"manual"}'
+                    aria-label="Data field JSON value"
+                    onChange={(event) =>
+                      updateDataField(field.id, { value: event.target.value })
+                    }
+                  />
+                ) : field.type === "boolean" ? (
+                  <select
+                    className="v2InspectorDataValue"
+                    value={field.value === "true" ? "true" : "false"}
+                    aria-label="Data field boolean value"
+                    onChange={(event) =>
+                      updateDataField(field.id, { value: event.target.value })
+                    }
+                  >
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                  </select>
+                ) : (
+                  <input
+                    className="v2InspectorDataValue"
+                    type={field.type === "number" ? "number" : "text"}
+                    value={field.value}
+                    placeholder={field.type === "number" ? "0" : "value"}
+                    aria-label="Data field value"
+                    onChange={(event) =>
+                      updateDataField(field.id, { value: event.target.value })
+                    }
+                  />
+                )}
+                {dataFieldErrors[field.id] ? (
+                  <p className="v2InspectorDataError">{dataFieldErrors[field.id]}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="v2InspectorDataFooter">
+          <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
+            {dataError ?? (hasDataChanges ? "Unsaved data changes" : "Data saved")}
+          </span>
+          <div className="v2InspectorEditActions">
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={addDataField}
+            >
+              + Add field
+            </button>
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={cancelDataDraft}
+              disabled={!hasDataChanges || saveStatus === "saving"}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="v2InspectorPrimaryAction"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void saveDataDraft()}
+              disabled={!hasDataChanges || saveStatus === "saving"}
+            >
+              Save
+            </button>
+          </div>
         </div>
-      )}
-      <div className="v2InspectorDataFooter">
-        <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-          {dataError ?? (hasDataChanges ? "Unsaved data changes" : "Data saved")}
-        </span>
-        <div className="v2InspectorEditActions">
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={addDataField}
-          >
-            + Add field
-          </button>
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={cancelDataDraft}
-            disabled={!hasDataChanges || saveStatus === "saving"}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="v2InspectorPrimaryAction"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => void saveDataDraft()}
-            disabled={!hasDataChanges || saveStatus === "saving"}
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </section>
+      </section>
+    </>
+  );
+}
+
+function SchemaFieldInput({
+  field,
+  onChange,
+}: {
+  field: SchemaFieldDraft;
+  onChange: (fieldId: string, patch: Partial<Pick<SchemaFieldDraft, "value">>) => void;
+}) {
+  if (field.type === "json") {
+    return (
+      <textarea
+        className="v2InspectorDataValue v2InspectorDataJsonValue"
+        value={field.value}
+        placeholder={field.placeholder ?? "{}"}
+        aria-label={`${field.label} value`}
+        onChange={(event) => onChange(field.id, { value: event.target.value })}
+      />
+    );
+  }
+
+  if (field.type === "boolean") {
+    return (
+      <select
+        className="v2InspectorDataValue"
+        value={field.value === "true" ? "true" : "false"}
+        aria-label={`${field.label} value`}
+        onChange={(event) => onChange(field.id, { value: event.target.value })}
+      >
+        <option value="true">true</option>
+        <option value="false">false</option>
+      </select>
+    );
+  }
+
+  if (field.type === "select") {
+    return (
+      <select
+        className="v2InspectorDataValue"
+        value={field.value}
+        aria-label={`${field.label} value`}
+        onChange={(event) => onChange(field.id, { value: event.target.value })}
+      >
+        <option value="">Choose value</option>
+        {field.options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <input
+      className="v2InspectorDataValue"
+      type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+      value={field.value}
+      placeholder={field.placeholder ?? (field.type === "number" ? "0" : "value")}
+      aria-label={`${field.label} value`}
+      onChange={(event) => onChange(field.id, { value: event.target.value })}
+    />
   );
 }

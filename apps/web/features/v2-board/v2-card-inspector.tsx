@@ -148,6 +148,7 @@ export function V2CardInspector({
         />
         <V2CardDataSection
           card={card}
+          cardType={cardType}
           saveStatus={saveStatus}
           onUpdateCardData={onUpdateCardData}
         />
@@ -160,6 +161,7 @@ export function V2CardInspector({
           allCards={allCards}
           allConnections={allConnections}
           bindings={linkedFieldBindings}
+          schemaFieldKeys={cardType?.schema.fields.map((field) => field.key) ?? []}
           isLoading={linkedFieldBindingsLoading}
           error={linkedFieldBindingsError}
           onCreateBinding={onCreateLinkedFieldBinding}
