@@ -67,6 +67,7 @@ import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 import { V2CardTypeManager } from "./v2-card-type-manager";
+import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -327,6 +328,14 @@ function buildCardNode(
       height: size.height,
     },
   };
+}
+
+function getV2CardTypeAccentToken(cardType: V2CardType | null | undefined): string {
+  return `var(--yd-accent-${resolveCardTypeAccentKey(cardType)}-solid)`;
+}
+
+function getMiniMapNodeColor(node: V2CardNode): string {
+  return getV2CardTypeAccentToken(node.data.cardType);
 }
 
 export function V2BoardCanvas({ boardDetail }: Props) {
@@ -1465,7 +1474,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             borderRadius: 8,
             overflow: "hidden",
           }}
-          nodeColor={() => "#7147e8"}
+          nodeColor={(node) => getMiniMapNodeColor(node as V2CardNode)}
           maskColor="rgba(0,0,0,0.08)"
         />
         {connectionCreateError ? (

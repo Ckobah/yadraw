@@ -455,7 +455,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     fontStyle: visualStyle.fontStyle,
     textDecoration: visualStyle.textDecoration,
   };
-  const cardBorderColor = selected ? "var(--yd-border-selected)" : "var(--yd-border-default)";
+  const cardBorderColor = selected ? "var(--v2-card-accent)" : "var(--yd-border-default)";
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
     void Promise.resolve(data.onUpdateVisualStyle?.(card.id, patch)).catch(() => {});
@@ -740,7 +740,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         flexDirection: "column",
         borderColor: cardBorderColor,
         boxShadow: selected
-          ? "var(--yd-card-selected-outline), var(--v2-card-shadow)"
+          ? "0 0 0 3px var(--v2-card-accent-soft), var(--v2-card-shadow)"
           : "var(--v2-card-shadow)",
         width: "100%",
         height: "100%",
