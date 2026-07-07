@@ -476,6 +476,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [nodes]
   );
   const boardCards = assistantCards;
+  const boardCardPreviewSignature = useMemo(
+    () =>
+      JSON.stringify(
+        nodes.map((node) => ({
+          id: node.data.card.id,
+          cardTypeId: node.data.card.cardTypeId,
+          title: node.data.card.title,
+          description: node.data.card.description,
+          data: node.data.card.data,
+          updatedAt: node.data.card.updatedAt,
+        }))
+      ),
+    [nodes]
+  );
   const assistantContext = useMemo<V2BoardAssistantContext>(
     () => ({
       board,
@@ -1003,11 +1017,17 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
+    const previewCards = nodesRef.current.map((node) => node.data.card);
+
     setNodes((nds) =>
       nds.map((node) => ({
         ...node,
         data: {
           ...node.data,
+          allCards: previewCards,
+          allConnections: connectionRecordsRef.current,
+          cardTypes,
+          linkedFieldBindings,
           isCardActionPending: pendingCardAction?.cardId === node.id,
           pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
           cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
@@ -1026,6 +1046,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     );
   }, [
     setNodes,
+    boardCardPreviewSignature,
+    cardTypes,
+    linkedFieldBindings,
+    connectionRecords,
     visualEditingCardId,
     pendingCardAction,
     cardActionError,

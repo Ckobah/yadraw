@@ -3404,6 +3404,24 @@ button:disabled {
   font-weight: 680;
 }
 
+.v2CardDataPreviewRowLinkedSource {
+  grid-template-columns: minmax(70px, 0.5fr) minmax(0, 1fr);
+  border-top-color: color-mix(in srgb, var(--v2-card-accent-border) 58%, transparent);
+}
+
+.v2CardDataPreviewRowLinkedSource dt,
+.v2CardDataPreviewRowLinkedSource dd {
+  color: var(--v2-card-accent-text);
+}
+
+.v2CardDataPreviewRowLinkedSource dd {
+  font-weight: 760;
+}
+
+.v2CardDataPreviewRowLinked dt {
+  color: color-mix(in srgb, var(--v2-card-accent-text) 76%, var(--yd-text-muted, #667085));
+}
+
 .react-flow__node-v2Card {
   overflow: visible;
 }

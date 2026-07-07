@@ -39,6 +39,8 @@ import {
 } from "lucide-react";
 import type {
   V2Card,
+  V2Connection,
+  V2LinkedFieldBinding,
   V2CardType,
   V2CardTypeFieldSchema,
   V2CardVisualStyle,
@@ -55,11 +57,19 @@ import {
   type V2ConnectorSlotType,
   type V2PersistedConnectorSlot,
 } from "./v2-connector-slots";
+import {
+  formatLinkedFieldValue,
+  resolveV2LinkedFieldDrafts,
+} from "./v2-linked-fields";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
+  allCards?: V2Card[];
+  allConnections?: V2Connection[];
+  cardTypes?: V2CardType[];
+  linkedFieldBindings?: V2LinkedFieldBinding[];
   connectedPortKeys?: string[];
   isCardActionPending?: boolean;
   pendingCardAction?: "duplicate" | "delete" | null;
@@ -401,6 +411,7 @@ type V2CardDataPreviewRow = {
   key: string;
   label: string;
   value: string;
+  variant?: "data" | "linkedSource" | "linked";
 };
 
 const CARD_DATA_PREVIEW_ROW_HEIGHT_PX = 23;
@@ -465,6 +476,114 @@ function buildCardDataPreviewRows(card: V2Card, cardType: V2CardType): V2CardDat
   ];
 }
 
+function resolveLinkedFieldSourceCard(
+  binding: V2LinkedFieldBinding,
+  targetCard: V2Card,
+  cards: V2Card[],
+  connections: V2Connection[],
+  cardTypes: V2CardType[]
+): V2Card | null {
+  const cardById = new Map(cards.map((card) => [card.id, card]));
+  const cardTypeById = new Map(cardTypes.map((type) => [type.id, type]));
+
+  if (binding.sourceMode === "exactCard") {
+    if (!binding.sourceCardId || binding.sourceCardId === targetCard.id) return null;
+    return cardById.get(binding.sourceCardId) ?? null;
+  }
+
+  const relatedSourceIds = connections.flatMap((connection) => {
+    if (binding.direction === "incoming" && connection.targetCardId === targetCard.id) {
+      return [connection.sourceCardId];
+    }
+    if (binding.direction === "outgoing" && connection.sourceCardId === targetCard.id) {
+      return [connection.targetCardId];
+    }
+    return [];
+  });
+
+  const matchingSources = relatedSourceIds
+    .map((cardId) => cardById.get(cardId))
+    .filter((card): card is V2Card => {
+      if (!card || card.id === targetCard.id) return false;
+      if (binding.sourceCardTypeId && card.cardTypeId !== binding.sourceCardTypeId) {
+        return false;
+      }
+      if (binding.sourceCardTypeKey) {
+        return cardTypeById.get(card.cardTypeId)?.key === binding.sourceCardTypeKey;
+      }
+      return true;
+    });
+
+  return matchingSources.length === 1 ? matchingSources[0] ?? null : null;
+}
+
+function buildLinkedFieldPreviewRows({
+  targetCard,
+  bindings,
+  cards,
+  connections,
+  cardTypes,
+}: {
+  targetCard: V2Card;
+  bindings: V2LinkedFieldBinding[];
+  cards: V2Card[];
+  connections: V2Connection[];
+  cardTypes: V2CardType[];
+}): V2CardDataPreviewRow[] {
+  const targetBindings = bindings.filter(
+    (binding) => binding.targetCardId === targetCard.id && binding.status === "active"
+  );
+  if (targetBindings.length === 0) return [];
+
+  const resolvedByBindingId = new Map(
+    resolveV2LinkedFieldDrafts({
+      bindings: targetBindings,
+      targetCard,
+      cards,
+      connections,
+      cardTypes,
+    }).map((resolved) => [resolved.bindingId, resolved])
+  );
+  const rows: V2CardDataPreviewRow[] = [];
+  const sourceRowKeys = new Set<string>();
+
+  for (const binding of targetBindings) {
+    const resolved = resolvedByBindingId.get(binding.id);
+    if (!resolved || resolved.status !== "resolved") continue;
+
+    const value = formatLinkedFieldValue(resolved.value).trim();
+    if (!value) continue;
+
+    const sourceCard = resolveLinkedFieldSourceCard(
+      binding,
+      targetCard,
+      cards,
+      connections,
+      cardTypes
+    );
+    if (!sourceCard) continue;
+
+    if (!sourceRowKeys.has(sourceCard.id)) {
+      sourceRowKeys.add(sourceCard.id);
+      rows.push({
+        key: `linked-source-${sourceCard.id}`,
+        label: "Linked from",
+        value: sourceCard.title,
+        variant: "linkedSource",
+      });
+    }
+
+    rows.push({
+      key: `linked-${binding.id}`,
+      label: binding.targetField,
+      value,
+      variant: "linked",
+    });
+  }
+
+  return rows;
+}
+
 export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -477,9 +596,31 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const CardTypeIcon = getV2CardTypeIcon(cardType);
-  const dataPreviewRows = useMemo(
+  const storedDataPreviewRows = useMemo(
     () => buildCardDataPreviewRows(card, cardType),
     [card, cardType]
+  );
+  const linkedDataPreviewRows = useMemo(
+    () =>
+      buildLinkedFieldPreviewRows({
+        targetCard: card,
+        bindings: data.linkedFieldBindings ?? [],
+        cards: data.allCards ?? [card],
+        connections: data.allConnections ?? [],
+        cardTypes: data.cardTypes ?? [cardType],
+      }),
+    [
+      card,
+      cardType,
+      data.allCards,
+      data.allConnections,
+      data.cardTypes,
+      data.linkedFieldBindings,
+    ]
+  );
+  const dataPreviewRows = useMemo(
+    () => [...storedDataPreviewRows, ...linkedDataPreviewRows],
+    [storedDataPreviewRows, linkedDataPreviewRows]
   );
   const [visibleDataPreviewRowCount, setVisibleDataPreviewRowCount] = useState(
     dataPreviewRows.length
@@ -1199,7 +1340,16 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         {visibleDataPreviewRows.length > 0 ? (
           <dl className="v2CardDataPreview" aria-label="Card data preview">
             {visibleDataPreviewRows.map((row) => (
-              <div key={row.key} className="v2CardDataPreviewRow">
+              <div
+                key={row.key}
+                className={`v2CardDataPreviewRow${
+                  row.variant === "linkedSource"
+                    ? " v2CardDataPreviewRowLinkedSource"
+                    : row.variant === "linked"
+                      ? " v2CardDataPreviewRowLinked"
+                      : ""
+                }`}
+              >
                 <dt>{row.label}</dt>
                 <dd>{row.value}</dd>
               </div>
