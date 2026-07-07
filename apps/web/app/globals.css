@@ -2350,6 +2350,66 @@ button:disabled {
   text-overflow: ellipsis;
 }
 
+.v2CardVisualEditPanel {
+  border-color: var(--yd-border-default, #bcc7d8);
+  background: color-mix(in srgb, var(--yd-surface-panel, #fff) 96%, transparent);
+  color: var(--yd-text-primary, #111827);
+  box-shadow: var(--yd-panel-shadow, 0 16px 42px rgba(31, 45, 73, 0.16));
+}
+
+.v2CardVisualEditToolbar {
+  gap: 6px;
+}
+
+.v2CardVisualToolGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--yd-border-default, #d9e0eb);
+  border-radius: 999px;
+  background: var(--yd-surface-panel, #fff);
+  padding: 3px;
+}
+
+.v2CardVisualToolGroup .v2ConnectorVisualIconButton {
+  border-color: transparent;
+  background: transparent;
+}
+
+.v2CardVisualToolGroup .v2ConnectorVisualIconButtonActive {
+  border-color: color-mix(in srgb, var(--blue) 65%, var(--yd-border-default, #d9e0eb));
+  background: color-mix(in srgb, var(--blue) 10%, var(--yd-surface-panel, #fff));
+}
+
+.v2CardVisualFontTool select {
+  width: 74px;
+  color: var(--yd-text-primary, #182230);
+}
+
+.v2CardVisualEditPanel .v2ConnectorVisualTool,
+.v2CardVisualEditPanel .v2ConnectorVisualIconButton,
+.v2CardVisualEditPanel .v2ConnectorVisualTextButton {
+  border-color: var(--yd-form-input-border, #d9e0eb);
+  background: var(--yd-form-input-background, #fff);
+  color: var(--yd-text-primary, #273142);
+}
+
+.v2CardVisualEditPanel .v2ConnectorVisualIconButtonActive {
+  border-color: color-mix(in srgb, var(--blue) 65%, var(--yd-form-input-border, #d9e0eb));
+  background: color-mix(in srgb, var(--blue) 10%, var(--yd-surface-panel, #fff));
+  color: var(--blue);
+}
+
+.v2CardVisualEditPanel .v2ConnectorVisualTool:hover,
+.v2CardVisualEditPanel .v2ConnectorVisualTool:focus-within,
+.v2CardVisualEditPanel .v2ConnectorVisualIconButton:hover:not(:disabled),
+.v2CardVisualEditPanel .v2ConnectorVisualIconButton:focus-visible:not(:disabled),
+.v2CardVisualEditPanel .v2ConnectorVisualTextButton:hover:not(:disabled),
+.v2CardVisualEditPanel .v2ConnectorVisualTextButton:focus-visible:not(:disabled) {
+  border-color: var(--yd-form-focus-ring, var(--blue));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--yd-form-focus-ring, var(--blue)) 10%, transparent);
+}
+
 .v2ConnectorEdgeInteraction,
 .v2ConnectorEdgeInteractionHidden {
   stroke: transparent;

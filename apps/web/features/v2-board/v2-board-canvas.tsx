@@ -39,6 +39,7 @@ import {
 import { V2CardInspector } from "./v2-card-inspector";
 import { V2ConnectorInspector } from "./v2-connector-inspector";
 import { V2ConnectorVisualEditPanel } from "./v2-connector-visual-edit-panel";
+import { V2CardVisualEditPanel } from "./v2-card-visual-edit-panel";
 import { V2ConnectorEdge, type V2ConnectorEdgeData } from "./v2-connector-edge";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
@@ -1505,6 +1506,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           <div className="v2CanvasConnectionError" role="status">
             {connectionCreateError}
           </div>
+        ) : null}
+        {selectedCard && visualEditingCardId === selectedCard.id ? (
+          <V2CardVisualEditPanel
+            card={selectedCard}
+            saveStatus={saveStatus}
+            onUpdateVisualStyle={handleUpdateVisualStyle}
+            onClose={() => setVisualEditingCardId(null)}
+          />
         ) : null}
         {selectedConnection && visualEditingConnectionId === selectedConnection.id ? (
           <V2ConnectorVisualEditPanel
