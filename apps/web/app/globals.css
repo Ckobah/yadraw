@@ -3359,6 +3359,47 @@ button:disabled {
   white-space: nowrap;
 }
 
+.v2CardDataPreview {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  margin: 2px 0 0;
+  overflow: hidden;
+}
+
+.v2CardDataPreviewRow {
+  display: grid;
+  grid-template-columns: minmax(42px, 0.42fr) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  min-height: 18px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--v2-card-accent-border) 34%, transparent);
+}
+
+.v2CardDataPreviewRow dt,
+.v2CardDataPreviewRow dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardDataPreviewRow dt {
+  color: var(--yd-text-muted, #667085);
+  font-size: 10px;
+  font-weight: 740;
+}
+
+.v2CardDataPreviewRow dd {
+  color: var(--yd-text-primary, #182230);
+  font-size: 11px;
+  font-weight: 680;
+}
+
 .react-flow__node-v2Card {
   overflow: visible;
 }

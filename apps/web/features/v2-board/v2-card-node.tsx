@@ -35,7 +35,12 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
+import type {
+  V2Card,
+  V2CardType,
+  V2CardTypeFieldSchema,
+  V2CardVisualStyle,
+} from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
 import {
   buildV2ConnectorSlots,
@@ -390,6 +395,70 @@ function getCardSummary(card: V2Card): string {
   return typeof kind === "string" && kind.trim() ? kind.trim() : "No description";
 }
 
+type V2CardDataPreviewRow = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+function formatCardDataPreviewValue(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.length > 0 ? `[${value.length} items]` : null;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length === 0) return null;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(value);
+}
+
+function buildSchemaPreviewRows(
+  fields: V2CardTypeFieldSchema[],
+  data: V2Card["data"]
+): V2CardDataPreviewRow[] {
+  return fields.flatMap((field) => {
+    const value = formatCardDataPreviewValue(data[field.key]);
+    return value
+      ? [
+          {
+            key: field.key,
+            label: field.label || field.key,
+            value,
+          },
+        ]
+      : [];
+  });
+}
+
+function buildExtraDataPreviewRows(
+  card: V2Card,
+  schemaFields: V2CardTypeFieldSchema[]
+): V2CardDataPreviewRow[] {
+  const schemaKeys = new Set(schemaFields.map((field) => field.key));
+  return Object.entries(card.data).flatMap(([key, rawValue]) => {
+    if (schemaKeys.has(key) || key === "kind") return [];
+    const value = formatCardDataPreviewValue(rawValue);
+    return value ? [{ key, label: key, value }] : [];
+  });
+}
+
+function buildCardDataPreviewRows(card: V2Card, cardType: V2CardType): V2CardDataPreviewRow[] {
+  const schemaFields = cardType.schema.fields;
+  return [
+    ...buildSchemaPreviewRows(schemaFields, card.data),
+    ...buildExtraDataPreviewRows(card, schemaFields),
+  ];
+}
+
 export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -399,6 +468,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const CardTypeIcon = getV2CardTypeIcon(cardType);
+  const dataPreviewRows = buildCardDataPreviewRows(card, cardType);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
@@ -1060,6 +1130,16 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         >
           {getCardSummary(card)}
         </span>
+        {dataPreviewRows.length > 0 ? (
+          <dl className="v2CardDataPreview" aria-label="Card data preview">
+            {dataPreviewRows.map((row) => (
+              <div key={row.key} className="v2CardDataPreviewRow">
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
       </div>
     </article>
   );
