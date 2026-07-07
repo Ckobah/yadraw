@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import type { V2CardType, V2CardTypePort, V2Position } from "@yadraw/shared";
-import { getV2CardAccentColor } from "./v2-card-node";
+import { getV2CardTypeAccentColor } from "./v2-card-node";
 
 type V2CardCreateToolbarProps = {
   cardTypes: V2CardType[];
@@ -143,7 +143,7 @@ export function V2CardCreateToolbar({
             <div className="v2CardTypePickerBody">
               <div className="v2CardTypeList">
                 {filteredCardTypes.map((cardType) => {
-                  const accentColor = getV2CardAccentColor(cardType.key);
+                  const accentColor = getV2CardTypeAccentColor(cardType);
                   const summary = summarizePorts(cardType.ports);
                   const isActive = activeCardType?.id === cardType.id;
                   return (
@@ -201,7 +201,7 @@ function CardTypePreview({ cardType }: { cardType: V2CardType | null }) {
     );
   }
 
-  const accentColor = getV2CardAccentColor(cardType.key);
+  const accentColor = getV2CardTypeAccentColor(cardType);
   const groupedPorts = groupPorts(cardType.ports);
 
   return (

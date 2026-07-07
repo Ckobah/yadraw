@@ -17,6 +17,7 @@ import {
   type V2BoardDetail,
   type V2Card,
   type V2CardType,
+  type V2CardTypePortInput,
   type V2Connection,
   type V2CreateCardRequest,
   type V2CreateConnectionRequest,
@@ -349,6 +350,7 @@ export function createV2BoardService(
       schema: V2CardType["schema"];
       defaultSize: V2CardType["defaultSize"];
       defaultVisualStyle: V2CardType["defaultVisualStyle"];
+      ports: V2CardTypePortInput[];
     }): Promise<V2CardType>;
     updateCardType(cardTypeId: string, input: V2UpdateCardTypeRequest): Promise<V2CardType | null>;
     updateCardTypeSchema(cardTypeId: string, schema: V2CardType["schema"]): Promise<V2CardType | null>;
@@ -456,7 +458,8 @@ export function createV2BoardService(
         description: parsedInput.data.description ?? "",
         schema: parsedInput.data.schema,
         defaultSize: parsedInput.data.defaultSize ?? { width: 300, height: 180 },
-        defaultVisualStyle: parsedInput.data.defaultVisualStyle
+        defaultVisualStyle: parsedInput.data.defaultVisualStyle,
+        ports: parsedInput.data.ports
       });
     },
 
@@ -711,10 +714,7 @@ export function createV2BoardService(
         data: cloneJson(input.data ?? {}),
         position: input.position ?? { x: 0, y: 0 },
         size: input.size ?? cardType.defaultSize,
-        visualStyle: {
-          ...cloneJson(cardType.defaultVisualStyle),
-          ...cloneJson(input.visualStyle ?? {})
-        },
+        visualStyle: cloneJson(input.visualStyle ?? {}),
         status: input.status ?? "active"
       });
     },

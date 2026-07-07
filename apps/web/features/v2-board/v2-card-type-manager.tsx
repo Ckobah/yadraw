@@ -25,9 +25,10 @@ type CardTypeDraft = {
   fields: V2CardTypeSchemaFieldDraft[];
   defaultWidth: string;
   defaultHeight: string;
-  fillColor: string;
-  borderColor: string;
-  textColor: string;
+  accentColor: string;
+  iconKey: string;
+  hasInputPort: boolean;
+  hasOutputPort: boolean;
 };
 
 type V2CardTypeManagerProps = {
@@ -43,9 +44,8 @@ type V2CardTypeManagerProps = {
 
 const CARD_TYPE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-const DEFAULT_FILL_COLOR = "#ffffff";
-const DEFAULT_BORDER_COLOR = "#d0d7de";
-const DEFAULT_TEXT_COLOR = "#111827";
+const DEFAULT_ACCENT_COLOR = "#2383ff";
+const ICON_OPTIONS = ["database", "task", "box", "user", "file", "gear", "truck", "factory", "material"];
 
 function draftFromCardType(cardType: V2CardType): CardTypeDraft {
   return {
@@ -56,9 +56,13 @@ function draftFromCardType(cardType: V2CardType): CardTypeDraft {
     fields: createV2CardTypeSchemaFieldDrafts(cardType.schema),
     defaultWidth: String(cardType.defaultSize.width),
     defaultHeight: String(cardType.defaultSize.height),
-    fillColor: cardType.defaultVisualStyle.fillColor ?? DEFAULT_FILL_COLOR,
-    borderColor: cardType.defaultVisualStyle.borderColor ?? DEFAULT_BORDER_COLOR,
-    textColor: cardType.defaultVisualStyle.textColor ?? DEFAULT_TEXT_COLOR,
+    accentColor:
+      cardType.defaultVisualStyle.accentColor ??
+      cardType.defaultVisualStyle.fillColor ??
+      DEFAULT_ACCENT_COLOR,
+    iconKey: cardType.defaultVisualStyle.iconKey ?? cardType.key,
+    hasInputPort: cardType.ports.some((port) => port.direction === "input" && port.key === "input"),
+    hasOutputPort: cardType.ports.some((port) => port.direction === "output" && port.key === "output"),
   };
 }
 
@@ -71,18 +75,43 @@ function emptyDraft(): CardTypeDraft {
     fields: [],
     defaultWidth: "300",
     defaultHeight: "180",
-    fillColor: DEFAULT_FILL_COLOR,
-    borderColor: DEFAULT_BORDER_COLOR,
-    textColor: DEFAULT_TEXT_COLOR,
+    accentColor: DEFAULT_ACCENT_COLOR,
+    iconKey: "box",
+    hasInputPort: true,
+    hasOutputPort: true,
   };
 }
 
 function buildDefaultVisualStyle(draft: CardTypeDraft): V2CardVisualStyle {
   return {
-    fillColor: draft.fillColor.trim(),
-    borderColor: draft.borderColor.trim(),
-    textColor: draft.textColor.trim(),
+    accentColor: draft.accentColor.trim(),
+    iconKey: draft.iconKey.trim(),
   };
+}
+
+function buildDefaultPorts(draft: CardTypeDraft): V2CreateCardTypeRequest["ports"] {
+  const ports: NonNullable<V2CreateCardTypeRequest["ports"]> = [];
+  if (draft.hasInputPort) {
+    ports.push({
+      key: "input",
+      label: "Input",
+      direction: "input",
+      dataType: "json",
+      required: false,
+      sortOrder: 0,
+    });
+  }
+  if (draft.hasOutputPort) {
+    ports.push({
+      key: "output",
+      label: "Output",
+      direction: "output",
+      dataType: "json",
+      required: false,
+      sortOrder: 1,
+    });
+  }
+  return ports;
 }
 
 export function V2CardTypeManager({
@@ -150,14 +179,11 @@ export function V2CardTypeManager({
     const height = Number(draft.defaultHeight);
     if (!Number.isFinite(width) || width <= 0) return "Default width must be greater than 0.";
     if (!Number.isFinite(height) || height <= 0) return "Default height must be greater than 0.";
-    for (const [label, value] of [
-      ["Fill color", draft.fillColor],
-      ["Border color", draft.borderColor],
-      ["Text color", draft.textColor],
-    ] as const) {
-      if (value.trim() && !COLOR_PATTERN.test(value.trim())) {
-        return `${label} must be a hex color like #ffffff.`;
-      }
+    if (!draft.accentColor.trim() || !COLOR_PATTERN.test(draft.accentColor.trim())) {
+      return "Type color must be a hex color like #2383ff.";
+    }
+    if (!draft.iconKey.trim()) {
+      return "Icon is required.";
     }
     const duplicate = cardTypes.some(
       (cardType) => cardType.key === key && cardType.id !== draft.id
@@ -200,6 +226,7 @@ export function V2CardTypeManager({
         height: Number(draft.defaultHeight),
       };
       const defaultVisualStyle = buildDefaultVisualStyle(draft);
+      const ports = buildDefaultPorts(draft);
       if (mode === "new") {
         const created = await onCreateCardType({
           key: draft.key.trim(),
@@ -208,6 +235,7 @@ export function V2CardTypeManager({
           schema: schemaResult.schema,
           defaultSize,
           defaultVisualStyle,
+          ports,
         });
         setMode("existing");
         setSelectedCardTypeId(created.id);
@@ -227,6 +255,7 @@ export function V2CardTypeManager({
         schema: schemaResult.schema,
         defaultSize,
         defaultVisualStyle,
+        ports,
       });
       setDraft(draftFromCardType(updated));
       setMessage("Card type saved.");
@@ -341,7 +370,7 @@ export function V2CardTypeManager({
 
             <section className="v2CardTypeManagerSection">
               <h3>Visual defaults</h3>
-              <p>Used when new cards of this type are created. Existing cards are not changed.</p>
+              <p>Type appearance is rendered as an accent, matching built-in Source and Task cards.</p>
               <div className="v2CardTypeVisualGrid">
                 <label>
                   <span>Default width</span>
@@ -368,23 +397,51 @@ export function V2CardTypeManager({
                   />
                 </label>
                 <ColorControl
-                  label="Fill color"
-                  value={draft.fillColor}
+                  label="Type color"
+                  value={draft.accentColor}
                   disabled={isSaving}
-                  onChange={(fillColor) => updateDraft({ fillColor })}
+                  onChange={(accentColor) => updateDraft({ accentColor })}
                 />
-                <ColorControl
-                  label="Border color"
-                  value={draft.borderColor}
-                  disabled={isSaving}
-                  onChange={(borderColor) => updateDraft({ borderColor })}
-                />
-                <ColorControl
-                  label="Text color"
-                  value={draft.textColor}
-                  disabled={isSaving}
-                  onChange={(textColor) => updateDraft({ textColor })}
-                />
+                <label>
+                  <span>Icon</span>
+                  <select
+                    className="v2InspectorDataValue"
+                    value={draft.iconKey}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ iconKey: event.target.value })}
+                  >
+                    {ICON_OPTIONS.map((iconKey) => (
+                      <option key={iconKey} value={iconKey}>
+                        {iconKey}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section className="v2CardTypeManagerSection">
+              <h3>Default ports</h3>
+              <p>Ports are type-level connection handles. New custom types start with input and output.</p>
+              <div className="v2CardTypePortToggles">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={draft.hasInputPort}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ hasInputPort: event.target.checked })}
+                  />
+                  <span>Input port</span>
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={draft.hasOutputPort}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ hasOutputPort: event.target.checked })}
+                  />
+                  <span>Output port</span>
+                </label>
               </div>
             </section>
 

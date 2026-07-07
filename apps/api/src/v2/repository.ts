@@ -4,6 +4,7 @@ import {
   v2BoardDetailSchema,
   v2CardAttachmentSchema,
   v2CardSchema,
+  v2CardTypePortSchema,
   v2CardTypeSchema,
   v2ConnectionAttachmentSchema,
   v2ConnectionSchema,
@@ -14,6 +15,7 @@ import {
   type V2Card,
   type V2CardStatus,
   type V2CardType,
+  type V2CardTypePortInput,
   type V2CardTypePort,
   type V2CardTypeSchema,
   type V2CardVisualStyle,
@@ -56,6 +58,7 @@ export type V2CreateCardTypeRecordInput = {
   schema: V2CardTypeSchema;
   defaultSize: V2Size;
   defaultVisualStyle: V2CardVisualStyle;
+  ports: V2CardTypePortInput[];
 };
 
 export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
@@ -636,6 +639,29 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     );
   }
 
+  function buildMemoryCardTypePorts(
+    workspaceId: string,
+    cardTypeId: string,
+    ports: V2CardTypePortInput[],
+    timestamp: string
+  ): V2CardTypePort[] {
+    return ports.map((port, index) =>
+      v2CardTypePortSchema.parse({
+        id: randomUUID(),
+        workspaceId,
+        cardTypeId,
+        key: port.key,
+        label: port.label,
+        direction: port.direction,
+        dataType: port.dataType,
+        required: port.required,
+        sortOrder: port.sortOrder ?? index,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+    );
+  }
+
   function roleForWorkspace(userId: string, workspaceId: string): V2WorkspaceRole | null {
     return (
       state.workspaceMembers.find(
@@ -696,8 +722,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async createCardType(input) {
       const timestamp = nowIso();
+      const cardTypeId = randomUUID();
       const cardType = v2CardTypeSchema.parse({
-        id: randomUUID(),
+        id: cardTypeId,
         workspaceId: input.workspaceId,
         key: input.key,
         name: input.name,
@@ -706,7 +733,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         schema: cloneJson(input.schema),
         defaultVisualStyle: cloneJson(input.defaultVisualStyle),
         defaultSize: cloneJson(input.defaultSize),
-        ports: [],
+        ports: buildMemoryCardTypePorts(input.workspaceId, cardTypeId, input.ports, timestamp),
         createdAt: timestamp,
         updatedAt: timestamp
       });
@@ -719,6 +746,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       const index = state.cardTypes.findIndex((cardType) => cardType.id === cardTypeId);
       const existing = state.cardTypes[index];
       if (index === -1 || !existing) return null;
+      const timestamp = nowIso();
 
       const updated = v2CardTypeSchema.parse({
         ...existing,
@@ -730,7 +758,12 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...(input.defaultVisualStyle !== undefined
           ? { defaultVisualStyle: cloneJson(input.defaultVisualStyle) }
           : {}),
-        updatedAt: nowIso()
+        ...(input.ports !== undefined
+          ? {
+              ports: buildMemoryCardTypePorts(existing.workspaceId, existing.id, input.ports, timestamp)
+            }
+          : {}),
+        updatedAt: timestamp
       });
       state.cardTypes[index] = updated;
       return cloneJson(updated);
@@ -1201,6 +1234,51 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     return rows.map((row) => cardTypeFromRow(row, groupedPorts.get(String(row.id)) ?? []));
   }
 
+  async function replaceCardTypePorts(
+    workspaceId: string,
+    cardTypeId: string,
+    ports: V2CardTypePortInput[]
+  ): Promise<void> {
+    await pool.query(
+      `
+        update card_type_ports
+        set deleted_at = now(),
+            updated_at = now()
+        where card_type_id = $1
+          and deleted_at is null
+      `,
+      [cardTypeId]
+    );
+
+    for (const [index, port] of ports.entries()) {
+      await pool.query(
+        `
+          insert into card_type_ports (
+            workspace_id,
+            card_type_id,
+            key,
+            label,
+            direction,
+            data_type,
+            required,
+            sort_order
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8)
+        `,
+        [
+          workspaceId,
+          cardTypeId,
+          port.key,
+          port.label,
+          port.direction,
+          port.dataType,
+          port.required,
+          port.sortOrder ?? index
+        ]
+      );
+    }
+  }
+
   function roleFromRow(row: QueryResultRow | undefined): V2WorkspaceRole | null {
     return row?.role ? (String(row.role) as V2WorkspaceRole) : null;
   }
@@ -1442,7 +1520,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         ]
       );
       const row = result.rows[0];
-      return cardTypeFromRow(row, []);
+      await replaceCardTypePorts(input.workspaceId, String(row.id), input.ports);
+      const ports = await loadPortsForCardTypes([String(row.id)]);
+      return cardTypeFromRow(row, ports.get(String(row.id)) ?? []);
     },
 
     async updateCardType(cardTypeId, input) {
@@ -1489,6 +1569,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       const row = result.rows[0];
       if (!row) return null;
 
+      if (input.ports !== undefined) {
+        await replaceCardTypePorts(existing.workspaceId, cardTypeId, input.ports);
+      }
       const ports = await loadPortsForCardTypes([cardTypeId]);
       return cardTypeFromRow(row, ports.get(cardTypeId) ?? []);
     },

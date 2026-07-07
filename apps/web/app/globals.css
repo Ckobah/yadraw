@@ -4599,6 +4599,32 @@ button:disabled {
   cursor: pointer;
 }
 
+.v2CardTypePortToggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.v2CardTypePortToggles label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid #d9e0ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.v2CardTypePortToggles input {
+  width: 14px;
+  height: 14px;
+  accent-color: #2657d9;
+}
+
 .v2CardTypeManagerSuccess {
   margin: 0;
   color: #057647;

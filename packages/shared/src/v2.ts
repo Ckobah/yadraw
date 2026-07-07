@@ -53,6 +53,8 @@ export const v2ConnectorSlotSchema = z.object({
 });
 
 export const v2CardVisualStyleSchema = z.object({
+  accentColor: z.string().min(1).max(32).optional(),
+  iconKey: z.string().trim().min(1).max(40).optional(),
   fillColor: z.string().min(1).max(32).optional(),
   borderColor: z.string().min(1).max(32).optional(),
   fontFamily: z.string().min(1).max(80).optional(),
@@ -132,6 +134,22 @@ export const v2CardTypePortSchema = z.object({
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
 });
+
+export const v2CardTypePortInputSchema = z
+  .object({
+    key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
+    label: z.string().trim().min(1),
+    direction: v2PortDirectionSchema,
+    dataType: z.string().trim().min(1).default("json"),
+    required: z.boolean().default(false),
+    sortOrder: z.number().int().default(0)
+  })
+  .strict();
+
+export const v2DefaultCardTypePortsSchema = z.array(v2CardTypePortInputSchema).default([
+  { key: "input", label: "Input", direction: "input", dataType: "json", required: false, sortOrder: 0 },
+  { key: "output", label: "Output", direction: "output", dataType: "json", required: false, sortOrder: 1 }
+]);
 
 export const v2CardTypeFieldOptionSchema = z.object({
   value: z.string().trim().min(1),
@@ -375,7 +393,8 @@ export const v2CreateCardTypeBodySchema = z
     description: z.string().optional(),
     schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
     defaultSize: v2SizeSchema.optional(),
-    defaultVisualStyle: v2CardVisualStyleSchema.default({})
+    defaultVisualStyle: v2CardVisualStyleSchema.default({}),
+    ports: v2DefaultCardTypePortsSchema
   })
   .strict();
 
@@ -391,7 +410,8 @@ export const v2UpdateCardTypeBodySchema = z
     description: z.string().optional(),
     schema: v2CardTypeDefinitionSchema.optional(),
     defaultSize: v2SizeSchema.optional(),
-    defaultVisualStyle: v2CardVisualStyleSchema.optional()
+    defaultVisualStyle: v2CardVisualStyleSchema.optional(),
+    ports: z.array(v2CardTypePortInputSchema).optional()
   })
   .strict();
 
@@ -670,6 +690,7 @@ export type V2CardTypeFieldOption = z.infer<typeof v2CardTypeFieldOptionSchema>;
 export type V2CardTypeFieldSchema = z.infer<typeof v2CardTypeFieldSchema>;
 export type V2CardTypeSchema = z.infer<typeof v2CardTypeDefinitionSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
+export type V2CardTypePortInput = z.infer<typeof v2CardTypePortInputSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;

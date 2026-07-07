@@ -192,7 +192,7 @@ describe("v2 card type schema API", () => {
     await server.close();
   });
 
-  it("creates a card type with empty ports and schema fields", async () => {
+  it("creates a card type with default ports and schema fields", async () => {
     const { server, seed, repository } = createSchemaServer();
 
     const response = await server.inject({
@@ -204,9 +204,8 @@ describe("v2 card type schema API", () => {
         description: "Provides material data.",
         defaultSize: { width: 260, height: 150 },
         defaultVisualStyle: {
-          fillColor: "#ffffff",
-          borderColor: "#d0d7de",
-          textColor: "#111827"
+          accentColor: "#2383ff",
+          iconKey: "truck"
         },
         schema: {
           fields: [{ key: "phone", label: "Phone", type: "text" }]
@@ -222,11 +221,13 @@ describe("v2 card type schema API", () => {
       defaultData: {},
       defaultSize: { width: 260, height: 150 },
       defaultVisualStyle: {
-        fillColor: "#ffffff",
-        borderColor: "#d0d7de",
-        textColor: "#111827"
+        accentColor: "#2383ff",
+        iconKey: "truck"
       },
-      ports: [],
+      ports: [
+        { key: "input", label: "Input", direction: "input" },
+        { key: "output", label: "Output", direction: "output" }
+      ],
       schema: { fields: [{ key: "phone", label: "Phone", type: "text" }] }
     });
 
@@ -287,10 +288,10 @@ describe("v2 card type schema API", () => {
         description: "Updated description",
         defaultSize: { width: 320, height: 190 },
         defaultVisualStyle: {
-          fillColor: "#f8fafc",
-          borderColor: "#94a3b8",
-          textColor: "#0f172a"
+          accentColor: "#f8fafc",
+          iconKey: "factory"
         },
+        ports: [{ key: "output", label: "Output", direction: "output" }],
         schema: {
           fields: [{ key: "email", label: "Email", type: "text" }]
         }
@@ -306,10 +307,10 @@ describe("v2 card type schema API", () => {
       defaultData,
       defaultSize: { width: 320, height: 190 },
       defaultVisualStyle: {
-        fillColor: "#f8fafc",
-        borderColor: "#94a3b8",
-        textColor: "#0f172a"
+        accentColor: "#f8fafc",
+        iconKey: "factory"
       },
+      ports: [{ key: "output", label: "Output", direction: "output" }],
       schema: { fields: [{ key: "email", label: "Email", type: "text" }] }
     });
 
@@ -366,9 +367,8 @@ describe("v2 card type schema API", () => {
       payload: {
         defaultSize: { width: 360, height: 210 },
         defaultVisualStyle: {
-          fillColor: "#fff7ed",
-          borderColor: "#fb923c",
-          textColor: "#7c2d12"
+          accentColor: "#fb923c",
+          iconKey: "box"
         }
       }
     });
@@ -377,9 +377,8 @@ describe("v2 card type schema API", () => {
     expect(response.json()).toMatchObject({
       defaultSize: { width: 360, height: 210 },
       defaultVisualStyle: {
-        fillColor: "#fff7ed",
-        borderColor: "#fb923c",
-        textColor: "#7c2d12"
+        accentColor: "#fb923c",
+        iconKey: "box"
       },
       defaultData,
       schema
@@ -392,7 +391,7 @@ describe("v2 card type schema API", () => {
     await server.close();
   });
 
-  it("creates new cards with type default size and visual style", async () => {
+  it("creates new cards with type default size while type ports stay on the card type", async () => {
     const { server, seed } = createSchemaServer();
 
     const typeResponse = await server.inject({
@@ -403,9 +402,8 @@ describe("v2 card type schema API", () => {
         name: "Visual Type",
         defaultSize: { width: 280, height: 170 },
         defaultVisualStyle: {
-          fillColor: "#eff6ff",
-          borderColor: "#60a5fa",
-          textColor: "#1e3a8a"
+          accentColor: "#60a5fa",
+          iconKey: "box"
         }
       }
     });
@@ -424,11 +422,25 @@ describe("v2 card type schema API", () => {
     expect(cardResponse.statusCode).toBe(201);
     expect(cardResponse.json()).toMatchObject({
       size: { width: 280, height: 170 },
-      visualStyle: {
-        fillColor: "#eff6ff",
-        borderColor: "#60a5fa",
-        textColor: "#1e3a8a"
-      }
+      visualStyle: {}
+    });
+
+    const detailResponse = await server.inject({
+      method: "GET",
+      url: `/v2/boards/${seed.board.id}`
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json()).toMatchObject({
+      cardTypes: expect.arrayContaining([
+        expect.objectContaining({
+          id: cardType.id,
+          defaultVisualStyle: { accentColor: "#60a5fa", iconKey: "box" },
+          ports: [
+            expect.objectContaining({ key: "input", direction: "input" }),
+            expect.objectContaining({ key: "output", direction: "output" })
+          ]
+        })
+      ])
     });
 
     await server.close();

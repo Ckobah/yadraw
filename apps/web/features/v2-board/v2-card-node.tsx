@@ -20,12 +20,20 @@ import {
   AlignLeft,
   AlignRight,
   Bold,
+  Box,
   ChevronsUpDown,
   Database,
+  Factory,
+  FileText,
+  Package,
+  Settings,
   Italic,
   MoreHorizontal,
+  Truck,
   Underline,
+  User,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import type { V2Card, V2CardType, V2CardVisualStyle } from "@yadraw/shared";
 import type { Node } from "@xyflow/react";
@@ -367,6 +375,33 @@ export function getV2CardAccentColor(cardTypeKey?: string): string {
   return cardTypeKey ? accentColorByType[cardTypeKey] ?? "var(--blue)" : "var(--blue)";
 }
 
+export function getV2CardTypeAccentColor(cardType: V2CardType | null | undefined): string {
+  return (
+    cardType?.defaultVisualStyle.accentColor ??
+    cardType?.defaultVisualStyle.fillColor ??
+    getV2CardAccentColor(cardType?.key)
+  );
+}
+
+const iconByKey: Record<string, LucideIcon> = {
+  database: Database,
+  source: Database,
+  task: Box,
+  box: Box,
+  material: Package,
+  user: User,
+  file: FileText,
+  gear: Settings,
+  settings: Settings,
+  truck: Truck,
+  factory: Factory,
+};
+
+function getV2CardTypeIcon(cardType: V2CardType): LucideIcon {
+  const iconKey = cardType.defaultVisualStyle.iconKey ?? cardType.key;
+  return iconByKey[iconKey] ?? Database;
+}
+
 function getCardSummary(card: V2Card): string {
   if (card.description.trim()) return card.description.trim();
   const kind = card.data.kind;
@@ -379,7 +414,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const articleRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
-  const accentColor = getV2CardAccentColor(cardType.key);
+  const accentColor = getV2CardTypeAccentColor(cardType);
+  const CardTypeIcon = getV2CardTypeIcon(cardType);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
@@ -436,9 +472,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     fontStyle: visualStyle.fontStyle,
     textDecoration: visualStyle.textDecoration,
   };
-  const cardBorderColor = selected
-    ? accentColor
-    : visualStyle.borderColor ?? "var(--line)";
+  const cardBorderColor = "var(--line)";
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
     void Promise.resolve(data.onUpdateVisualStyle?.(card.id, patch)).catch(() => {});
@@ -722,9 +756,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         display: "flex",
         flexDirection: "column",
         borderColor: cardBorderColor,
-        backgroundColor: visualStyle.fillColor,
         boxShadow: selected
-          ? `0 0 0 3px ${accentColor}22, var(--v2-card-shadow)`
+          ? "0 0 0 3px rgba(15, 23, 42, 0.2), var(--v2-card-shadow)"
           : "var(--v2-card-shadow)",
         width: "100%",
         height: "100%",
@@ -962,7 +995,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       {/* Compact header (fixed top) */}
       <div className="v2CardHeader">
         <span className="v2CardTypeIcon" aria-hidden="true">
-          <Database size={17} strokeWidth={2.1} />
+          <CardTypeIcon size={17} strokeWidth={2.1} />
         </span>
         <span className="v2CardTypeLabel">{cardType.name}</span>
         <div

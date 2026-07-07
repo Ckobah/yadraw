@@ -207,16 +207,16 @@ describe("v2 API contracts", () => {
       v2CardTypeEntitySchema.parse({
         ...baseCardType,
         defaultVisualStyle: {
-          fillColor: "#ffffff",
-          borderColor: "#d0d7de",
-          textColor: "#111827"
+          accentColor: "#2383ff",
+          iconKey: "database",
+          fillColor: "#ffffff"
         }
       })
     ).toMatchObject({
       defaultVisualStyle: {
-        fillColor: "#ffffff",
-        borderColor: "#d0d7de",
-        textColor: "#111827"
+        accentColor: "#2383ff",
+        iconKey: "database",
+        fillColor: "#ffffff"
       }
     });
   });
@@ -383,10 +383,13 @@ describe("v2 API contracts", () => {
         description: "Provides parts",
         defaultSize: { width: 320, height: 180 },
         defaultVisualStyle: {
-          fillColor: "#ffffff",
-          borderColor: "#d0d7de",
-          textColor: "#111827"
+          accentColor: "#2383ff",
+          iconKey: "database"
         },
+        ports: [
+          { key: "input", label: "Input", direction: "input" },
+          { key: "output", label: "Output", direction: "output" }
+        ],
         schema: {
           fields: [{ key: "phone", label: "Phone", type: "text" }]
         }
@@ -397,10 +400,13 @@ describe("v2 API contracts", () => {
       description: "Provides parts",
       defaultSize: { width: 320, height: 180 },
       defaultVisualStyle: {
-        fillColor: "#ffffff",
-        borderColor: "#d0d7de",
-        textColor: "#111827"
+        accentColor: "#2383ff",
+        iconKey: "database"
       },
+      ports: [
+        { key: "input", label: "Input", direction: "input", dataType: "json", required: false, sortOrder: 0 },
+        { key: "output", label: "Output", direction: "output", dataType: "json", required: false, sortOrder: 0 }
+      ],
       schema: {
         fields: [{ key: "phone", label: "Phone", type: "text" }]
       }
@@ -410,13 +416,15 @@ describe("v2 API contracts", () => {
       v2UpdateCardTypeBodySchema.parse({
         name: "Updated supplier",
         defaultSize: { width: 340, height: 190 },
-        defaultVisualStyle: { fillColor: "#f8fafc" },
+        defaultVisualStyle: { accentColor: "#f8fafc", iconKey: "truck" },
+        ports: [{ key: "output", label: "Output", direction: "output" }],
         schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
       })
     ).toEqual({
       name: "Updated supplier",
       defaultSize: { width: 340, height: 190 },
-      defaultVisualStyle: { fillColor: "#f8fafc" },
+      defaultVisualStyle: { accentColor: "#f8fafc", iconKey: "truck" },
+      ports: [{ key: "output", label: "Output", direction: "output", dataType: "json", required: false, sortOrder: 0 }],
       schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
     });
 
