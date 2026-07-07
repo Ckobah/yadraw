@@ -207,6 +207,7 @@ describe("v2 API contracts", () => {
       v2CardTypeEntitySchema.parse({
         ...baseCardType,
         defaultVisualStyle: {
+          accentKey: "blue",
           accentColor: "#2383ff",
           iconKey: "database",
           fillColor: "#ffffff"
@@ -214,6 +215,7 @@ describe("v2 API contracts", () => {
       })
     ).toMatchObject({
       defaultVisualStyle: {
+        accentKey: "blue",
         accentColor: "#2383ff",
         iconKey: "database",
         fillColor: "#ffffff"
@@ -383,7 +385,7 @@ describe("v2 API contracts", () => {
         description: "Provides parts",
         defaultSize: { width: 320, height: 180 },
         defaultVisualStyle: {
-          accentColor: "#2383ff",
+          accentKey: "green",
           iconKey: "database"
         },
         ports: [
@@ -400,7 +402,7 @@ describe("v2 API contracts", () => {
       description: "Provides parts",
       defaultSize: { width: 320, height: 180 },
       defaultVisualStyle: {
-        accentColor: "#2383ff",
+        accentKey: "green",
         iconKey: "database"
       },
       ports: [
@@ -416,14 +418,14 @@ describe("v2 API contracts", () => {
       v2UpdateCardTypeBodySchema.parse({
         name: "Updated supplier",
         defaultSize: { width: 340, height: 190 },
-        defaultVisualStyle: { accentColor: "#f8fafc", iconKey: "truck" },
+        defaultVisualStyle: { accentKey: "orange", iconKey: "truck" },
         ports: [{ key: "output", label: "Output", direction: "output" }],
         schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
       })
     ).toEqual({
       name: "Updated supplier",
       defaultSize: { width: 340, height: 190 },
-      defaultVisualStyle: { accentColor: "#f8fafc", iconKey: "truck" },
+      defaultVisualStyle: { accentKey: "orange", iconKey: "truck" },
       ports: [{ key: "output", label: "Output", direction: "output", dataType: "json", required: false, sortOrder: 0 }],
       schema: { fields: [{ key: "rating", label: "Rating", type: "number" }] }
     });

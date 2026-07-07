@@ -48,6 +48,7 @@ import {
   type V2ConnectorSlotType,
   type V2PersistedConnectorSlot,
 } from "./v2-connector-slots";
+import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 export type V2CardNodeData = {
   card: V2Card;
@@ -360,27 +361,8 @@ function bodyVerticalJustify(
   return "flex-start";
 }
 
-const accentColorByType: Record<string, string> = {
-  source: "var(--green)",
-  task: "var(--blue)",
-  trigger: "var(--green)",
-  ai_action: "var(--blue)",
-  database: "var(--purple)",
-  vector_store: "var(--teal)",
-  storage: "var(--pink)",
-  note: "var(--blue)",
-};
-
-export function getV2CardAccentColor(cardTypeKey?: string): string {
-  return cardTypeKey ? accentColorByType[cardTypeKey] ?? "var(--blue)" : "var(--blue)";
-}
-
 export function getV2CardTypeAccentColor(cardType: V2CardType | null | undefined): string {
-  return (
-    cardType?.defaultVisualStyle.accentColor ??
-    cardType?.defaultVisualStyle.fillColor ??
-    getV2CardAccentColor(cardType?.key)
-  );
+  return `var(--yd-accent-${resolveCardTypeAccentKey(cardType)}-solid)`;
 }
 
 const iconByKey: Record<string, LucideIcon> = {
@@ -414,7 +396,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const articleRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
-  const accentColor = getV2CardTypeAccentColor(cardType);
+  const accentKey = resolveCardTypeAccentKey(cardType);
+  const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const CardTypeIcon = getV2CardTypeIcon(cardType);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
@@ -472,7 +455,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     fontStyle: visualStyle.fontStyle,
     textDecoration: visualStyle.textDecoration,
   };
-  const cardBorderColor = "var(--line)";
+  const cardBorderColor = selected ? "var(--yd-border-selected)" : "var(--yd-border-default)";
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
     void Promise.resolve(data.onUpdateVisualStyle?.(card.id, patch)).catch(() => {});
@@ -757,11 +740,15 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         flexDirection: "column",
         borderColor: cardBorderColor,
         boxShadow: selected
-          ? "0 0 0 3px rgba(15, 23, 42, 0.2), var(--v2-card-shadow)"
+          ? "var(--yd-card-selected-outline), var(--v2-card-shadow)"
           : "var(--v2-card-shadow)",
         width: "100%",
         height: "100%",
         ["--v2-card-accent" as string]: accentColor,
+        ["--v2-card-accent-soft" as string]: `var(--yd-accent-${accentKey}-soft)`,
+        ["--v2-card-accent-surface" as string]: `var(--yd-accent-${accentKey}-surface)`,
+        ["--v2-card-accent-text" as string]: `var(--yd-accent-${accentKey}-text)`,
+        ["--v2-card-accent-border" as string]: `var(--yd-accent-${accentKey}-border)`,
       }}
     >
       {/* Resize handles in visual edit mode */}

@@ -191,7 +191,7 @@ function getConnectionMarkerId(
 }
 
 function getConnectionStrokeColor(visualStyle: V2ConnectionVisualStyle | undefined): string {
-  return visualStyle?.strokeColor ?? "var(--line-strong)";
+  return visualStyle?.strokeColor ?? "var(--yd-graph-connector)";
 }
 
 function getConnectionStrokeWidth(visualStyle: V2ConnectionVisualStyle | undefined): number {
@@ -227,7 +227,7 @@ function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
     },
     labelStyle: {
       fontSize: 11,
-      fill: "var(--muted)",
+      fill: "var(--yd-text-muted)",
       fontWeight: 500,
     },
   };
@@ -1291,11 +1291,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           },
           style: {
             ...(edge.style ?? {}),
+            stroke: isSelected
+              ? "var(--yd-graph-connector-selected)"
+              : edge.style?.stroke,
             strokeWidth: isSelected ? baseStrokeWidth + 1.25 : baseStrokeWidth,
           },
           labelStyle: {
             ...(edge.labelStyle ?? {}),
-            fill: isSelected ? "var(--blue)" : "var(--muted)",
+            fill: isSelected ? "var(--yd-graph-connector-selected)" : "var(--yd-text-muted)",
             fontWeight: isSelected ? 700 : 500,
           },
         };
@@ -1454,11 +1457,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             onClose={() => setDryRunResult(null)}
           />
         ) : null}
-        <Background color="var(--line)" gap={24} size={1} />
+        <Background color="var(--yd-border-subtle)" gap={24} size={1} />
         <Controls showInteractive={false} />
         <MiniMap
           style={{
-            border: "1px solid var(--line)",
+            border: "1px solid var(--yd-border-default)",
             borderRadius: 8,
             overflow: "hidden",
           }}

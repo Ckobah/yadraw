@@ -15,7 +15,7 @@ import { V2CardBasicsSection } from "./v2-card-basics-section";
 import { V2CardConnectionsSection } from "./v2-card-connections-section";
 import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
-import { getV2CardAccentColor } from "./v2-card-node";
+import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 
 type V2CardInspectorProps = {
@@ -78,7 +78,7 @@ export function V2CardInspector({
   onDeleteCard,
   onClose,
 }: V2CardInspectorProps) {
-  const accentColor = getV2CardAccentColor(cardType?.key);
+  const accentColor = getV2CardTypeAccentColor(cardType);
   const actionsDisabled = pendingAction !== null;
 
   function handleDuplicateClick() {

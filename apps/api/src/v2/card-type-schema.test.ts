@@ -204,7 +204,7 @@ describe("v2 card type schema API", () => {
         description: "Provides material data.",
         defaultSize: { width: 260, height: 150 },
         defaultVisualStyle: {
-          accentColor: "#2383ff",
+          accentKey: "green",
           iconKey: "truck"
         },
         schema: {
@@ -221,7 +221,7 @@ describe("v2 card type schema API", () => {
       defaultData: {},
       defaultSize: { width: 260, height: 150 },
       defaultVisualStyle: {
-        accentColor: "#2383ff",
+        accentKey: "green",
         iconKey: "truck"
       },
       ports: [
@@ -288,7 +288,7 @@ describe("v2 card type schema API", () => {
         description: "Updated description",
         defaultSize: { width: 320, height: 190 },
         defaultVisualStyle: {
-          accentColor: "#f8fafc",
+          accentKey: "purple",
           iconKey: "factory"
         },
         ports: [{ key: "output", label: "Output", direction: "output" }],
@@ -307,7 +307,7 @@ describe("v2 card type schema API", () => {
       defaultData,
       defaultSize: { width: 320, height: 190 },
       defaultVisualStyle: {
-        accentColor: "#f8fafc",
+        accentKey: "purple",
         iconKey: "factory"
       },
       ports: [{ key: "output", label: "Output", direction: "output" }],
@@ -367,7 +367,7 @@ describe("v2 card type schema API", () => {
       payload: {
         defaultSize: { width: 360, height: 210 },
         defaultVisualStyle: {
-          accentColor: "#fb923c",
+          accentKey: "orange",
           iconKey: "box"
         }
       }
@@ -377,7 +377,7 @@ describe("v2 card type schema API", () => {
     expect(response.json()).toMatchObject({
       defaultSize: { width: 360, height: 210 },
       defaultVisualStyle: {
-        accentColor: "#fb923c",
+        accentKey: "orange",
         iconKey: "box"
       },
       defaultData,
@@ -402,7 +402,7 @@ describe("v2 card type schema API", () => {
         name: "Visual Type",
         defaultSize: { width: 280, height: 170 },
         defaultVisualStyle: {
-          accentColor: "#60a5fa",
+          accentKey: "blue",
           iconKey: "box"
         }
       }
@@ -434,7 +434,7 @@ describe("v2 card type schema API", () => {
       cardTypes: expect.arrayContaining([
         expect.objectContaining({
           id: cardType.id,
-          defaultVisualStyle: { accentColor: "#60a5fa", iconKey: "box" },
+          defaultVisualStyle: { accentKey: "blue", iconKey: "box" },
           ports: [
             expect.objectContaining({ key: "input", direction: "input" }),
             expect.objectContaining({ key: "output", direction: "output" })

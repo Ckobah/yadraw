@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, X } from "lucide-react";
 import type {
-  V2CardVisualStyle,
   V2CardType,
   V2CreateCardTypeRequest,
   V2UpdateCardTypeRequest,
@@ -14,6 +13,7 @@ import {
   V2CardTypeSchemaEditor,
   type V2CardTypeSchemaFieldDraft,
 } from "./v2-card-type-schema-editor";
+import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 type CardTypeManagerMode = "existing" | "new";
 
@@ -25,7 +25,7 @@ type CardTypeDraft = {
   fields: V2CardTypeSchemaFieldDraft[];
   defaultWidth: string;
   defaultHeight: string;
-  accentColor: string;
+  accentKey: string;
   iconKey: string;
   hasInputPort: boolean;
   hasOutputPort: boolean;
@@ -43,8 +43,7 @@ type V2CardTypeManagerProps = {
 };
 
 const CARD_TYPE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
-const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
-const DEFAULT_ACCENT_COLOR = "#2383ff";
+const ACCENT_OPTIONS = ["blue", "green", "orange", "red", "purple", "gray"] as const;
 const ICON_OPTIONS = ["database", "task", "box", "user", "file", "gear", "truck", "factory", "material"];
 
 function draftFromCardType(cardType: V2CardType): CardTypeDraft {
@@ -56,10 +55,7 @@ function draftFromCardType(cardType: V2CardType): CardTypeDraft {
     fields: createV2CardTypeSchemaFieldDrafts(cardType.schema),
     defaultWidth: String(cardType.defaultSize.width),
     defaultHeight: String(cardType.defaultSize.height),
-    accentColor:
-      cardType.defaultVisualStyle.accentColor ??
-      cardType.defaultVisualStyle.fillColor ??
-      DEFAULT_ACCENT_COLOR,
+    accentKey: resolveCardTypeAccentKey(cardType),
     iconKey: cardType.defaultVisualStyle.iconKey ?? cardType.key,
     hasInputPort: cardType.ports.some((port) => port.direction === "input" && port.key === "input"),
     hasOutputPort: cardType.ports.some((port) => port.direction === "output" && port.key === "output"),
@@ -75,16 +71,16 @@ function emptyDraft(): CardTypeDraft {
     fields: [],
     defaultWidth: "300",
     defaultHeight: "180",
-    accentColor: DEFAULT_ACCENT_COLOR,
+    accentKey: "blue",
     iconKey: "box",
     hasInputPort: true,
     hasOutputPort: true,
   };
 }
 
-function buildDefaultVisualStyle(draft: CardTypeDraft): V2CardVisualStyle {
+function buildDefaultVisualStyle(draft: CardTypeDraft): V2CreateCardTypeRequest["defaultVisualStyle"] {
   return {
-    accentColor: draft.accentColor.trim(),
+    accentKey: draft.accentKey.trim(),
     iconKey: draft.iconKey.trim(),
   };
 }
@@ -179,8 +175,8 @@ export function V2CardTypeManager({
     const height = Number(draft.defaultHeight);
     if (!Number.isFinite(width) || width <= 0) return "Default width must be greater than 0.";
     if (!Number.isFinite(height) || height <= 0) return "Default height must be greater than 0.";
-    if (!draft.accentColor.trim() || !COLOR_PATTERN.test(draft.accentColor.trim())) {
-      return "Type color must be a hex color like #2383ff.";
+    if (!ACCENT_OPTIONS.includes(draft.accentKey.trim() as (typeof ACCENT_OPTIONS)[number])) {
+      return "Accent is required.";
     }
     if (!draft.iconKey.trim()) {
       return "Icon is required.";
@@ -396,12 +392,21 @@ export function V2CardTypeManager({
                     onChange={(event) => updateDraft({ defaultHeight: event.target.value })}
                   />
                 </label>
-                <ColorControl
-                  label="Type color"
-                  value={draft.accentColor}
-                  disabled={isSaving}
-                  onChange={(accentColor) => updateDraft({ accentColor })}
-                />
+                <label>
+                  <span>Accent</span>
+                  <select
+                    className="v2InspectorDataValue"
+                    value={draft.accentKey}
+                    disabled={isSaving}
+                    onChange={(event) => updateDraft({ accentKey: event.target.value })}
+                  >
+                    {ACCENT_OPTIONS.map((accentKey) => (
+                      <option key={accentKey} value={accentKey}>
+                        {accentKey}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <label>
                   <span>Icon</span>
                   <select
@@ -466,40 +471,5 @@ export function V2CardTypeManager({
         </div>
       </section>
     </div>
-  );
-}
-
-function ColorControl({
-  label,
-  value,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  const colorValue = COLOR_PATTERN.test(value) ? value : "#ffffff";
-  return (
-    <label className="v2CardTypeColorControl">
-      <span>{label}</span>
-      <span className="v2CardTypeColorInputs">
-        <input
-          className="v2CardTypeColorSwatch"
-          type="color"
-          value={colorValue}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <input
-          className="v2InspectorDataValue"
-          value={value}
-          placeholder="#ffffff"
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      </span>
-    </label>
   );
 }

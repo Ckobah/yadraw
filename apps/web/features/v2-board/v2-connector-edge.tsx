@@ -218,7 +218,7 @@ function getPolylineLabelPosition(points: Point[]): Point {
 }
 
 function getStrokeColor(visualStyle: V2ConnectionVisualStyle | undefined): string {
-  return visualStyle?.strokeColor ?? "var(--line-strong)";
+  return visualStyle?.strokeColor ?? "var(--yd-graph-connector)";
 }
 
 function getStrokeWidth(visualStyle: V2ConnectionVisualStyle | undefined): number {
@@ -361,7 +361,7 @@ export function V2ConnectorEdge({
   const baseStrokeWidth = getStrokeWidth(visualStyle);
   const strokeWidth = selected || isVisualEditing ? baseStrokeWidth + 1.25 : baseStrokeWidth;
   const edgeStyle: CSSProperties = {
-    stroke: getStrokeColor(visualStyle),
+    stroke: selected ? "var(--yd-graph-connector-selected)" : getStrokeColor(visualStyle),
     strokeWidth,
   };
 

@@ -53,6 +53,7 @@ export const v2ConnectorSlotSchema = z.object({
 });
 
 export const v2CardVisualStyleSchema = z.object({
+  accentKey: z.string().trim().min(1).max(40).optional(),
   accentColor: z.string().min(1).max(32).optional(),
   iconKey: z.string().trim().min(1).max(40).optional(),
   fillColor: z.string().min(1).max(32).optional(),
