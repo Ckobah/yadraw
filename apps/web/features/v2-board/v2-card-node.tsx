@@ -9,6 +9,8 @@ import {
 } from "@xyflow/react";
 import {
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -401,6 +403,10 @@ type V2CardDataPreviewRow = {
   value: string;
 };
 
+const CARD_DATA_PREVIEW_ROW_HEIGHT_PX = 23;
+const CARD_DATA_PREVIEW_ROW_GAP_PX = 5;
+const CARD_DATA_PREVIEW_TOP_MARGIN_PX = 2;
+
 function formatCardDataPreviewValue(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value === "string") {
@@ -463,12 +469,22 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const { card, cardType } = data;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const articleRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
+  const subtitleRef = useRef<HTMLSpanElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const CardTypeIcon = getV2CardTypeIcon(cardType);
-  const dataPreviewRows = buildCardDataPreviewRows(card, cardType);
+  const dataPreviewRows = useMemo(
+    () => buildCardDataPreviewRows(card, cardType),
+    [card, cardType]
+  );
+  const [visibleDataPreviewRowCount, setVisibleDataPreviewRowCount] = useState(
+    dataPreviewRows.length
+  );
+  const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
@@ -526,6 +542,50 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     textDecoration: visualStyle.textDecoration,
   };
   const cardBorderColor = selected ? "var(--v2-card-accent)" : "var(--yd-border-default)";
+
+  useLayoutEffect(() => {
+    function updateVisibleRows() {
+      if (!bodyRef.current || dataPreviewRows.length === 0) {
+        setVisibleDataPreviewRowCount(0);
+        return;
+      }
+
+      const bodyHeight = bodyRef.current.clientHeight;
+      const titleHeight = titleRef.current?.offsetHeight ?? 0;
+      const subtitleHeight = subtitleRef.current?.offsetHeight ?? 0;
+      const bodyStyle = window.getComputedStyle(bodyRef.current);
+      const bodyGap = Number.parseFloat(bodyStyle.rowGap || bodyStyle.gap || "0") || 0;
+      const reservedHeight =
+        titleHeight + subtitleHeight + bodyGap * 2 + CARD_DATA_PREVIEW_TOP_MARGIN_PX;
+      const availablePreviewHeight = Math.max(0, bodyHeight - reservedHeight);
+      const nextCount = Math.min(
+        dataPreviewRows.length,
+        Math.floor(
+          (availablePreviewHeight + CARD_DATA_PREVIEW_ROW_GAP_PX) /
+            (CARD_DATA_PREVIEW_ROW_HEIGHT_PX + CARD_DATA_PREVIEW_ROW_GAP_PX)
+        )
+      );
+      setVisibleDataPreviewRowCount((current) => (current === nextCount ? current : nextCount));
+    }
+
+    updateVisibleRows();
+
+    const observer = new ResizeObserver(updateVisibleRows);
+    if (bodyRef.current) observer.observe(bodyRef.current);
+    if (titleRef.current) observer.observe(titleRef.current);
+    if (subtitleRef.current) observer.observe(subtitleRef.current);
+    return () => observer.disconnect();
+  }, [
+    card.size.height,
+    card.size.width,
+    card.title,
+    card.description,
+    dataPreviewRows,
+    visualStyle.fontFamily,
+    visualStyle.fontWeight,
+    visualStyle.fontStyle,
+    visualStyle.textDecoration,
+  ]);
 
   function updateVisualStyle(patch: V2CardVisualStyle) {
     void Promise.resolve(data.onUpdateVisualStyle?.(card.id, patch)).catch(() => {});
@@ -1109,30 +1169,36 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       </div>
 
       <div
+        ref={bodyRef}
         className="v2CardBody"
         style={{
           display: "flex",
           flexDirection: "column",
-          justifyContent: bodyVerticalJustify(card.visualStyle?.bodyVerticalAlign),
+          justifyContent:
+            dataPreviewRows.length > 0
+              ? "flex-start"
+              : bodyVerticalJustify(card.visualStyle?.bodyVerticalAlign),
           flex: 1,
           minHeight: 0,
         }}
       >
         <span
+          ref={titleRef}
           className="v2CardTitle"
           style={textStyle}
         >
           {card.title}
         </span>
         <span
+          ref={subtitleRef}
           className="v2CardSubtitle"
           style={textStyle}
         >
           {getCardSummary(card)}
         </span>
-        {dataPreviewRows.length > 0 ? (
+        {visibleDataPreviewRows.length > 0 ? (
           <dl className="v2CardDataPreview" aria-label="Card data preview">
-            {dataPreviewRows.map((row) => (
+            {visibleDataPreviewRows.map((row) => (
               <div key={row.key} className="v2CardDataPreviewRow">
                 <dt>{row.label}</dt>
                 <dd>{row.value}</dd>
