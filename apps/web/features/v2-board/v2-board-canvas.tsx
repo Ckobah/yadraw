@@ -10,6 +10,7 @@ import {
   useEdgesState,
   type Edge,
   type Connection,
+  type OnReconnect,
   type Viewport,
 } from "@xyflow/react";
 import {
@@ -168,7 +169,17 @@ function isValidHandle(
 }
 
 function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
-  return connection.title?.trim() || connection.label || undefined;
+  if (connection.title?.trim()) return connection.title.trim();
+  const quantity = connection.data?.quantity;
+  const unit = connection.data?.unit;
+  if (
+    (typeof quantity === "number" || typeof quantity === "string") &&
+    String(quantity).trim()
+  ) {
+    const unitText = typeof unit === "string" ? unit.trim() : "";
+    return unitText ? `${quantity} ${unitText}` : String(quantity);
+  }
+  return connection.label || undefined;
 }
 
 type V2StyledEdge = Edge<V2ConnectorEdgeData> & {
@@ -214,6 +225,8 @@ function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
     targetHandle: connection.targetPortKey,
     label: getConnectionEdgeLabel(connection),
     type: "v2Connector",
+    deletable: false,
+    reconnectable: true,
     data: {
       connection,
     },
@@ -803,9 +816,16 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleDeleteCard = useCallback(
     async (cardId: string) => {
       if (cardActionLockRef.current) return;
+      const connectedCount = connectionRecordsRef.current.filter(
+        (connection) => connection.sourceCardId === cardId || connection.targetCardId === cardId
+      ).length;
+      const connectorWarning =
+        connectedCount > 0
+          ? ` ${connectedCount} connected connector${connectedCount === 1 ? "" : "s"} will also be removed.`
+          : "";
       if (
         !window.confirm(
-          "Delete this card? Connections to this card will be removed from the board. Files will stay in storage."
+          `Delete this card?${connectorWarning} Files will stay in storage.`
         )
       ) {
         return;
@@ -1084,6 +1104,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       patch: {
         title?: string | null;
         description?: string | null;
+        sourceCardId?: string;
+        targetCardId?: string;
+        sourcePortKey?: string;
+        targetPortKey?: string;
         data?: Record<string, unknown>;
         visualStyle?: V2ConnectionVisualStyle;
       }
@@ -1094,6 +1118,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         ...previous,
         ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
         ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
+        ...(patch.sourceCardId !== undefined ? { sourceCardId: patch.sourceCardId } : {}),
+        ...(patch.targetCardId !== undefined ? { targetCardId: patch.targetCardId } : {}),
+        ...(patch.sourcePortKey !== undefined ? { sourcePortKey: patch.sourcePortKey } : {}),
+        ...(patch.targetPortKey !== undefined ? { targetPortKey: patch.targetPortKey } : {}),
         ...(patch.data !== undefined ? { data: patch.data } : {}),
         ...(patch.visualStyle !== undefined
           ? { visualStyle: { ...previous.visualStyle, ...patch.visualStyle } }
@@ -1158,6 +1186,33 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           edge.id === connectionId ? applyConnectionToEdge(edge, previewConnection) : edge
         )
       );
+    },
+    [setEdges]
+  );
+
+  const handleDeleteConnection = useCallback(
+    async (connectionId: string) => {
+      const connection = connectionRecordsRef.current.find((item) => item.id === connectionId);
+      if (!connection) return;
+      if (!window.confirm("Delete this connector? Cards and files will stay unchanged.")) {
+        return;
+      }
+
+      setSaveStatus("saving");
+      setConnectionCreateError(null);
+      try {
+        await deleteV2Connection(connectionId);
+        setConnectionRecords((current) => current.filter((item) => item.id !== connectionId));
+        setEdges((current) => current.filter((edge) => edge.id !== connectionId));
+        setSelectedConnectionId((current) => (current === connectionId ? null : current));
+        setVisualEditingConnectionId((current) => (current === connectionId ? null : current));
+        setSaveStatus("saved");
+      } catch (err) {
+        console.error("Failed to delete connection:", err);
+        setConnectionCreateError("Connector could not be deleted.");
+        setSaveStatus("error");
+        throw err;
+      }
     },
     [setEdges]
   );
@@ -1273,6 +1328,91 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [board.id, cardTypeMap, setEdges]
   );
 
+  const handleReconnect = useCallback<OnReconnect>(
+    async (oldEdge, connection) => {
+      const { source, target, sourceHandle, targetHandle } = connection;
+      if (!source || !target || !sourceHandle || !targetHandle) {
+        setConnectionCreateError("Connector could not be retargeted.");
+        setSaveStatus("error");
+        return;
+      }
+
+      const existing = connectionRecordsRef.current.find((record) => record.id === oldEdge.id);
+      if (!existing) return;
+
+      const sourceCard = nodesRef.current.find((node) => node.id === source)?.data.card;
+      const targetCard = nodesRef.current.find((node) => node.id === target)?.data.card;
+      const sourceType = sourceCard ? cardTypeMap.get(sourceCard.cardTypeId) : undefined;
+      const targetType = targetCard ? cardTypeMap.get(targetCard.cardTypeId) : undefined;
+      const canConnectAsDrawn =
+        isValidHandle(sourceCard, sourceType, sourceHandle, "output") &&
+        isValidHandle(targetCard, targetType, targetHandle, "input");
+      const canConnectReversed =
+        isValidHandle(targetCard, targetType, targetHandle, "output") &&
+        isValidHandle(sourceCard, sourceType, sourceHandle, "input");
+
+      if (!canConnectAsDrawn && !canConnectReversed) {
+        setConnectionCreateError("Connector could not be retargeted.");
+        setSaveStatus("error");
+        return;
+      }
+
+      const endpointPatch = canConnectAsDrawn
+        ? {
+            sourceCardId: source,
+            targetCardId: target,
+            sourcePortKey: sourceHandle,
+            targetPortKey: targetHandle,
+          }
+        : {
+            sourceCardId: target,
+            targetCardId: source,
+            sourcePortKey: targetHandle,
+            targetPortKey: sourceHandle,
+          };
+
+      if (
+        endpointPatch.sourceCardId === existing.sourceCardId &&
+        endpointPatch.targetCardId === existing.targetCardId &&
+        endpointPatch.sourcePortKey === existing.sourcePortKey &&
+        endpointPatch.targetPortKey === existing.targetPortKey
+      ) {
+        return;
+      }
+
+      const duplicate = connectionRecordsRef.current.find(
+        (record) =>
+          record.id !== existing.id &&
+          isSameConnectionEndpoint(record, {
+            ...endpointPatch,
+            type: existing.type,
+          })
+      );
+      if (duplicate) {
+        setSelectedConnectionId(duplicate.id);
+        setSelectedCardId(null);
+        setConnectionCreateError("Connection already exists.");
+        setSaveStatus("error");
+        return;
+      }
+
+      setConnectionCreateError(null);
+      try {
+        await handleUpdateConnection(existing.id, endpointPatch);
+        setSelectedConnectionId(existing.id);
+        setSelectedCardId(null);
+      } catch (err) {
+        console.error("Failed to retarget connection:", err);
+        setConnectionCreateError(
+          err instanceof V2ApiError && err.status === 409
+            ? "Connection already exists."
+            : "Connector could not be retargeted."
+        );
+      }
+    },
+    [cardTypeMap, handleUpdateConnection]
+  );
+
   // ── Delete connection ────────────────────────────────────────────
   const handleEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
@@ -1360,6 +1500,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         onEdgeClick={handleEdgeClick}
         onEdgeDoubleClick={handleEdgeDoubleClick}
         onConnect={handleConnect}
+        onReconnect={handleReconnect}
         onEdgesDelete={handleEdgesDelete}
         onPaneClick={() => {
           if (ignoreNextPaneClickRef.current) {
@@ -1383,6 +1524,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         minZoom={0.2}
         maxZoom={2.5}
         connectionMode={ConnectionMode.Loose}
+        edgesReconnectable={true}
+        reconnectRadius={12}
+        deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
         nodesConnectable={true}
         elementsSelectable={true}
@@ -1530,6 +1674,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
               );
               setVisualEditingConnectionId(null);
             }}
+            onDelete={handleDeleteConnection}
           />
         ) : null}
       </ReactFlow>
@@ -1566,6 +1711,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           targetCard={cardById.get(selectedConnection.targetCardId) ?? null}
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
+          onDeleteConnection={handleDeleteConnection}
           onClose={() => setSelectedConnectionId(null)}
         />
       ) : null}

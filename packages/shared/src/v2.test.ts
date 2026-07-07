@@ -353,6 +353,28 @@ describe("v2 API contracts", () => {
     });
   });
 
+  it("accepts connection endpoint retarget updates", () => {
+    expect(
+      v2UpdateConnectionBodySchema.parse({
+        sourceCardId: cardId,
+        targetCardId,
+        sourcePortKey: "payload",
+        targetPortKey: "input"
+      })
+    ).toEqual({
+      sourceCardId: cardId,
+      targetCardId,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    expect(() =>
+      v2UpdateConnectionBodySchema.parse({
+        sourcePortKey: ""
+      })
+    ).toThrow();
+  });
+
   it("rejects non-object connection data", () => {
     expect(() =>
       v2UpdateConnectionBodySchema.parse({

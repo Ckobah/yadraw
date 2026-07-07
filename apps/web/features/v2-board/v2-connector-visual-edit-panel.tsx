@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import type {
   V2Connection,
   V2ConnectionMarker,
@@ -15,6 +15,7 @@ type Props = {
   onPreview: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => void;
   onSave: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => Promise<void>;
   onCancel: () => void;
+  onDelete: (connectionId: string) => Promise<void>;
 };
 
 type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition" | "labelSegmentIndex">> & {
@@ -57,6 +58,7 @@ export function V2ConnectorVisualEditPanel({
   onPreview,
   onSave,
   onCancel,
+  onDelete,
 }: Props) {
   const [draft, setDraft] = useState<VisualStyleDraft>(() =>
     normalizeStyle(connection.visualStyle)
@@ -249,6 +251,15 @@ export function V2ConnectorVisualEditPanel({
           onClick={() => void save()}
         >
           Save
+        </button>
+        <button
+          type="button"
+          className="v2ConnectorVisualIconButton v2ConnectorVisualDeleteButton"
+          title="Delete connector"
+          aria-label="Delete connector"
+          onClick={() => void onDelete(connection.id).catch(() => {})}
+        >
+          <Trash2 size={14} strokeWidth={2.2} />
         </button>
         <button
           type="button"

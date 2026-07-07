@@ -2312,6 +2312,12 @@ button:disabled {
   color: var(--blue);
 }
 
+.v2ConnectorVisualDeleteButton {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .v2ConnectorVisualTextButton {
   padding: 0 10px;
   cursor: pointer;
@@ -2332,6 +2338,14 @@ button:disabled {
   border-color: var(--blue);
   outline: 0;
   box-shadow: 0 0 0 3px rgba(48, 135, 255, 0.1);
+}
+
+.v2ConnectorVisualDeleteButton:hover:not(:disabled),
+.v2ConnectorVisualDeleteButton:focus-visible:not(:disabled) {
+  border-color: #fdba74;
+  background: #ffedd5;
+  color: #c2410c;
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.1);
 }
 
 .v2ConnectorVisualIconButton:disabled,
@@ -4003,6 +4017,17 @@ button:disabled {
   font-weight: 660;
   line-height: 1.25;
   text-align: right;
+}
+
+.v2ConnectorInspectorDeleteButton {
+  margin-left: auto;
+}
+
+.v2InspectorHint {
+  margin: 8px 0 0;
+  color: #667085;
+  font-size: 11.5px;
+  line-height: 1.35;
 }
 
 .v2InspectorCloseButton {

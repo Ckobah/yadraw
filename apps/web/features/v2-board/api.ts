@@ -455,6 +455,10 @@ export async function updateV2Connection(
   patch: {
     title?: string | null;
     description?: string | null;
+    sourceCardId?: string;
+    targetCardId?: string;
+    sourcePortKey?: string;
+    targetPortKey?: string;
     data?: Record<string, unknown>;
     visualStyle?: V2ConnectionVisualStyle;
   }

@@ -903,6 +903,10 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...existing,
         ...(input.title !== undefined ? { title: input.title?.trim() || null } : {}),
         ...(input.description !== undefined ? { description: input.description ?? null } : {}),
+        ...(input.sourceCardId !== undefined ? { sourceCardId: input.sourceCardId } : {}),
+        ...(input.targetCardId !== undefined ? { targetCardId: input.targetCardId } : {}),
+        ...(input.sourcePortKey !== undefined ? { sourcePortKey: input.sourcePortKey } : {}),
+        ...(input.targetPortKey !== undefined ? { targetPortKey: input.targetPortKey } : {}),
         ...(input.data !== undefined ? { data: cloneJson(input.data) } : {}),
         ...(input.visualStyle !== undefined
           ? { visualStyle: { ...existing.visualStyle, ...cloneJson(input.visualStyle) } }
@@ -1835,6 +1839,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       const next = {
         title: input.title !== undefined ? input.title?.trim() || null : existing.title,
         description: input.description !== undefined ? input.description ?? null : existing.description,
+        sourceCardId: input.sourceCardId ?? existing.sourceCardId,
+        targetCardId: input.targetCardId ?? existing.targetCardId,
+        sourcePortKey: input.sourcePortKey ?? existing.sourcePortKey,
+        targetPortKey: input.targetPortKey ?? existing.targetPortKey,
         data: input.data !== undefined ? input.data : existing.data,
         visualStyle:
           input.visualStyle !== undefined
@@ -1847,8 +1855,12 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           update connections
           set title = $2,
               description = $3,
-              data = $4::jsonb,
-              visual_style = $5::jsonb,
+              source_card_id = $4,
+              target_card_id = $5,
+              source_port_key = $6,
+              target_port_key = $7,
+              data = $8::jsonb,
+              visual_style = $9::jsonb,
               updated_at = now()
           where id = $1
             and deleted_at is null
@@ -1858,6 +1870,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           connectionId,
           next.title,
           next.description,
+          next.sourceCardId,
+          next.targetCardId,
+          next.sourcePortKey,
+          next.targetPortKey,
           JSON.stringify(next.data),
           JSON.stringify(next.visualStyle)
         ]

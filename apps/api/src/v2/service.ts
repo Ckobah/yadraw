@@ -855,6 +855,71 @@ export function createV2BoardService(
         throw new V2ServiceError("conflict", "V2 connection update repository is not available");
       }
 
+      const nextEndpoint = {
+        sourceCardId: input.sourceCardId ?? existing.sourceCardId,
+        targetCardId: input.targetCardId ?? existing.targetCardId,
+        sourcePortKey: input.sourcePortKey ?? existing.sourcePortKey,
+        targetPortKey: input.targetPortKey ?? existing.targetPortKey,
+        type: existing.type
+      };
+      const endpointChanged =
+        nextEndpoint.sourceCardId !== existing.sourceCardId ||
+        nextEndpoint.targetCardId !== existing.targetCardId ||
+        nextEndpoint.sourcePortKey !== existing.sourcePortKey ||
+        nextEndpoint.targetPortKey !== existing.targetPortKey;
+
+      if (endpointChanged) {
+        const board = await repository.getBoard(existing.boardId);
+        if (!board) {
+          notFound("Board not found");
+        }
+        if (nextEndpoint.sourceCardId === nextEndpoint.targetCardId) {
+          validationFailed("Connection cannot link a card to itself");
+        }
+
+        const sourceCard = await repository.getCard(nextEndpoint.sourceCardId);
+        const targetCard = await repository.getCard(nextEndpoint.targetCardId);
+        if (!sourceCard || sourceCard.boardId !== existing.boardId) {
+          notFound("Source card not found on board");
+        }
+        if (!targetCard || targetCard.boardId !== existing.boardId) {
+          notFound("Target card not found on board");
+        }
+        if (sourceCard.workspaceId !== existing.workspaceId || targetCard.workspaceId !== existing.workspaceId) {
+          validationFailed("Connection cards must belong to the board workspace");
+        }
+
+        const sourceType = await repository.getCardType(sourceCard.cardTypeId);
+        const targetType = await repository.getCardType(targetCard.cardTypeId);
+        if (!sourceType) {
+          notFound("Source card type not found");
+        }
+        if (!targetType) {
+          notFound("Target card type not found");
+        }
+
+        if (!isValidConnectionPort(sourceCard, sourceType, nextEndpoint.sourcePortKey, "source")) {
+          validationFailed("Source port is not a valid output connector on the source card");
+        }
+        if (!isValidConnectionPort(targetCard, targetType, nextEndpoint.targetPortKey, "target")) {
+          validationFailed("Target port is not a valid input connector on the target card");
+        }
+
+        const detail = await repository.getBoardDetail(existing.boardId);
+        const duplicate = detail?.connections.some(
+          (connection) =>
+            connection.id !== existing.id &&
+            connection.sourceCardId === nextEndpoint.sourceCardId &&
+            connection.targetCardId === nextEndpoint.targetCardId &&
+            connection.sourcePortKey === nextEndpoint.sourcePortKey &&
+            connection.targetPortKey === nextEndpoint.targetPortKey &&
+            connection.type === nextEndpoint.type
+        );
+        if (duplicate) {
+          conflict("Connection already exists");
+        }
+      }
+
       const updated = await repository.updateConnection(connectionId, input);
       if (!updated) {
         notFound("Connection not found");

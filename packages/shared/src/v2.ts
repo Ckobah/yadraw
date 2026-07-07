@@ -487,6 +487,10 @@ export const v2UpdateConnectionBodySchema = z
   .object({
     title: z.string().trim().nullable().optional(),
     description: z.string().nullable().optional(),
+    sourceCardId: v2UuidSchema.optional(),
+    targetCardId: v2UuidSchema.optional(),
+    sourcePortKey: z.string().trim().min(1).optional(),
+    targetPortKey: z.string().trim().min(1).optional(),
     data: v2JsonObjectSchema.optional(),
     visualStyle: v2ConnectionVisualStyleSchema.optional()
   })

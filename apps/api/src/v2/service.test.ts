@@ -324,6 +324,150 @@ describe("v2 board service", () => {
     expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
   });
 
+  it("updates connection relationship data without mutating card data", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const source = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { part: "bolt" }
+    });
+    const task = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { assembly: "frame" }
+    });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    const updated = await service.updateConnection(ownerContext, connection.id, {
+      data: {
+        quantity: 4,
+        unit: "pcs",
+        note: "M6 bolts per assembly"
+      }
+    });
+
+    expect(updated.data).toEqual({
+      quantity: 4,
+      unit: "pcs",
+      note: "M6 bolts per assembly"
+    });
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ part: "bolt" });
+    expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ assembly: "frame" });
+  });
+
+  it("retargets connection endpoints while preserving metadata and visual style", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const source = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { sourceBusiness: true }
+    });
+    const task = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { targetBusiness: true }
+    });
+    const nextTask = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { nextTargetBusiness: true }
+    });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+    const styled = await service.updateConnection(ownerContext, connection.id, {
+      title: "Assembly quantity",
+      data: { quantity: 4, unit: "pcs" },
+      visualStyle: { strokeColor: "#2563eb", strokeWidth: 3 }
+    });
+
+    const retargeted = await service.updateConnection(ownerContext, styled.id, {
+      targetCardId: nextTask.id,
+      targetPortKey: "input"
+    });
+
+    expect(retargeted).toMatchObject({
+      id: connection.id,
+      sourceCardId: source.id,
+      targetCardId: nextTask.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input",
+      title: "Assembly quantity",
+      data: { quantity: 4, unit: "pcs" },
+      visualStyle: { strokeColor: "#2563eb", strokeWidth: 3 }
+    });
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ sourceBusiness: true });
+    expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
+    expect(detail.cards.find((card) => card.id === nextTask.id)?.data).toEqual({ nextTargetBusiness: true });
+  });
+
+  it("rejects invalid or duplicate connection retargets", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const secondSource = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+    const duplicateCandidate = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: secondSource.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    await expect(
+      service.updateConnection(ownerContext, connection.id, {
+        targetPortKey: "missing"
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+
+    await expect(
+      service.updateConnection(ownerContext, duplicateCandidate.id, {
+        sourceCardId: source.id
+      })
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("deletes a connector without deleting connected cards", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    await expect(service.deleteConnection(ownerContext, connection.id)).resolves.toEqual({
+      deleted: true,
+      id: connection.id
+    });
+
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.connections.map((item) => item.id)).not.toContain(connection.id);
+    expect(detail.cards.map((card) => card.id)).toEqual(
+      expect.arrayContaining([source.id, task.id])
+    );
+    await expect(repository.getConnection(connection.id)).resolves.toBeNull();
+  });
+
   it("updates connection visual style without changing connection or card data", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const repository = createV2MemoryRepository(seed);

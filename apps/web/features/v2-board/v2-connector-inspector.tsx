@@ -27,6 +27,7 @@ type V2ConnectorInspectorProps = {
       data?: Record<string, unknown>;
     }
   ) => Promise<void>;
+  onDeleteConnection: (connectionId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -63,6 +64,7 @@ export function V2ConnectorInspector({
   targetCard,
   saveStatus,
   onUpdateConnection,
+  onDeleteConnection,
   onClose,
 }: V2ConnectorInspectorProps) {
   const [titleDraft, setTitleDraft] = useState(connection.title ?? "");
@@ -250,6 +252,14 @@ export function V2ConnectorInspector({
         </div>
         <button
           type="button"
+          className="v2InspectorDeleteButton v2ConnectorInspectorDeleteButton"
+          onClick={() => void onDeleteConnection(connection.id).catch(() => {})}
+        >
+          <Trash2 size={14} strokeWidth={2.2} />
+          <span>Delete</span>
+        </button>
+        <button
+          type="button"
           className="v2InspectorCloseButton"
           aria-label="Close connector inspector"
           onClick={onClose}
@@ -338,7 +348,7 @@ export function V2ConnectorInspector({
 
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
-            <h3>Custom data</h3>
+            <h3>Relationship data</h3>
             {isDataEditing ? (
               <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
                 <Plus size={14} strokeWidth={2.2} />
@@ -357,7 +367,7 @@ export function V2ConnectorInspector({
           </div>
           {!isDataEditing ? (
             connectionDataEntries.length === 0 ? (
-              <p className="v2InspectorEmpty">No connector data</p>
+              <p className="v2InspectorEmpty">No relationship data</p>
             ) : (
               <div className="v2InspectorDataReadList">
                 {connectionDataEntries.map(([key, value]) => (
@@ -369,7 +379,7 @@ export function V2ConnectorInspector({
               </div>
             )
           ) : dataDraft.length === 0 ? (
-            <p className="v2InspectorEmpty">No connector data</p>
+            <p className="v2InspectorEmpty">No relationship data</p>
           ) : (
             <div className="v2InspectorDataEditor">
               {dataDraft.map((field) => (
@@ -430,6 +440,9 @@ export function V2ConnectorInspector({
               </div>
             </div>
           ) : null}
+          <p className="v2InspectorHint">
+            Use fields like quantity, unit, note, or role. Formulas are a future layer on top of relationship data.
+          </p>
         </section>
 
         <V2ConnectorFilesSection connectionId={connection.id} />
