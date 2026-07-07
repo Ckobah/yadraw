@@ -4570,10 +4570,6 @@ button:disabled {
   line-height: 1;
 }
 
-.v2CardTypeManagerDescription {
-  grid-column: 1 / -1;
-}
-
 .v2CardTypeVisualGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

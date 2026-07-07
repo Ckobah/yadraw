@@ -345,16 +345,6 @@ export function V2CardTypeManager({
                     onChange={(event) => updateDraft({ name: event.target.value })}
                   />
                 </label>
-                <label className="v2CardTypeManagerDescription">
-                  <span>Description</span>
-                  <textarea
-                    className="v2InspectorDataValue v2InspectorDataJsonValue"
-                    value={draft.description}
-                    placeholder="Optional description"
-                    disabled={isSaving}
-                    onChange={(event) => updateDraft({ description: event.target.value })}
-                  />
-                </label>
               </div>
             </section>
 
