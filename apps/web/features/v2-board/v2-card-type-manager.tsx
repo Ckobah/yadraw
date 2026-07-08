@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, X } from "lucide-react";
+import { Check, Plus, Save, X } from "lucide-react";
 import type {
   V2CardType,
   V2CreateCardTypeRequest,
@@ -13,6 +13,8 @@ import {
   V2CardTypeSchemaEditor,
   type V2CardTypeSchemaFieldDraft,
 } from "./v2-card-type-schema-editor";
+import { getV2CardTypeIcon, V2_CARD_TYPE_ICON_OPTIONS } from "./v2-card-type-icons";
+import { V2CardTypePreview } from "./v2-card-type-preview";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 type CardTypeManagerMode = "existing" | "new";
@@ -43,8 +45,29 @@ type V2CardTypeManagerProps = {
 };
 
 const CARD_TYPE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
-const ACCENT_OPTIONS = ["blue", "green", "orange", "red", "purple", "gray"] as const;
-const ICON_OPTIONS = ["database", "task", "box", "user", "file", "gear", "truck", "factory", "material"];
+const CARD_TYPE_DEFAULT_SIZE = { width: 172, height: 122 } as const;
+const ACCENT_OPTIONS = [
+  { key: "blue", label: "Blue" },
+  { key: "green", label: "Green" },
+  { key: "orange", label: "Orange" },
+  { key: "red", label: "Red" },
+  { key: "purple", label: "Purple" },
+  { key: "gray", label: "Gray" },
+] as const;
+
+function normalizeDraftAccentKey(accentKey: string): string {
+  return ACCENT_OPTIONS.some((option) => option.key === accentKey) ? accentKey : "blue";
+}
+
+function normalizeDraftIconKey(iconKey: string | null | undefined): string {
+  const normalized = iconKey?.trim();
+  if (normalized && V2_CARD_TYPE_ICON_OPTIONS.some((option) => option.key === normalized)) {
+    return normalized;
+  }
+  if (normalized === "source") return "database";
+  if (normalized === "settings") return "gear";
+  return "box";
+}
 
 function draftFromCardType(cardType: V2CardType): CardTypeDraft {
   return {
@@ -55,8 +78,8 @@ function draftFromCardType(cardType: V2CardType): CardTypeDraft {
     fields: createV2CardTypeSchemaFieldDrafts(cardType.schema),
     defaultWidth: String(cardType.defaultSize.width),
     defaultHeight: String(cardType.defaultSize.height),
-    accentKey: resolveCardTypeAccentKey(cardType),
-    iconKey: cardType.defaultVisualStyle.iconKey ?? cardType.key,
+    accentKey: normalizeDraftAccentKey(resolveCardTypeAccentKey(cardType)),
+    iconKey: normalizeDraftIconKey(cardType.defaultVisualStyle.iconKey ?? cardType.key),
     hasInputPort: cardType.ports.some((port) => port.direction === "input" && port.key === "input"),
     hasOutputPort: cardType.ports.some((port) => port.direction === "output" && port.key === "output"),
   };
@@ -69,8 +92,8 @@ function emptyDraft(): CardTypeDraft {
     name: "",
     description: "",
     fields: [],
-    defaultWidth: "300",
-    defaultHeight: "180",
+    defaultWidth: String(CARD_TYPE_DEFAULT_SIZE.width),
+    defaultHeight: String(CARD_TYPE_DEFAULT_SIZE.height),
     accentKey: "blue",
     iconKey: "box",
     hasInputPort: true,
@@ -173,12 +196,13 @@ export function V2CardTypeManager({
     if (!name) return "Name is required.";
     const width = Number(draft.defaultWidth);
     const height = Number(draft.defaultHeight);
-    if (!Number.isFinite(width) || width <= 0) return "Default width must be greater than 0.";
-    if (!Number.isFinite(height) || height <= 0) return "Default height must be greater than 0.";
-    if (!ACCENT_OPTIONS.includes(draft.accentKey.trim() as (typeof ACCENT_OPTIONS)[number])) {
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+      return "Default size is invalid.";
+    }
+    if (!ACCENT_OPTIONS.some((option) => option.key === draft.accentKey.trim())) {
       return "Accent is required.";
     }
-    if (!draft.iconKey.trim()) {
+    if (!V2_CARD_TYPE_ICON_OPTIONS.some((option) => option.key === draft.iconKey.trim())) {
       return "Icon is required.";
     }
     const duplicate = cardTypes.some(
@@ -298,25 +322,49 @@ export function V2CardTypeManager({
             {sortedCardTypes.length === 0 ? (
               <p className="v2InspectorEmpty">No card types yet.</p>
             ) : (
-              sortedCardTypes.map((cardType) => (
-                <button
-                  key={cardType.id}
-                  type="button"
-                  className={`v2CardTypeManagerRow${
-                    selectedCardTypeId === cardType.id && mode === "existing"
-                      ? " v2CardTypeManagerRowActive"
-                      : ""
-                  }`}
-                  onClick={() => selectExisting(cardType)}
-                >
-                  <strong>{cardType.name}</strong>
-                  <span>{cardType.key}</span>
-                </button>
-              ))
+              sortedCardTypes.map((cardType) => {
+                const Icon = getV2CardTypeIcon(cardType);
+                const accentKey = resolveCardTypeAccentKey(cardType);
+                return (
+                  <button
+                    key={cardType.id}
+                    type="button"
+                    className={`v2CardTypeManagerRow${
+                      selectedCardTypeId === cardType.id && mode === "existing"
+                        ? " v2CardTypeManagerRowActive"
+                        : ""
+                    }`}
+                    style={{
+                      ["--v2-manager-row-accent" as string]: `var(--yd-accent-${accentKey}-solid)`,
+                      ["--v2-manager-row-accent-soft" as string]: `var(--yd-accent-${accentKey}-soft)`,
+                    }}
+                    onClick={() => selectExisting(cardType)}
+                  >
+                    <span className="v2CardTypeManagerRowIcon" aria-hidden="true">
+                      <Icon size={15} strokeWidth={2.1} />
+                    </span>
+                    <span className="v2CardTypeManagerRowText">
+                      <strong>{cardType.name}</strong>
+                      <span>{cardType.key}</span>
+                    </span>
+                  </button>
+                );
+              })
             )}
           </aside>
 
           <div className="v2CardTypeManagerEditor">
+            <V2CardTypePreview
+              typeKey={draft.key}
+              name={draft.name}
+              description={draft.description}
+              accentKey={draft.accentKey}
+              iconKey={draft.iconKey}
+              fields={draft.fields}
+              hasInputPort={draft.hasInputPort}
+              hasOutputPort={draft.hasOutputPort}
+            />
+
             <section className="v2CardTypeManagerSection">
               <div className="v2CardTypeManagerSectionHeader">
                 <div>
@@ -346,6 +394,17 @@ export function V2CardTypeManager({
                   />
                 </label>
               </div>
+              <label className="v2CardTypeManagerDescriptionField">
+                <span>Description</span>
+                <textarea
+                  className="v2InspectorDataValue"
+                  value={draft.description}
+                  placeholder="What this card type represents"
+                  disabled={isSaving}
+                  rows={3}
+                  onChange={(event) => updateDraft({ description: event.target.value })}
+                />
+              </label>
             </section>
 
             <V2CardTypeSchemaEditor
@@ -356,62 +415,61 @@ export function V2CardTypeManager({
 
             <section className="v2CardTypeManagerSection">
               <h3>Visual defaults</h3>
-              <p>Type appearance is rendered as an accent, matching built-in Source and Task cards.</p>
+              <p>Type appearance is rendered from card type metadata.</p>
               <div className="v2CardTypeVisualGrid">
-                <label>
-                  <span>Default width</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={draft.defaultWidth}
-                    disabled={isSaving}
-                    onChange={(event) => updateDraft({ defaultWidth: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Default height</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={draft.defaultHeight}
-                    disabled={isSaving}
-                    onChange={(event) => updateDraft({ defaultHeight: event.target.value })}
-                  />
-                </label>
-                <label>
+                <div className="v2CardTypeChoiceGroup">
                   <span>Accent</span>
-                  <select
-                    className="v2InspectorDataValue"
-                    value={draft.accentKey}
-                    disabled={isSaving}
-                    onChange={(event) => updateDraft({ accentKey: event.target.value })}
-                  >
-                    {ACCENT_OPTIONS.map((accentKey) => (
-                      <option key={accentKey} value={accentKey}>
-                        {accentKey}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
+                  <div className="v2CardTypeAccentPicker">
+                    {ACCENT_OPTIONS.map((option) => {
+                      const isSelected = draft.accentKey === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`v2CardTypeAccentOption${
+                            isSelected ? " v2CardTypeAccentOptionActive" : ""
+                          }`}
+                          disabled={isSaving}
+                          style={{
+                            ["--v2-accent-option-solid" as string]: `var(--yd-accent-${option.key}-solid)`,
+                            ["--v2-accent-option-soft" as string]: `var(--yd-accent-${option.key}-soft)`,
+                          }}
+                          aria-pressed={isSelected}
+                          onClick={() => updateDraft({ accentKey: option.key })}
+                        >
+                          <span className="v2CardTypeAccentSwatch" aria-hidden="true" />
+                          <span>{option.label}</span>
+                          {isSelected ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="v2CardTypeChoiceGroup">
                   <span>Icon</span>
-                  <select
-                    className="v2InspectorDataValue"
-                    value={draft.iconKey}
-                    disabled={isSaving}
-                    onChange={(event) => updateDraft({ iconKey: event.target.value })}
-                  >
-                    {ICON_OPTIONS.map((iconKey) => (
-                      <option key={iconKey} value={iconKey}>
-                        {iconKey}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                  <div className="v2CardTypeIconPicker">
+                    {V2_CARD_TYPE_ICON_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      const isSelected = draft.iconKey === option.key;
+                      return (
+                        <button
+                          key={option.key}
+                          type="button"
+                          className={`v2CardTypeIconOption${
+                            isSelected ? " v2CardTypeIconOptionActive" : ""
+                          }`}
+                          disabled={isSaving}
+                          aria-pressed={isSelected}
+                          title={option.label}
+                          onClick={() => updateDraft({ iconKey: option.key })}
+                        >
+                          <Icon size={16} strokeWidth={2.1} aria-hidden="true" />
+                          <span>{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </section>
 

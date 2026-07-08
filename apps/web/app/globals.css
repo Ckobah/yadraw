@@ -4648,7 +4648,7 @@ button:disabled {
   --v2-inspector-accent: #2657d9;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(1080px, calc(100vw - 48px));
+  width: min(1160px, calc(100vw - 48px));
   max-height: min(820px, calc(100vh - 48px));
   min-height: 560px;
   overflow: hidden;
@@ -4694,7 +4694,7 @@ button:disabled {
 
 .v2CardTypeManagerBody {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -4712,7 +4712,6 @@ button:disabled {
 .v2CardTypeManagerRow,
 .v2CardTypeManagerNewButton {
   display: grid;
-  gap: 3px;
   width: 100%;
   min-width: 0;
   padding: 9px 10px;
@@ -4733,21 +4732,44 @@ button:disabled {
   font-weight: 760;
 }
 
-.v2CardTypeManagerRow strong,
-.v2CardTypeManagerRow span {
+.v2CardTypeManagerRow {
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.v2CardTypeManagerRowIcon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--v2-manager-row-accent) 36%, #d9e0ec);
+  border-radius: 8px;
+  background: var(--v2-manager-row-accent-soft);
+  color: var(--v2-manager-row-accent);
+}
+
+.v2CardTypeManagerRowText {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2CardTypeManagerRowText strong,
+.v2CardTypeManagerRowText span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.v2CardTypeManagerRow strong {
+.v2CardTypeManagerRowText strong {
   color: #1d2939;
   font-size: 12px;
   font-weight: 760;
 }
 
-.v2CardTypeManagerRow span {
+.v2CardTypeManagerRowText span {
   color: #667085;
   font-size: 11px;
   font-weight: 670;
@@ -4770,6 +4792,147 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   padding: 16px;
+}
+
+.v2CardTypePreviewPanel {
+  display: grid;
+  justify-items: center;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--v2-preview-accent) 24%, #e4e7f0);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--v2-preview-accent) 7%, #fff), #fff 62%);
+}
+
+.v2CardTypePreviewCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 172px;
+  height: 122px;
+  border: 1px solid var(--v2-preview-accent);
+  border-radius: var(--yd-card-radius, 9px);
+  background: var(--yd-surface-card, #fff);
+  box-shadow: 0 12px 28px rgba(23, 100, 220, 0.14);
+}
+
+.v2CardTypePreviewCardHeader {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border-bottom: 1px solid color-mix(in srgb, var(--v2-preview-accent) 18%, #e4e7f0);
+  border-radius: var(--yd-card-radius, 9px) var(--yd-card-radius, 9px) 0 0;
+  background: color-mix(in srgb, var(--v2-preview-accent) 8%, var(--yd-surface-card-header, #f8fbff));
+  padding: 6px 8px;
+  color: var(--yd-text-muted, #667085);
+}
+
+.v2CardTypePreviewIcon {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--v2-preview-accent) 14%, #fff);
+  color: var(--v2-preview-accent);
+}
+
+.v2CardTypePreviewTypeLabel {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-preview-accent);
+  font-size: 10px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardTypePreviewCardBody {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 0;
+  padding: 9px 10px;
+}
+
+.v2CardTypePreviewCardBody strong,
+.v2CardTypePreviewCardBody span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardTypePreviewCardBody strong {
+  color: var(--yd-text-primary, #101828);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.v2CardTypePreviewCardBody span {
+  color: var(--yd-text-muted, #667085);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.v2CardTypePreviewDataRows {
+  display: grid;
+  gap: 4px;
+  margin: 3px 0 0;
+}
+
+.v2CardTypePreviewDataRows div {
+  display: grid;
+  grid-template-columns: minmax(48px, 0.55fr) minmax(0, 1fr);
+  gap: 5px;
+  min-height: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--v2-preview-accent) 16%, #eef2f7);
+  padding-top: 3px;
+}
+
+.v2CardTypePreviewDataRows dt,
+.v2CardTypePreviewDataRows dd {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  font-size: 9.5px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardTypePreviewDataRows dt {
+  color: var(--yd-text-muted, #667085);
+  font-weight: 720;
+}
+
+.v2CardTypePreviewDataRows dd {
+  color: var(--yd-text-secondary, #475467);
+  font-weight: 650;
+}
+
+.v2CardTypePreviewPort {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--v2-preview-accent) 45%, #c9d2e3);
+}
+
+.v2CardTypePreviewPortInput {
+  left: -6px;
+  background: var(--yd-graph-port-input, #98a2b3);
+}
+
+.v2CardTypePreviewPortOutput {
+  right: -6px;
+  background: var(--yd-graph-port-output, #2f80ed);
 }
 
 .v2CardTypeManagerSection,
@@ -4828,18 +4991,19 @@ button:disabled {
 .v2CardTypeVisualGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 9px;
+  gap: 12px;
   min-width: 0;
 }
 
-.v2CardTypeVisualGrid label,
+.v2CardTypeChoiceGroup,
 .v2CardTypeColorControl {
   display: grid;
-  gap: 5px;
+  align-content: start;
+  gap: 7px;
   min-width: 0;
 }
 
-.v2CardTypeVisualGrid label > span,
+.v2CardTypeChoiceGroup > span,
 .v2CardTypeColorControl > span:first-child {
   color: #667085;
   font-size: 10.5px;
@@ -4847,21 +5011,89 @@ button:disabled {
   line-height: 1;
 }
 
-.v2CardTypeColorInputs {
+.v2CardTypeAccentPicker,
+.v2CardTypeIconPicker {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
   min-width: 0;
 }
 
-.v2CardTypeColorSwatch {
-  width: 34px;
-  height: 30px;
-  padding: 2px;
+.v2CardTypeAccentOption,
+.v2CardTypeIconOption {
+  display: inline-grid;
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
   border: 1px solid #d9e0ec;
   border-radius: 8px;
   background: #fff;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 720;
   cursor: pointer;
+}
+
+.v2CardTypeAccentOption {
+  grid-template-columns: 16px minmax(0, 1fr) 13px;
+  gap: 6px;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.v2CardTypeIconOption {
+  justify-items: center;
+  gap: 3px;
+  padding: 7px 6px;
+  text-align: center;
+}
+
+.v2CardTypeIconOption svg {
+  color: #475467;
+}
+
+.v2CardTypeIconOption span,
+.v2CardTypeAccentOption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CardTypeAccentSwatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid color-mix(in srgb, var(--v2-accent-option-solid) 45%, #fff);
+  border-radius: 50%;
+  background: var(--v2-accent-option-solid);
+}
+
+.v2CardTypeAccentOption:hover:not(:disabled),
+.v2CardTypeAccentOption:focus-visible:not(:disabled),
+.v2CardTypeAccentOptionActive {
+  border-color: color-mix(in srgb, var(--v2-accent-option-solid) 55%, #d9e0ec);
+  background: var(--v2-accent-option-soft);
+  color: #1d2939;
+  outline: 0;
+}
+
+.v2CardTypeIconOption:hover:not(:disabled),
+.v2CardTypeIconOption:focus-visible:not(:disabled),
+.v2CardTypeIconOptionActive {
+  border-color: var(--yd-accent-blue-border, #a9cdf8);
+  background: var(--yd-accent-blue-soft, #eef6ff);
+  color: var(--yd-accent-blue-text, #1553a8);
+  outline: 0;
+}
+
+.v2CardTypeIconOptionActive svg {
+  color: var(--yd-accent-blue-solid, #2f80ed);
+}
+
+.v2CardTypeAccentOption:disabled,
+.v2CardTypeIconOption:disabled {
+  cursor: default;
+  opacity: 0.58;
 }
 
 .v2CardTypePortToggles {

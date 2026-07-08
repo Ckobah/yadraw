@@ -29,6 +29,7 @@ type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
+const CONNECTOR_ENDPOINT_PORT_OFFSET = 12;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 
@@ -54,6 +55,23 @@ function buildManualPath(points: Point[]): string {
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+export function offsetEndpointAwayFromPort(
+  endpoint: Point,
+  adjacent: Point,
+  offset: number
+): Point {
+  const dx = adjacent.x - endpoint.x;
+  const dy = adjacent.y - endpoint.y;
+  const length = Math.hypot(dx, dy);
+  if (length <= 0 || offset <= 0) return endpoint;
+
+  const safeOffset = Math.min(offset, length / 2);
+  return {
+    x: endpoint.x + (dx / length) * safeOffset,
+    y: endpoint.y + (dy / length) * safeOffset,
+  };
 }
 
 function normalizeWaypoints(points: Point[]): Point[] {
@@ -325,13 +343,27 @@ export function V2ConnectorEdge({
   const storedWaypoints = getWaypoints(visualStyle);
   const isVisualEditing = Boolean(data?.isVisualEditing);
   const canEditGeometry = isVisualEditing && visualStyle.routeMode === "manual";
+  const sourcePoint = { x: sourceX, y: sourceY };
+  const targetPoint = { x: targetX, y: targetY };
+  const sourceAdjacent = storedWaypoints[0] ?? targetPoint;
+  const targetAdjacent = storedWaypoints[storedWaypoints.length - 1] ?? sourcePoint;
+  const visibleSourcePoint = offsetEndpointAwayFromPort(
+    sourcePoint,
+    sourceAdjacent,
+    CONNECTOR_ENDPOINT_PORT_OFFSET
+  );
+  const visibleTargetPoint = offsetEndpointAwayFromPort(
+    targetPoint,
+    targetAdjacent,
+    CONNECTOR_ENDPOINT_PORT_OFFSET
+  );
 
   const automaticPathResult = getSmoothStepPath({
-    sourceX,
-    sourceY,
+    sourceX: visibleSourcePoint.x,
+    sourceY: visibleSourcePoint.y,
     sourcePosition,
-    targetX,
-    targetY,
+    targetX: visibleTargetPoint.x,
+    targetY: visibleTargetPoint.y,
     targetPosition,
     borderRadius: getCornerRadius(visualStyle),
   });
@@ -350,7 +382,21 @@ export function V2ConnectorEdge({
       ? materializedAutoWaypoints
       : storedWaypoints;
   const usesManualRoute = visualStyle.routeMode === "manual" && waypoints.length > 0;
-  const routePoints = [{ x: sourceX, y: sourceY }, ...waypoints, { x: targetX, y: targetY }];
+  const routeSourcePoint = usesManualRoute
+    ? offsetEndpointAwayFromPort(
+        sourcePoint,
+        waypoints[0] ?? targetPoint,
+        CONNECTOR_ENDPOINT_PORT_OFFSET
+      )
+    : visibleSourcePoint;
+  const routeTargetPoint = usesManualRoute
+    ? offsetEndpointAwayFromPort(
+        targetPoint,
+        waypoints[waypoints.length - 1] ?? sourcePoint,
+        CONNECTOR_ENDPOINT_PORT_OFFSET
+      )
+    : visibleTargetPoint;
+  const routePoints = [routeSourcePoint, ...waypoints, routeTargetPoint];
   const manualPath = buildRoundedManualPath(routePoints, getCornerRadius(visualStyle));
   const savedLabelPosition =
     visualStyle.routeMode === "manual" && visualStyle.labelPosition && isFinitePoint(visualStyle.labelPosition)
@@ -407,7 +453,13 @@ export function V2ConnectorEdge({
   }
 
   function getRoutePoints(nextWaypoints: Point[]): Point[] {
-    return [{ x: sourceX, y: sourceY }, ...nextWaypoints, { x: targetX, y: targetY }];
+    const nextSourceAdjacent = nextWaypoints[0] ?? targetPoint;
+    const nextTargetAdjacent = nextWaypoints[nextWaypoints.length - 1] ?? sourcePoint;
+    return [
+      offsetEndpointAwayFromPort(sourcePoint, nextSourceAdjacent, CONNECTOR_ENDPOINT_PORT_OFFSET),
+      ...nextWaypoints,
+      offsetEndpointAwayFromPort(targetPoint, nextTargetAdjacent, CONNECTOR_ENDPOINT_PORT_OFFSET),
+    ];
   }
 
   function handleSegmentDoubleClick(

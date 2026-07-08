@@ -17,18 +17,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import {
-  Box,
-  Database,
-  Factory,
-  FileText,
-  Package,
-  Settings,
-  MoreHorizontal,
-  Truck,
-  User,
-  type LucideIcon,
-} from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import type {
   V2Card,
   V2Connection,
@@ -53,6 +42,7 @@ import {
   formatLinkedFieldValue,
   resolveV2LinkedFieldDrafts,
 } from "./v2-linked-fields";
+import { getV2CardTypeIcon } from "./v2-card-type-icons";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 export type V2CardNodeData = {
@@ -80,7 +70,7 @@ export type V2CardNodeData = {
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
 
 export const V2_CARD_MIN_SIZE = {
-  width: 196,
+  width: 172,
   height: 122,
 } as const;
 
@@ -372,25 +362,6 @@ function bodyVerticalJustify(
 
 export function getV2CardTypeAccentColor(cardType: V2CardType | null | undefined): string {
   return `var(--yd-accent-${resolveCardTypeAccentKey(cardType)}-solid)`;
-}
-
-const iconByKey: Record<string, LucideIcon> = {
-  database: Database,
-  source: Database,
-  task: Box,
-  box: Box,
-  material: Package,
-  user: User,
-  file: FileText,
-  gear: Settings,
-  settings: Settings,
-  truck: Truck,
-  factory: Factory,
-};
-
-function getV2CardTypeIcon(cardType: V2CardType): LucideIcon {
-  const iconKey = cardType.defaultVisualStyle.iconKey ?? cardType.key;
-  return iconByKey[iconKey] ?? Database;
 }
 
 function getCardSummary(card: V2Card): string {
