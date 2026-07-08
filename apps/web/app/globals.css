@@ -2203,6 +2203,20 @@ button:disabled {
   pointer-events: none;
 }
 
+.v2BoardCanvasArea .v2BoardControls.react-flow__controls {
+  left: 16px;
+  bottom: 16px;
+  margin: 0;
+}
+
+.v2BoardCanvasArea .v2BoardMiniMap.react-flow__minimap {
+  left: 16px;
+  bottom: 74px;
+  margin: 0;
+  background: var(--yd-surface-panel, #fff);
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.12);
+}
+
 .v2ConnectorMarkerDefs {
   position: absolute;
   width: 0;

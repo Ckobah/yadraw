@@ -90,6 +90,8 @@ type CardActionError = {
   message: string;
 } | null;
 
+const SHOW_EXPERIMENTAL_RUN_AI = false;
+
 function getBoardViewportStorageKey(boardId: string): string {
   return `yadraw:v2-board:${boardId}:viewport`;
 }
@@ -1667,47 +1669,55 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onCreateCard={handleCreateCard}
           onManageCardTypes={handleOpenCardTypeManager}
         />
-        <div className="v2RunToolbar nodrag nopan">
-          <button
-            type="button"
-            className="v2AssistantOpenButton"
-            onClick={() => setIsAssistantOpen((current) => !current)}
-            aria-expanded={isAssistantOpen}
-          >
-            <Bot size={14} strokeWidth={2.4} />
-            <span>AI Assistant</span>
-          </button>
-          <button
-            type="button"
-            className="v2RunDryRunButton"
-            onClick={() => void handleRunDryRun()}
-            disabled={isDryRunRunning}
-            aria-busy={isDryRunRunning}
-          >
-            <Play size={14} strokeWidth={2.4} />
-            <span>{isDryRunRunning ? "Running..." : "Run dry-run"}</span>
-          </button>
-          {dryRunError ? (
-            <p className="v2RunDryRunError" role="alert">
-              {dryRunError}
-            </p>
-          ) : null}
-        </div>
-        {isAssistantOpen ? (
+        {SHOW_EXPERIMENTAL_RUN_AI ? (
+          <div className="v2RunToolbar nodrag nopan">
+            <button
+              type="button"
+              className="v2AssistantOpenButton"
+              onClick={() => setIsAssistantOpen((current) => !current)}
+              aria-expanded={isAssistantOpen}
+            >
+              <Bot size={14} strokeWidth={2.4} />
+              <span>AI Assistant</span>
+            </button>
+            <button
+              type="button"
+              className="v2RunDryRunButton"
+              onClick={() => void handleRunDryRun()}
+              disabled={isDryRunRunning}
+              aria-busy={isDryRunRunning}
+            >
+              <Play size={14} strokeWidth={2.4} />
+              <span>{isDryRunRunning ? "Running..." : "Run dry-run"}</span>
+            </button>
+            {dryRunError ? (
+              <p className="v2RunDryRunError" role="alert">
+                {dryRunError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {SHOW_EXPERIMENTAL_RUN_AI && isAssistantOpen ? (
           <V2AiAssistantPanel
             context={assistantContext}
             onClose={() => setIsAssistantOpen(false)}
           />
         ) : null}
-        {dryRunResult ? (
+        {SHOW_EXPERIMENTAL_RUN_AI && dryRunResult ? (
           <V2RunDryRunPanel
             result={dryRunResult}
             onClose={() => setDryRunResult(null)}
           />
         ) : null}
         <Background color="var(--yd-border-subtle)" gap={24} size={1} />
-        <Controls showInteractive={false} />
+        <Controls
+          className="v2BoardControls"
+          position="bottom-left"
+          showInteractive={false}
+        />
         <MiniMap
+          className="v2BoardMiniMap"
+          position="bottom-left"
           style={{
             border: "1px solid var(--yd-border-default)",
             borderRadius: 8,
