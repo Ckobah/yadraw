@@ -63,6 +63,23 @@ export type V2CreateCardTypeRecordInput = {
   ports: V2CardTypePortInput[];
 };
 
+export type V2CreateConnectionTypeRecordInput = {
+  workspaceId: string;
+  key: string;
+  name: string;
+  description: string | null;
+  schema: V2ConnectionType["schema"];
+  defaultVisualStyle: V2ConnectionType["defaultVisualStyle"];
+};
+
+export type V2UpdateConnectionTypeInput = {
+  key?: string;
+  name?: string;
+  description?: string | null;
+  schema?: V2ConnectionType["schema"];
+  defaultVisualStyle?: V2ConnectionType["defaultVisualStyle"];
+};
+
 export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
   workspaceId: string;
   boardId: string;
@@ -127,6 +144,8 @@ export type V2Repository = {
   listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
   getConnectionType?(connectionTypeId: string): Promise<V2ConnectionType | null>;
+  createConnectionType?(input: V2CreateConnectionTypeRecordInput): Promise<V2ConnectionType>;
+  updateConnectionType?(connectionTypeId: string, input: V2UpdateConnectionTypeInput): Promise<V2ConnectionType | null>;
   createCardType?(input: V2CreateCardTypeRecordInput): Promise<V2CardType>;
   updateCardType?(cardTypeId: string, input: V2UpdateCardTypeInput): Promise<V2CardType | null>;
   updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
@@ -845,6 +864,44 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     async getConnectionType(connectionTypeId) {
       if (deletedConnectionTypeIds.has(connectionTypeId)) return null;
       return cloneJson(state.connectionTypes.find((connectionType) => connectionType.id === connectionTypeId) ?? null);
+    },
+
+    async createConnectionType(input) {
+      const timestamp = nowIso();
+      const connectionType = v2ConnectionTypeSchema.parse({
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        key: input.key,
+        name: input.name,
+        description: input.description ?? null,
+        schema: cloneJson(input.schema),
+        defaultVisualStyle: cloneJson(input.defaultVisualStyle),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+      state.connectionTypes.push(connectionType);
+      return cloneJson(connectionType);
+    },
+
+    async updateConnectionType(connectionTypeId, input) {
+      if (deletedConnectionTypeIds.has(connectionTypeId)) return null;
+      const index = state.connectionTypes.findIndex((connectionType) => connectionType.id === connectionTypeId);
+      const existing = state.connectionTypes[index];
+      if (index === -1 || !existing) return null;
+
+      const updated = v2ConnectionTypeSchema.parse({
+        ...existing,
+        ...(input.key !== undefined ? { key: input.key } : {}),
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.schema !== undefined ? { schema: cloneJson(input.schema) } : {}),
+        ...(input.defaultVisualStyle !== undefined
+          ? { defaultVisualStyle: cloneJson(input.defaultVisualStyle) }
+          : {}),
+        updatedAt: nowIso()
+      });
+      state.connectionTypes[index] = updated;
+      return cloneJson(updated);
     },
 
     async createCardType(input) {
@@ -1663,6 +1720,73 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           limit 1
         `,
         [connectionTypeId]
+      );
+      const row = result.rows[0];
+      return row ? connectionTypeFromRow(row) : null;
+    },
+
+    async createConnectionType(input) {
+      const result = await pool.query(
+        `
+          insert into connection_types (
+            workspace_id,
+            key,
+            name,
+            description,
+            schema,
+            default_visual_style
+          )
+          values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+          returning *
+        `,
+        [
+          input.workspaceId,
+          input.key,
+          input.name,
+          input.description,
+          JSON.stringify(input.schema),
+          JSON.stringify(input.defaultVisualStyle)
+        ]
+      );
+      return connectionTypeFromRow(result.rows[0]);
+    },
+
+    async updateConnectionType(connectionTypeId, input) {
+      const existingResult = await pool.query(
+        `
+          select *
+          from connection_types
+          where id = $1
+            and deleted_at is null
+          limit 1
+        `,
+        [connectionTypeId]
+      );
+      const existingRow = existingResult.rows[0];
+      if (!existingRow) return null;
+      const existing = connectionTypeFromRow(existingRow);
+
+      const result = await pool.query(
+        `
+          update connection_types
+          set key = $2,
+              name = $3,
+              description = $4,
+              schema = $5::jsonb,
+              default_visual_style = $6::jsonb,
+              updated_at = now()
+          where id = $1
+            and deleted_at is null
+          returning *
+        `,
+        [
+          connectionTypeId,
+          input.key ?? existing.key,
+          input.name ?? existing.name,
+          input.description !== undefined ? input.description : existing.description,
+          JSON.stringify(input.schema ?? existing.schema),
+          JSON.stringify(input.defaultVisualStyle ?? existing.defaultVisualStyle)
+        ]
       );
       const row = result.rows[0];
       return row ? connectionTypeFromRow(row) : null;

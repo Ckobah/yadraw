@@ -240,6 +240,178 @@ describe("v2 card type schema API", () => {
     await server.close();
   });
 
+  it("creates and lists connection types with relationship schema fields", async () => {
+    const { server, seed, repository } = createSchemaServer();
+
+    const response = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/connection-types`,
+      payload: {
+        key: "assembled_with",
+        name: "Assembled with",
+        description: "Assembly relationship.",
+        schema: {
+          fields: [
+            { key: "quantity", label: "Quantity", type: "number" },
+            { key: "unit", label: "Unit", type: "text" },
+            { key: "note", label: "Note", type: "text" }
+          ]
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({
+      key: "assembled_with",
+      name: "Assembled with",
+      description: "Assembly relationship.",
+      schema: {
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "unit", label: "Unit", type: "text" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {}
+    });
+
+    const list = await server.inject({
+      method: "GET",
+      url: `/v2/boards/${seed.board.id}/connection-types`
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json()).toMatchObject({
+      connectionTypes: expect.arrayContaining([
+        expect.objectContaining({ key: "assembled_with", name: "Assembled with" })
+      ])
+    });
+
+    await expect(repository.getBoardDetail(seed.board.id)).resolves.toMatchObject({
+      connectionTypes: expect.arrayContaining([
+        expect.objectContaining({ key: "assembled_with", name: "Assembled with" })
+      ])
+    });
+
+    await server.close();
+  });
+
+  it("rejects duplicate connection type key and empty create fields", async () => {
+    const { server, seed } = createSchemaServer();
+    const existing = seed.connectionTypes![0]!;
+
+    const duplicate = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/connection-types`,
+      payload: {
+        key: existing.key,
+        name: "Duplicate",
+        schema: { fields: [] }
+      }
+    });
+    expect(duplicate.statusCode).toBe(409);
+    expect(duplicate.json()).toMatchObject({ error: { code: "conflict" } });
+
+    for (const payload of [
+      { key: "", name: "Missing key", schema: { fields: [] } },
+      { key: "new_relation", name: "", schema: { fields: [] } },
+      {
+        key: "invalid_schema",
+        name: "Invalid schema",
+        schema: { fields: [{ key: "quantity", label: "Quantity", type: "formula" }] }
+      }
+    ]) {
+      const response = await server.inject({
+        method: "POST",
+        url: `/v2/boards/${seed.board.id}/connection-types`,
+        payload
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ error: { code: "invalid_payload" } });
+    }
+
+    await server.close();
+  });
+
+  it("updates connection type details and schema without mutating cards or connections", async () => {
+    const { server, seed, repository } = createSchemaServer();
+    const connection = seed.connections[0]!;
+    const connectionType = seed.connectionTypes!.find((item) => item.id === connection.connectionTypeId)!;
+    const card = seed.cards.find((item) => item.id === connection.sourceCardId)!;
+    const cardData = structuredClone(card.data);
+    const connectionData = structuredClone(connection.data);
+    const connectionVisualStyle = structuredClone(connection.visualStyle);
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/connection-types/${connectionType.id}`,
+      payload: {
+        key: "contains_updated",
+        name: "Contains updated",
+        description: "Updated relationship definition.",
+        schema: {
+          fields: [
+            { key: "quantity", label: "Quantity", type: "number" },
+            { key: "unit", label: "Unit", type: "select", options: [{ value: "pcs", label: "pcs" }] }
+          ]
+        }
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: connectionType.id,
+      key: "contains_updated",
+      name: "Contains updated",
+      description: "Updated relationship definition.",
+      schema: {
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "unit", label: "Unit", type: "select" }
+        ]
+      }
+    });
+
+    const detail = await repository.getBoardDetail(seed.board.id);
+    const updatedCard = detail!.cards.find((item) => item.id === card.id)!;
+    const updatedConnection = detail!.connections.find((item) => item.id === connection.id)!;
+    expect(updatedCard.data).toEqual(cardData);
+    expect(updatedConnection.data).toEqual(connectionData);
+    expect(updatedConnection.visualStyle).toEqual(connectionVisualStyle);
+    expect(updatedConnection.connectionTypeId).toBe(connectionType.id);
+
+    await server.close();
+  });
+
+  it("rejects invalid connection type updates", async () => {
+    const { server, seed } = createSchemaServer();
+    const connectionType = seed.connectionTypes!.find((item) => item.key === "contains")!;
+    const otherType = seed.connectionTypes!.find((item) => item.key === "generic")!;
+
+    for (const payload of [
+      { key: otherType.key },
+      { key: "" },
+      { name: "" },
+      {
+        schema: {
+          fields: [
+            { key: "quantity", label: "Quantity", type: "number" },
+            { key: "quantity", label: "Duplicate", type: "number" }
+          ]
+        }
+      },
+      { schema: { fields: [{ key: "rating", label: "Rating", type: "formula" }] } }
+    ]) {
+      const response = await server.inject({
+        method: "PATCH",
+        url: `/v2/boards/${seed.board.id}/connection-types/${connectionType.id}`,
+        payload
+      });
+      expect([400, 409]).toContain(response.statusCode);
+    }
+
+    await server.close();
+  });
+
   it("rejects duplicate card type key and empty create fields", async () => {
     const { server, seed } = createSchemaServer();
     const existing = seed.cardTypes[0]!;

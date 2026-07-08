@@ -12,6 +12,7 @@ import {
   v2ConnectionFileSchema,
   v2ConnectionTypeDefinitionSchema,
   v2ConnectionTypeSchema,
+  v2CreateConnectionTypeBodySchema,
   v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateCardTypeBodySchema,
@@ -25,6 +26,7 @@ import {
   v2LinkedFieldBindingListResponseSchema,
   v2RunDryRunBodySchema,
   v2UpdateCardTypeBodySchema,
+  v2UpdateConnectionTypeBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
@@ -190,6 +192,38 @@ describe("v2 API contracts", () => {
         ]
       },
       defaultVisualStyle: {}
+    });
+  });
+
+  it("parses connection type manager create and update payloads", () => {
+    const parsed = v2CreateConnectionTypeBodySchema.parse({
+      key: "contains",
+      name: "Contains",
+      description: "Assembly containment",
+      schema: {
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "unit", label: "Unit", type: "text" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      }
+    });
+
+    expect(parsed).toMatchObject({
+      key: "contains",
+      name: "Contains",
+      defaultVisualStyle: {}
+    });
+    expect(parsed.schema.fields[0]).toMatchObject({ key: "quantity", type: "number" });
+
+    expect(
+      v2UpdateConnectionTypeBodySchema.parse({
+        name: "Contains updated",
+        schema: { fields: [] }
+      })
+    ).toEqual({
+      name: "Contains updated",
+      schema: { fields: [] }
     });
   });
 

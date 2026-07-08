@@ -3,10 +3,12 @@ import {
   type V2CardAttachment,
   type V2ConnectionAttachment,
   type V2CreateCardTypeRequest,
+  type V2CreateConnectionTypeRequest,
   type V2CreateLinkedFieldBindingRequest,
   v2CreateCardBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
+  v2CreateConnectionTypeBodySchema,
   v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
   v2RunDryRunBodySchema,
@@ -26,10 +28,12 @@ import {
   type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
   type V2UpdateCardTypeRequest,
+  type V2UpdateConnectionTypeRequest,
   type V2UpdateCardRequest,
   v2UpdateCardTypeBodySchema,
   type V2UpdateCardTypeSchemaRequest,
   type V2UpdateConnectionRequest,
+  v2UpdateConnectionTypeBodySchema,
   type V2UpdateLinkedFieldBindingRequest
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
@@ -81,6 +85,18 @@ export type V2BoardService = {
     cardTypeId: string,
     input: V2UpdateCardTypeSchemaRequest
   ): Promise<V2CardType>;
+  listConnectionTypes(context: RequestContext, boardId: string): Promise<{ connectionTypes: V2ConnectionType[] }>;
+  createConnectionType(
+    context: RequestContext,
+    boardId: string,
+    input: V2CreateConnectionTypeRequest
+  ): Promise<V2ConnectionType>;
+  updateConnectionType(
+    context: RequestContext,
+    boardId: string,
+    connectionTypeId: string,
+    input: V2UpdateConnectionTypeRequest
+  ): Promise<V2ConnectionType>;
   runBoardDryRun(context: RequestContext, boardId: string, input?: V2RunDryRunRequest): Promise<V2DryRunResult>;
   listLinkedFieldBindings(context: RequestContext, boardId: string): Promise<{ fieldBindings: V2LinkedFieldBinding[] }>;
   createLinkedFieldBinding(
@@ -370,14 +386,26 @@ export function createV2BoardService(
   function requireConnectionTypeRepository(): {
     listConnectionTypes(workspaceId: string): Promise<V2ConnectionType[]>;
     getConnectionType(connectionTypeId: string): Promise<V2ConnectionType | null>;
+    createConnectionType(input: Parameters<NonNullable<V2Repository["createConnectionType"]>>[0]): Promise<V2ConnectionType>;
+    updateConnectionType(
+      connectionTypeId: string,
+      input: Parameters<NonNullable<V2Repository["updateConnectionType"]>>[1]
+    ): Promise<V2ConnectionType | null>;
   } {
-    if (!repository.listConnectionTypes || !repository.getConnectionType) {
+    if (
+      !repository.listConnectionTypes ||
+      !repository.getConnectionType ||
+      !repository.createConnectionType ||
+      !repository.updateConnectionType
+    ) {
       throw new V2ServiceError("conflict", "V2 connection type repository is not available");
     }
 
     return {
       listConnectionTypes: repository.listConnectionTypes.bind(repository),
-      getConnectionType: repository.getConnectionType.bind(repository)
+      getConnectionType: repository.getConnectionType.bind(repository),
+      createConnectionType: repository.createConnectionType.bind(repository),
+      updateConnectionType: repository.updateConnectionType.bind(repository)
     };
   }
 
@@ -434,6 +462,21 @@ export function createV2BoardService(
     const cardTypes = await repository.listCardTypes(workspaceId);
     if (cardTypes.some((cardType) => cardType.key === key && cardType.id !== existingCardTypeId)) {
       throw new V2ServiceError("conflict", "Card type key already exists");
+    }
+  }
+
+  async function ensureConnectionTypeKeyUnique(
+    workspaceId: string,
+    key: string,
+    existingConnectionTypeId?: string
+  ) {
+    const connectionTypes = await requireConnectionTypeRepository().listConnectionTypes(workspaceId);
+    if (
+      connectionTypes.some(
+        (connectionType) => connectionType.key === key && connectionType.id !== existingConnectionTypeId
+      )
+    ) {
+      throw new V2ServiceError("conflict", "Connection type key already exists");
     }
   }
 
@@ -551,6 +594,62 @@ export function createV2BoardService(
       );
       if (!updated) {
         notFound("Card type not found");
+      }
+
+      return updated;
+    },
+
+    async listConnectionTypes(context, boardId) {
+      const board = await requireBoardForAccess(context, boardId, "read");
+      return {
+        connectionTypes: await requireConnectionTypeRepository().listConnectionTypes(board.workspaceId)
+      };
+    },
+
+    async createConnectionType(context, boardId, rawInput) {
+      const parsedInput = v2CreateConnectionTypeBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid connection type payload");
+      }
+
+      const board = await requireBoardForAccess(context, boardId, "write");
+      await ensureConnectionTypeKeyUnique(board.workspaceId, parsedInput.data.key);
+
+      return requireConnectionTypeRepository().createConnectionType({
+        workspaceId: board.workspaceId,
+        key: parsedInput.data.key,
+        name: parsedInput.data.name,
+        description: parsedInput.data.description ?? null,
+        schema: parsedInput.data.schema,
+        defaultVisualStyle: parsedInput.data.defaultVisualStyle
+      });
+    },
+
+    async updateConnectionType(context, boardId, connectionTypeId, rawInput) {
+      const parsedInput = v2UpdateConnectionTypeBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) {
+        validationFailed("Invalid connection type payload");
+      }
+
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const connectionTypeRepository = requireConnectionTypeRepository();
+      const connectionType = await connectionTypeRepository.getConnectionType(connectionTypeId);
+      if (!connectionType) {
+        notFound("Connection type not found");
+      }
+      if (connectionType.workspaceId !== board.workspaceId) {
+        validationFailed("Connection type does not belong to the board workspace");
+      }
+      if (parsedInput.data.key !== undefined) {
+        await ensureConnectionTypeKeyUnique(board.workspaceId, parsedInput.data.key, connectionType.id);
+      }
+
+      const updated = await connectionTypeRepository.updateConnectionType(
+        connectionType.id,
+        parsedInput.data
+      );
+      if (!updated) {
+        notFound("Connection type not found");
       }
 
       return updated;

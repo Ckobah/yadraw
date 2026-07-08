@@ -34,6 +34,7 @@ type V2ConnectorInspectorProps = {
     }
   ) => Promise<void>;
   onDeleteConnection: (connectionId: string) => Promise<void>;
+  onManageConnectionType: (connectionTypeId?: string | null) => void;
   onClose: () => void;
 };
 
@@ -72,6 +73,7 @@ export function V2ConnectorInspector({
   saveStatus,
   onUpdateConnection,
   onDeleteConnection,
+  onManageConnectionType,
   onClose,
 }: V2ConnectorInspectorProps) {
   const [titleDraft, setTitleDraft] = useState(connection.title ?? "");
@@ -475,22 +477,34 @@ export function V2ConnectorInspector({
 
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
-            <h3>{hasSchemaFields ? "Relationship fields" : "Relationship data"}</h3>
-            {hasSchemaFields || isDataEditing ? (
-              <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
-                <Plus size={14} strokeWidth={2.2} />
-                Add extra field
-              </button>
-            ) : (
+            <div>
+              <h3>{hasSchemaFields ? "Relationship fields" : "Relationship data"}</h3>
+              <span>{connectionType?.name ?? "Generic"} type</span>
+            </div>
+            <div className="v2InspectorSectionActions">
               <button
                 type="button"
                 className="v2InspectorAttachButton"
-                onClick={connectionDataEntries.length === 0 ? addDataField : startDataEditing}
+                onClick={() => onManageConnectionType(connectionType?.id ?? null)}
               >
-                <Plus size={14} strokeWidth={2.2} />
-                {connectionDataEntries.length === 0 ? "Add field" : "Edit"}
+                Manage type
               </button>
-            )}
+              {hasSchemaFields || isDataEditing ? (
+                <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
+                  <Plus size={14} strokeWidth={2.2} />
+                  Add extra field
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="v2InspectorAttachButton"
+                  onClick={connectionDataEntries.length === 0 ? addDataField : startDataEditing}
+                >
+                  <Plus size={14} strokeWidth={2.2} />
+                  {connectionDataEntries.length === 0 ? "Add field" : "Edit"}
+                </button>
+              )}
+            </div>
           </div>
           {hasSchemaFields ? (
             <>

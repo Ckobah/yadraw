@@ -78,6 +78,46 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get("/v2/boards/:boardId/connection-types", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.listConnectionTypes(request.requestContext, boardId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/boards/:boardId/connection-types", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      const connectionType = await service.createConnectionType(
+        request.requestContext,
+        boardId,
+        request.body as any
+      );
+      return reply.code(201).send(connectionType);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.patch("/v2/boards/:boardId/connection-types/:connectionTypeId", async (request, reply) => {
+    try {
+      const { boardId, connectionTypeId } = request.params as {
+        boardId: string;
+        connectionTypeId: string;
+      };
+      return await service.updateConnectionType(
+        request.requestContext,
+        boardId,
+        connectionTypeId,
+        request.body as any
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/boards/:boardId/field-bindings", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

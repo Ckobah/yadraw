@@ -4250,6 +4250,28 @@ button:disabled {
   min-width: 0;
 }
 
+.v2InspectorSectionHeader > div:first-child {
+  min-width: 0;
+}
+
+.v2InspectorSectionHeader > div:first-child > span {
+  display: block;
+  margin-top: 3px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.v2InspectorSectionActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .v2InspectorAttachButton {
   display: inline-flex;
   align-items: center;
@@ -4723,7 +4745,14 @@ button:disabled {
   min-width: 0;
 }
 
-.v2CardTypeManagerDetailsGrid label > span {
+.v2CardTypeManagerDescriptionField {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.v2CardTypeManagerDetailsGrid label > span,
+.v2CardTypeManagerDescriptionField > span {
   color: #667085;
   font-size: 10.5px;
   font-weight: 720;

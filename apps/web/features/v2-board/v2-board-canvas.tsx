@@ -47,6 +47,7 @@ import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
   createV2CardType,
+  createV2ConnectionType,
   createV2Card,
   updateV2CardPosition,
   updateV2CardSize,
@@ -64,12 +65,14 @@ import {
   updateV2LinkedFieldBinding,
   deleteV2LinkedFieldBinding,
   updateV2CardType,
+  updateV2ConnectionType,
   V2ApiError,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 import { V2CardTypeManager } from "./v2-card-type-manager";
+import { V2ConnectionTypeManager } from "./v2-connection-type-manager";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
 type Props = {
@@ -354,8 +357,9 @@ function getMiniMapNodeColor(node: V2CardNode): string {
 }
 
 export function V2BoardCanvas({ boardDetail }: Props) {
-  const { board, cards, connections, cardTypes: initialCardTypes, connectionTypes } = boardDetail;
+  const { board, cards, connections, cardTypes: initialCardTypes, connectionTypes: initialConnectionTypes } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
+  const [connectionTypes, setConnectionTypes] = useState<V2ConnectionType[]>(initialConnectionTypes);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -370,6 +374,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCardTypeManagerOpen, setIsCardTypeManagerOpen] = useState(false);
   const [cardTypeManagerInitialId, setCardTypeManagerInitialId] = useState<string | null>(null);
+  const [isConnectionTypeManagerOpen, setIsConnectionTypeManagerOpen] = useState(false);
+  const [connectionTypeManagerInitialId, setConnectionTypeManagerInitialId] = useState<string | null>(null);
   const [linkedFieldBindings, setLinkedFieldBindings] = useState<V2LinkedFieldBinding[]>([]);
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
@@ -942,6 +948,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setIsCardTypeManagerOpen(true);
   }, []);
 
+  const applyConnectionTypeToState = useCallback((connectionType: V2ConnectionType) => {
+    setConnectionTypes((current) => {
+      const exists = current.some((item) => item.id === connectionType.id);
+      return exists
+        ? current.map((item) => (item.id === connectionType.id ? connectionType : item))
+        : [...current, connectionType];
+    });
+  }, []);
+
+  const handleOpenConnectionTypeManager = useCallback((connectionTypeId?: string | null) => {
+    setConnectionTypeManagerInitialId(connectionTypeId ?? null);
+    setIsConnectionTypeManagerOpen(true);
+  }, []);
+
   const handleCreateCardType = useCallback(
     async (input: Parameters<typeof createV2CardType>[1]) => {
       setSaveStatus("saving");
@@ -974,6 +994,40 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       }
     },
     [applyCardTypeToState, board.id]
+  );
+
+  const handleCreateConnectionType = useCallback(
+    async (input: Parameters<typeof createV2ConnectionType>[1]) => {
+      setSaveStatus("saving");
+      try {
+        const created = await createV2ConnectionType(board.id, input);
+        applyConnectionTypeToState(created);
+        setSaveStatus("saved");
+        return created;
+      } catch (error) {
+        console.error("Failed to create connection type:", error);
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [applyConnectionTypeToState, board.id]
+  );
+
+  const handleUpdateConnectionType = useCallback(
+    async (connectionTypeId: string, input: Parameters<typeof updateV2ConnectionType>[2]) => {
+      setSaveStatus("saving");
+      try {
+        const updated = await updateV2ConnectionType(board.id, connectionTypeId, input);
+        applyConnectionTypeToState(updated);
+        setSaveStatus("saved");
+        return updated;
+      } catch (error) {
+        console.error("Failed to update connection type:", error);
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [applyConnectionTypeToState, board.id]
   );
 
   const handleRunDryRun = useCallback(async () => {
@@ -1722,6 +1776,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
           onDeleteConnection={handleDeleteConnection}
+          onManageConnectionType={handleOpenConnectionTypeManager}
           onClose={() => setSelectedConnectionId(null)}
         />
       ) : null}
@@ -1732,6 +1787,15 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onCreateCardType={handleCreateCardType}
           onUpdateCardType={handleUpdateCardType}
           onClose={() => setIsCardTypeManagerOpen(false)}
+        />
+      ) : null}
+      {isConnectionTypeManagerOpen ? (
+        <V2ConnectionTypeManager
+          connectionTypes={connectionTypes}
+          initialConnectionTypeId={connectionTypeManagerInitialId}
+          onCreateConnectionType={handleCreateConnectionType}
+          onUpdateConnectionType={handleUpdateConnectionType}
+          onClose={() => setIsConnectionTypeManagerOpen(false)}
         />
       ) : null}
     </>

@@ -6,14 +6,17 @@ import type {
   V2CardVisualStyle,
   V2Connection,
   V2ConnectionAttachment,
+  V2ConnectionType,
   V2ConnectionVisualStyle,
   V2CreateLinkedFieldBindingRequest,
   V2CreateCardTypeRequest,
   V2CreateCardRequest,
+  V2CreateConnectionTypeRequest,
   V2DryRunResult,
   V2LinkedFieldBinding,
   V2LinkedFieldBindingListResponse,
   V2UpdateCardTypeRequest,
+  V2UpdateConnectionTypeRequest,
   V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
 
@@ -263,6 +266,55 @@ export async function updateV2CardTypeSchema(
     );
   }
   return response.json() as Promise<V2CardType>;
+}
+
+export async function createV2ConnectionType(
+  boardId: string,
+  input: V2CreateConnectionTypeRequest
+): Promise<V2ConnectionType> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/connection-types`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection type creation failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2ConnectionType>;
+}
+
+export async function updateV2ConnectionType(
+  boardId: string,
+  connectionTypeId: string,
+  input: V2UpdateConnectionTypeRequest
+): Promise<V2ConnectionType> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/connection-types/${encodeURIComponent(connectionTypeId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input),
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Connection type update failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2ConnectionType>;
 }
 
 export async function duplicateV2Card(cardId: string): Promise<V2Card> {

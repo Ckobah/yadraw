@@ -483,6 +483,39 @@ export const v2UpdateCardTypeSchemaBodySchema = z
   })
   .strict();
 
+export const v2ListConnectionTypesParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2CreateConnectionTypeParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2CreateConnectionTypeBodySchema = z
+  .object({
+    key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
+    name: z.string().trim().min(1),
+    description: z.string().nullable().optional(),
+    schema: v2ConnectionTypeDefinitionSchema.default({ fields: [] }),
+    defaultVisualStyle: v2ConnectionVisualStyleSchema.default({})
+  })
+  .strict();
+
+export const v2UpdateConnectionTypeParamsSchema = z.object({
+  boardId: v2UuidSchema,
+  connectionTypeId: v2UuidSchema
+});
+
+export const v2UpdateConnectionTypeBodySchema = z
+  .object({
+    key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/).optional(),
+    name: z.string().trim().min(1).optional(),
+    description: z.string().nullable().optional(),
+    schema: v2ConnectionTypeDefinitionSchema.optional(),
+    defaultVisualStyle: v2ConnectionVisualStyleSchema.optional()
+  })
+  .strict();
+
 export const v2CreateCardParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -638,6 +671,26 @@ export const v2ApiContracts = {
     body: v2UpdateCardTypeSchemaBodySchema,
     response: v2CardTypeSchema
   },
+  listConnectionTypes: {
+    method: "GET",
+    path: "/v2/boards/{boardId}/connection-types",
+    params: v2ListConnectionTypesParamsSchema,
+    response: z.object({ connectionTypes: z.array(v2ConnectionTypeSchema) })
+  },
+  createConnectionType: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/connection-types",
+    params: v2CreateConnectionTypeParamsSchema,
+    body: v2CreateConnectionTypeBodySchema,
+    response: v2ConnectionTypeSchema
+  },
+  updateConnectionType: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}/connection-types/{connectionTypeId}",
+    params: v2UpdateConnectionTypeParamsSchema,
+    body: v2UpdateConnectionTypeBodySchema,
+    response: v2ConnectionTypeSchema
+  },
   createCard: {
     method: "POST",
     path: "/v2/boards/{boardId}/cards",
@@ -781,6 +834,8 @@ export type V2LinkedFieldBinding = z.infer<typeof v2LinkedFieldBindingSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2CreateCardTypeInput = z.infer<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeInput = z.infer<typeof v2UpdateCardTypeBodySchema>;
+export type V2CreateConnectionTypeInput = z.infer<typeof v2CreateConnectionTypeBodySchema>;
+export type V2UpdateConnectionTypeInput = z.infer<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaInput = z.infer<typeof v2UpdateCardTypeSchemaBodySchema>;
@@ -794,6 +849,8 @@ export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
 export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
 export type V2CreateCardTypeRequest = z.input<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeRequest = z.input<typeof v2UpdateCardTypeBodySchema>;
+export type V2CreateConnectionTypeRequest = z.input<typeof v2CreateConnectionTypeBodySchema>;
+export type V2UpdateConnectionTypeRequest = z.input<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaRequest = z.input<typeof v2UpdateCardTypeSchemaBodySchema>;

@@ -22,6 +22,8 @@ type V2CardTypeSchemaEditorProps = {
   fields: V2CardTypeSchemaFieldDraft[];
   onChange: (fields: V2CardTypeSchemaFieldDraft[]) => void;
   disabled?: boolean;
+  title?: string;
+  description?: string;
 };
 
 const FIELD_TYPES: V2CardTypeFieldType[] = ["text", "number", "boolean", "select", "json", "date"];
@@ -108,6 +110,8 @@ export function V2CardTypeSchemaEditor({
   fields,
   onChange,
   disabled = false,
+  title = "Schema fields",
+  description = "Fields rendered in the card inspector for this type.",
 }: V2CardTypeSchemaEditorProps) {
   function updateField(fieldId: string, patch: Partial<Omit<V2CardTypeSchemaFieldDraft, "id">>) {
     onChange(fields.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)));
@@ -137,8 +141,8 @@ export function V2CardTypeSchemaEditor({
     <section className="v2CardTypeSchemaEditor">
       <div className="v2CardTypeManagerSectionHeader">
         <div>
-          <h3>Schema fields</h3>
-          <span>Fields rendered in the card inspector for this type.</span>
+          <h3>{title}</h3>
+          <span>{description}</span>
         </div>
         <button type="button" className="v2SchemaEditButton" onClick={addField} disabled={disabled}>
           <Plus size={13} strokeWidth={2.2} />
