@@ -15,12 +15,14 @@ function getSeedParts() {
   const seed = createDefaultV2MemorySeed();
   const sourceType = seed.cardTypes.find((cardType) => cardType.key === "source");
   const taskType = seed.cardTypes.find((cardType) => cardType.key === "task");
+  const genericConnectionType = seed.connectionTypes?.find((connectionType) => connectionType.key === "generic");
+  const containsConnectionType = seed.connectionTypes?.find((connectionType) => connectionType.key === "contains");
 
-  if (!sourceType || !taskType) {
+  if (!sourceType || !taskType || !genericConnectionType || !containsConnectionType) {
     throw new Error("Invalid v2 memory seed");
   }
 
-  return { seed, sourceType, taskType };
+  return { seed, sourceType, taskType, genericConnectionType, containsConnectionType };
 }
 
 describe("v2 board service", () => {
@@ -136,7 +138,7 @@ describe("v2 board service", () => {
   });
 
   it("allows viewers to read board data but rejects write operations", async () => {
-    const { seed, sourceType } = getSeedParts();
+    const { seed, sourceType, genericConnectionType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
 
     await expect(service.getBoard(viewerContext, seed.board.id)).resolves.toMatchObject({
@@ -144,6 +146,13 @@ describe("v2 board service", () => {
       cardTypes: expect.arrayContaining([
         expect.objectContaining({
           id: sourceType.id,
+          schema: { fields: [] }
+        })
+      ]),
+      connectionTypes: expect.arrayContaining([
+        expect.objectContaining({
+          id: genericConnectionType.id,
+          key: "generic",
           schema: { fields: [] }
         })
       ])
@@ -177,7 +186,7 @@ describe("v2 board service", () => {
   });
 
   it("creates typed connections only through valid output and input ports", async () => {
-    const { seed, sourceType, taskType } = getSeedParts();
+    const { seed, sourceType, taskType, containsConnectionType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));
     const source = await service.createCard(ownerContext, seed.board.id, {
       cardTypeId: sourceType.id,
@@ -189,6 +198,7 @@ describe("v2 board service", () => {
     });
 
     const connection = await service.createConnection(ownerContext, seed.board.id, {
+      connectionTypeId: containsConnectionType.id,
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -199,11 +209,99 @@ describe("v2 board service", () => {
       boardId: seed.board.id,
       sourceCardId: source.id,
       targetCardId: task.id,
+      connectionTypeId: containsConnectionType.id,
       sourcePortKey: "payload",
       targetPortKey: "input",
       type: "data",
       status: "active"
     });
+  });
+
+  it("creates connections without a type by using the generic fallback when available", async () => {
+    const { seed, sourceType, taskType, genericConnectionType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+
+    await expect(
+      service.createConnection(ownerContext, seed.board.id, {
+        sourceCardId: source.id,
+        targetCardId: task.id,
+        sourcePortKey: "payload",
+        targetPortKey: "input"
+      })
+    ).resolves.toMatchObject({
+      connectionTypeId: genericConnectionType.id
+    });
+  });
+
+  it("rejects invalid or soft-deleted connection types", async () => {
+    const { seed, sourceType, taskType, containsConnectionType } = getSeedParts();
+    const service = createV2BoardService(
+      createV2MemoryRepository({
+        ...seed,
+        deletedConnectionTypeIds: [containsConnectionType.id]
+      })
+    );
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const task = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+
+    await expect(
+      service.createConnection(ownerContext, seed.board.id, {
+        connectionTypeId: containsConnectionType.id,
+        sourceCardId: source.id,
+        targetCardId: task.id,
+        sourcePortKey: "payload",
+        targetPortKey: "input"
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+
+    await expect(
+      service.createConnection(ownerContext, seed.board.id, {
+        connectionTypeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        sourceCardId: source.id,
+        targetCardId: task.id,
+        sourcePortKey: "payload",
+        targetPortKey: "input"
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("patches connection type while preserving relationship data and visual style", async () => {
+    const { seed, sourceType, taskType, containsConnectionType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const source = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      data: { sourceBusiness: true }
+    });
+    const task = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { targetBusiness: true }
+    });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+    const styled = await service.updateConnection(ownerContext, connection.id, {
+      data: { quantity: 8, unit: "pcs" },
+      visualStyle: { strokeColor: "#2563eb", strokeWidth: 3 }
+    });
+
+    const typed = await service.updateConnection(ownerContext, styled.id, {
+      connectionTypeId: containsConnectionType.id
+    });
+
+    expect(typed).toMatchObject({
+      id: connection.id,
+      connectionTypeId: containsConnectionType.id,
+      data: { quantity: 8, unit: "pcs" },
+      visualStyle: { strokeColor: "#2563eb", strokeWidth: 3 }
+    });
+    const detail = await service.getBoard(ownerContext, seed.board.id);
+    expect(detail.cards.find((card) => card.id === source.id)?.data).toEqual({ sourceBusiness: true });
+    expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
   });
 
   it("creates connections through persisted visual connector slots", async () => {
@@ -325,7 +423,7 @@ describe("v2 board service", () => {
   });
 
   it("updates connection relationship data without mutating card data", async () => {
-    const { seed, sourceType, taskType } = getSeedParts();
+    const { seed, sourceType, taskType, containsConnectionType } = getSeedParts();
     const repository = createV2MemoryRepository(seed);
     const service = createV2BoardService(repository);
     const source = await service.createCard(ownerContext, seed.board.id, {
@@ -337,6 +435,7 @@ describe("v2 board service", () => {
       data: { assembly: "frame" }
     });
     const connection = await service.createConnection(ownerContext, seed.board.id, {
+      connectionTypeId: containsConnectionType.id,
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -361,8 +460,8 @@ describe("v2 board service", () => {
     expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ assembly: "frame" });
   });
 
-  it("retargets connection endpoints while preserving metadata and visual style", async () => {
-    const { seed, sourceType, taskType } = getSeedParts();
+  it("retargets connection endpoints while preserving metadata, visual style, and connection type", async () => {
+    const { seed, sourceType, taskType, containsConnectionType } = getSeedParts();
     const repository = createV2MemoryRepository(seed);
     const service = createV2BoardService(repository);
     const source = await service.createCard(ownerContext, seed.board.id, {
@@ -378,6 +477,7 @@ describe("v2 board service", () => {
       data: { nextTargetBusiness: true }
     });
     const connection = await service.createConnection(ownerContext, seed.board.id, {
+      connectionTypeId: containsConnectionType.id,
       sourceCardId: source.id,
       targetCardId: task.id,
       sourcePortKey: "payload",
@@ -398,6 +498,7 @@ describe("v2 board service", () => {
       id: connection.id,
       sourceCardId: source.id,
       targetCardId: nextTask.id,
+      connectionTypeId: containsConnectionType.id,
       sourcePortKey: "payload",
       targetPortKey: "input",
       title: "Assembly quantity",
@@ -683,6 +784,7 @@ describe("v2 board service", () => {
       id: "cccccccc-cccc-4ccc-cccc-cccccccccccc",
       workspaceId: seed.workspace.id,
       boardId: seed.board.id,
+      connectionTypeId: null,
       sourceCardId: cardA.id,
       targetCardId: "missing-card-id",
       sourcePortKey: "payload",
@@ -719,6 +821,7 @@ describe("v2 board service", () => {
       id: "dddddddd-dddd-4ddd-dddd-dddddddddddd",
       workspaceId: seed.workspace.id,
       boardId: seed.board.id,
+      connectionTypeId: null,
       sourceCardId: "missing-source",
       targetCardId: "missing-target",
       sourcePortKey: "payload",

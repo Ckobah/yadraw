@@ -10,6 +10,8 @@ import {
   v2CardVisualStyleSchema,
   v2ConnectionAttachmentSchema,
   v2ConnectionFileSchema,
+  v2ConnectionTypeDefinitionSchema,
+  v2ConnectionTypeSchema,
   v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateCardTypeBodySchema,
@@ -38,6 +40,7 @@ const portId = "55555555-5555-4555-8555-555555555555";
 const cardId = "66666666-6666-4666-8666-666666666666";
 const targetCardId = "99999999-9999-4999-8999-999999999999";
 const connectionId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const connectionTypeId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const fileId = "77777777-7777-4777-8777-777777777777";
 const cardFileId = "88888888-8888-4888-8888-888888888888";
 const connectionFileId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -103,6 +106,7 @@ describe("v2 API contracts", () => {
             schema: { fields: [] }
           }
         ],
+        connectionTypes: [],
         cards: [],
         connections: []
       })
@@ -110,6 +114,82 @@ describe("v2 API contracts", () => {
       workspace: { id: workspaceId },
       board: { id: boardId },
       cardTypes: [{ key: "source" }]
+    });
+  });
+
+  it("parses empty connection type schema", () => {
+    expect(v2ConnectionTypeDefinitionSchema.parse({ fields: [] })).toEqual({ fields: [] });
+  });
+
+  it("parses supported connection type field schemas", () => {
+    expect(
+      v2ConnectionTypeDefinitionSchema.parse({
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number", required: true },
+          { key: "unit", label: "Unit", type: "select", options: [{ value: "pcs", label: "pcs" }] },
+          { key: "note", label: "Note", type: "text" },
+          { key: "active", label: "Active", type: "boolean" },
+          { key: "payload", label: "Payload", type: "json" },
+          { key: "dueDate", label: "Due date", type: "date" }
+        ]
+      })
+    ).toMatchObject({
+      fields: [
+        { key: "quantity", type: "number" },
+        { key: "unit", type: "select" },
+        { key: "note", type: "text" },
+        { key: "active", type: "boolean" },
+        { key: "payload", type: "json" },
+        { key: "dueDate", type: "date" }
+      ]
+    });
+  });
+
+  it("rejects invalid connection type field schema", () => {
+    expect(() =>
+      v2ConnectionTypeDefinitionSchema.parse({
+        fields: [{ key: "quantity", label: "Quantity", type: "formula" }]
+      })
+    ).toThrow();
+
+    expect(() =>
+      v2ConnectionTypeDefinitionSchema.parse({
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "quantity", label: "Count", type: "number" }
+        ]
+      })
+    ).toThrow();
+  });
+
+  it("parses connection type entity and defaults safely", () => {
+    expect(
+      v2ConnectionTypeSchema.parse({
+        id: connectionTypeId,
+        workspaceId,
+        key: "contains",
+        name: "Contains",
+        description: null,
+        schema: {
+          fields: [
+            { key: "quantity", label: "Quantity", type: "number" },
+            { key: "unit", label: "Unit", type: "text" },
+            { key: "note", label: "Note", type: "text" }
+          ]
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+    ).toMatchObject({
+      key: "contains",
+      schema: {
+        fields: [
+          { key: "quantity", type: "number" },
+          { key: "unit", type: "text" },
+          { key: "note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {}
     });
   });
 
@@ -273,6 +353,7 @@ describe("v2 API contracts", () => {
         id: connectionId,
         workspaceId,
         boardId,
+        connectionTypeId,
         sourceCardId: cardId,
         targetCardId,
         sourcePortKey: "payload",
@@ -294,6 +375,7 @@ describe("v2 API contracts", () => {
         updatedAt: timestamp
       })
     ).toMatchObject({
+      connectionTypeId,
       title: "Payload route",
       description: "Transfers normalized payloads",
       data: { payload: "json", priority: 2 },
@@ -324,6 +406,7 @@ describe("v2 API contracts", () => {
         updatedAt: timestamp
       })
     ).toMatchObject({
+      connectionTypeId: null,
       title: null,
       description: null,
       data: {},
@@ -358,12 +441,14 @@ describe("v2 API contracts", () => {
       v2UpdateConnectionBodySchema.parse({
         sourceCardId: cardId,
         targetCardId,
+        connectionTypeId,
         sourcePortKey: "payload",
         targetPortKey: "input"
       })
     ).toEqual({
       sourceCardId: cardId,
       targetCardId,
+      connectionTypeId,
       sourcePortKey: "payload",
       targetPortKey: "input"
     });

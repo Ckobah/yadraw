@@ -30,6 +30,7 @@ export const v2PortDirectionSchema = z.enum(["input", "output"]);
 export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
 export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
 export const v2CardTypeFieldTypeSchema = z.enum(["text", "number", "boolean", "select", "json", "date"]);
+export const v2ConnectionTypeFieldTypeSchema = z.enum(["text", "number", "boolean", "select", "json", "date"]);
 export const v2LinkedFieldSourceModeSchema = z.enum(["exactCard", "connectedCard"]);
 export const v2LinkedFieldDirectionSchema = z.enum(["incoming", "outgoing"]);
 export const v2LinkedFieldOnMissingSchema = z.enum(["empty"]);
@@ -193,6 +194,47 @@ export const v2CardTypeDefinitionSchema = z
     }
   });
 
+export const v2ConnectionTypeFieldOptionSchema = z.object({
+  value: z.string().trim().min(1),
+  label: z.string().trim().min(1)
+});
+
+export const v2ConnectionTypeFieldSchema = z
+  .object({
+    key: z.string().trim().min(1),
+    label: z.string().trim().min(1).optional(),
+    type: v2ConnectionTypeFieldTypeSchema,
+    required: z.boolean().optional(),
+    description: z.string().optional(),
+    placeholder: z.string().optional(),
+    defaultValue: z.unknown().optional(),
+    options: z.array(v2ConnectionTypeFieldOptionSchema).optional()
+  })
+  .strict()
+  .transform((field) => ({
+    ...field,
+    label: field.label ?? field.key
+  }));
+
+export const v2ConnectionTypeDefinitionSchema = z
+  .object({
+    fields: z.array(v2ConnectionTypeFieldSchema).default([])
+  })
+  .strict()
+  .superRefine((schema, context) => {
+    const seenKeys = new Set<string>();
+    for (const field of schema.fields) {
+      if (seenKeys.has(field.key)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["fields"],
+          message: `Duplicate field key: ${field.key}`
+        });
+      }
+      seenKeys.add(field.key);
+    }
+  });
+
 export const v2CardTypeSchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
@@ -204,6 +246,18 @@ export const v2CardTypeSchema = z.object({
   defaultVisualStyle: v2CardVisualStyleSchema.default({}),
   defaultSize: v2SizeSchema,
   ports: z.array(v2CardTypePortSchema),
+  createdAt: v2TimestampSchema,
+  updatedAt: v2TimestampSchema
+});
+
+export const v2ConnectionTypeSchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  key: z.string().regex(/^[a-z][a-z0-9_]*$/),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  schema: v2ConnectionTypeDefinitionSchema.default({ fields: [] }),
+  defaultVisualStyle: z.record(z.string(), z.unknown()).default({}),
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
 });
@@ -228,6 +282,7 @@ export const v2ConnectionSchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
   boardId: v2UuidSchema,
+  connectionTypeId: v2UuidSchema.nullable().default(null),
   sourceCardId: v2UuidSchema,
   targetCardId: v2UuidSchema,
   sourcePortKey: z.string().min(1),
@@ -371,6 +426,7 @@ export const v2BoardDetailSchema = z.object({
   project: v2ProjectSchema,
   board: v2BoardSchema,
   cardTypes: z.array(v2CardTypeSchema),
+  connectionTypes: z.array(v2ConnectionTypeSchema).default([]),
   cards: z.array(v2CardSchema),
   connections: z.array(v2ConnectionSchema)
 });
@@ -467,6 +523,7 @@ export const v2CreateConnectionParamsSchema = z.object({
 });
 
 export const v2CreateConnectionBodySchema = z.object({
+  connectionTypeId: v2UuidSchema.nullable().optional(),
   sourceCardId: v2UuidSchema,
   targetCardId: v2UuidSchema,
   sourcePortKey: z.string().trim().min(1),
@@ -487,6 +544,7 @@ export const v2UpdateConnectionBodySchema = z
   .object({
     title: z.string().trim().nullable().optional(),
     description: z.string().nullable().optional(),
+    connectionTypeId: v2UuidSchema.nullable().optional(),
     sourceCardId: v2UuidSchema.optional(),
     targetCardId: v2UuidSchema.optional(),
     sourcePortKey: z.string().trim().min(1).optional(),
@@ -672,8 +730,11 @@ export const V2CardAttachmentSchema = v2CardAttachmentSchema;
 export const V2ConnectionFileSchema = v2ConnectionFileSchema;
 export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
 export const V2ConnectionVisualStyleSchema = v2ConnectionVisualStyleSchema;
+export const V2ConnectionTypeFieldSchema = v2ConnectionTypeFieldSchema;
+export const V2ConnectionTypeSchema = v2ConnectionTypeSchema;
 export const V2LinkedFieldBindingSchema = v2LinkedFieldBindingSchema;
 export const V2CardTypeDefinitionSchema = v2CardTypeDefinitionSchema;
+export const V2ConnectionTypeDefinitionSchema = v2ConnectionTypeDefinitionSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -694,11 +755,16 @@ export type V2CardTypeFieldType = z.infer<typeof v2CardTypeFieldTypeSchema>;
 export type V2CardTypeFieldOption = z.infer<typeof v2CardTypeFieldOptionSchema>;
 export type V2CardTypeFieldSchema = z.infer<typeof v2CardTypeFieldSchema>;
 export type V2CardTypeSchema = z.infer<typeof v2CardTypeDefinitionSchema>;
+export type V2ConnectionTypeFieldType = z.infer<typeof v2ConnectionTypeFieldTypeSchema>;
+export type V2ConnectionTypeFieldOption = z.infer<typeof v2ConnectionTypeFieldOptionSchema>;
+export type V2ConnectionTypeFieldSchema = z.infer<typeof v2ConnectionTypeFieldSchema>;
+export type V2ConnectionTypeSchema = z.infer<typeof v2ConnectionTypeDefinitionSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardTypePortInput = z.infer<typeof v2CardTypePortInputSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
+export type V2ConnectionType = z.infer<typeof v2ConnectionTypeSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
 export type V2ConnectionMarker = z.infer<typeof v2ConnectionMarkerSchema>;
 export type V2ConnectionRouteMode = z.infer<typeof v2ConnectionRouteModeSchema>;

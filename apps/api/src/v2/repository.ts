@@ -7,6 +7,7 @@ import {
   v2CardTypePortSchema,
   v2CardTypeSchema,
   v2ConnectionAttachmentSchema,
+  v2ConnectionTypeSchema,
   v2ConnectionSchema,
   v2LinkedFieldBindingSchema,
   type V2Board,
@@ -22,6 +23,7 @@ import {
   type V2Connection,
   type V2ConnectionAttachment,
   type V2ConnectionStatus,
+  type V2ConnectionType,
   type V2CreateConnectionInput,
   type V2CreateLinkedFieldBindingInput,
   type V2JsonObject,
@@ -122,7 +124,9 @@ export type V2Repository = {
   getBoardDetail(boardId: string): Promise<V2BoardDetail | null>;
   getBoard(boardId: string): Promise<V2Board | null>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
+  listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
+  getConnectionType?(connectionTypeId: string): Promise<V2ConnectionType | null>;
   createCardType?(input: V2CreateCardTypeRecordInput): Promise<V2CardType>;
   updateCardType?(cardTypeId: string, input: V2UpdateCardTypeInput): Promise<V2CardType | null>;
   updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
@@ -160,6 +164,8 @@ type V2MemorySeed = {
   }>;
   cardTypes: V2CardType[];
   deletedCardTypeIds?: string[];
+  connectionTypes?: V2ConnectionType[];
+  deletedConnectionTypeIds?: string[];
   cards: V2Card[];
   connections: V2Connection[];
   fieldBindings?: V2MemoryLinkedFieldBinding[];
@@ -303,6 +309,20 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
   });
 }
 
+function connectionTypeFromRow(row: QueryResultRow): V2ConnectionType {
+  return v2ConnectionTypeSchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    key: String(row.key),
+    name: String(row.name),
+    description: row.description === null || row.description === undefined ? null : String(row.description),
+    schema: asObject(row.schema ?? { fields: [] }),
+    defaultVisualStyle: asObject(row.default_visual_style ?? {}),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at)
+  });
+}
+
 function cardFromRow(row: QueryResultRow): V2Card {
   return v2CardSchema.parse({
     id: String(row.id),
@@ -332,6 +352,10 @@ function connectionFromRow(row: QueryResultRow): V2Connection {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     boardId: String(row.board_id),
+    connectionTypeId:
+      row.connection_type_id === null || row.connection_type_id === undefined
+        ? null
+        : String(row.connection_type_id),
     sourceCardId: String(row.source_card_id),
     targetCardId: String(row.target_card_id),
     sourcePortKey: String(row.source_port_key),
@@ -412,6 +436,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
   };
   const sourceTypeId = "44444444-4444-4444-8444-444444444444";
   const taskTypeId = "55555555-5555-4555-8555-555555555555";
+  const genericConnectionTypeId = "99999999-9999-4999-8999-999999999991";
   const cardTypes: V2CardType[] = [
     {
       id: sourceTypeId,
@@ -483,6 +508,89 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       updatedAt: timestamp
     }
   ];
+  const connectionTypes: V2ConnectionType[] = [
+    {
+      id: genericConnectionTypeId,
+      workspaceId: workspace.id,
+      key: "generic",
+      name: "Generic",
+      description: "Default relationship type.",
+      schema: { fields: [] },
+      defaultVisualStyle: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "99999999-9999-4999-8999-999999999992",
+      workspaceId: workspace.id,
+      key: "contains",
+      name: "Contains",
+      description: "One card contains another.",
+      schema: {
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "unit", label: "Unit", type: "text" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "99999999-9999-4999-8999-999999999993",
+      workspaceId: workspace.id,
+      key: "supplies",
+      name: "Supplies",
+      description: "A supplier relationship.",
+      schema: {
+        fields: [
+          { key: "price", label: "Price", type: "number" },
+          { key: "currency", label: "Currency", type: "text" },
+          { key: "leadTimeDays", label: "Lead time days", type: "number" },
+          { key: "minOrderQty", label: "Minimum order quantity", type: "number" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "99999999-9999-4999-8999-999999999994",
+      workspaceId: workspace.id,
+      key: "uses",
+      name: "Uses",
+      description: "One card uses another.",
+      schema: {
+        fields: [
+          { key: "quantity", label: "Quantity", type: "number" },
+          { key: "unit", label: "Unit", type: "text" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "99999999-9999-4999-8999-999999999995",
+      workspaceId: workspace.id,
+      key: "depends_on",
+      name: "Depends on",
+      description: "A dependency relationship.",
+      schema: {
+        fields: [
+          { key: "dependencyType", label: "Dependency type", type: "text" },
+          { key: "lagDays", label: "Lag days", type: "number" },
+          { key: "note", label: "Note", type: "text" }
+        ]
+      },
+      defaultVisualStyle: {},
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
   const cards: V2Card[] = [
     {
       id: "77777777-7777-4777-8777-777777777771",
@@ -520,6 +628,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       id: "88888888-8888-4888-8888-888888888881",
       workspaceId: workspace.id,
       boardId: board.id,
+      connectionTypeId: genericConnectionTypeId,
       sourceCardId: cards[0]!.id,
       targetCardId: cards[1]!.id,
       sourcePortKey: "payload",
@@ -558,6 +667,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       }
     ],
     cardTypes,
+    connectionTypes,
     cards,
     connections
   };
@@ -596,6 +706,7 @@ function connectionAttachmentFromRow(row: QueryResultRow): V2ConnectionAttachmen
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
   const state = {
     ...cloneJson(seed),
+    connectionTypes: cloneJson(seed.connectionTypes ?? []),
     fieldBindings: cloneJson((seed.fieldBindings ?? []) as V2MemoryLinkedFieldBinding[]),
     files: cloneJson(seed.files ?? []),
     cardFiles: cloneJson(seed.cardFiles ?? []),
@@ -604,6 +715,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
   const deletedCardIds = new Set<string>();
   const deletedConnectionIds = new Set<string>();
   const deletedCardTypeIds = new Set<string>(state.deletedCardTypeIds ?? []);
+  const deletedConnectionTypeIds = new Set<string>(state.deletedConnectionTypeIds ?? []);
   const deletedCardFileIds = new Set<string>(
     state.cardFiles
       .filter((cardFile) => cardFile.deletedAt)
@@ -701,6 +813,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         project: state.project,
         board: state.board,
         cardTypes: state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)),
+        connectionTypes: state.connectionTypes.filter(
+          (connectionType) => !deletedConnectionTypeIds.has(connectionType.id)
+        ),
         cards: activeCards(),
         connections: activeConnections()
       });
@@ -718,6 +833,18 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     async getCardType(cardTypeId) {
       if (deletedCardTypeIds.has(cardTypeId)) return null;
       return cloneJson(state.cardTypes.find((cardType) => cardType.id === cardTypeId) ?? null);
+    },
+
+    async listConnectionTypes(workspaceId) {
+      if (workspaceId !== state.workspace.id) return [];
+      return cloneJson(
+        state.connectionTypes.filter((connectionType) => !deletedConnectionTypeIds.has(connectionType.id))
+      );
+    },
+
+    async getConnectionType(connectionTypeId) {
+      if (deletedConnectionTypeIds.has(connectionTypeId)) return null;
+      return cloneJson(state.connectionTypes.find((connectionType) => connectionType.id === connectionTypeId) ?? null);
     },
 
     async createCardType(input) {
@@ -873,6 +1000,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         id: randomUUID(),
         workspaceId: input.workspaceId,
         boardId: input.boardId,
+        connectionTypeId: input.connectionTypeId ?? null,
         sourceCardId: input.sourceCardId,
         targetCardId: input.targetCardId,
         sourcePortKey: input.sourcePortKey,
@@ -903,6 +1031,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...existing,
         ...(input.title !== undefined ? { title: input.title?.trim() || null } : {}),
         ...(input.description !== undefined ? { description: input.description ?? null } : {}),
+        ...(input.connectionTypeId !== undefined ? { connectionTypeId: input.connectionTypeId } : {}),
         ...(input.sourceCardId !== undefined ? { sourceCardId: input.sourceCardId } : {}),
         ...(input.targetCardId !== undefined ? { targetCardId: input.targetCardId } : {}),
         ...(input.sourcePortKey !== undefined ? { sourcePortKey: input.sourcePortKey } : {}),
@@ -1419,6 +1548,18 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       );
       const cardTypes = await cardTypesFromRows(cardTypesResult.rows);
 
+      const connectionTypesResult = await pool.query(
+        `
+          select *
+          from connection_types
+          where workspace_id = $1
+            and deleted_at is null
+          order by name asc, id asc
+        `,
+        [String(boardRow.workspace_id)]
+      );
+      const connectionTypes = connectionTypesResult.rows.map(connectionTypeFromRow);
+
       const connectionsResult = await pool.query(
         `
           select c.*
@@ -1443,6 +1584,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         project: projectFromRow(boardRow),
         board: boardFromRow(boardRow),
         cardTypes,
+        connectionTypes,
         cards,
         connections: connectionsResult.rows.map(connectionFromRow)
       });
@@ -1494,6 +1636,36 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
 
       const ports = await loadPortsForCardTypes([cardTypeId]);
       return cardTypeFromRow(row, ports.get(cardTypeId) ?? []);
+    },
+
+    async listConnectionTypes(workspaceId) {
+      const result = await pool.query(
+        `
+          select *
+          from connection_types
+          where workspace_id = $1
+            and deleted_at is null
+          order by name asc, id asc
+        `,
+        [workspaceId]
+      );
+
+      return result.rows.map(connectionTypeFromRow);
+    },
+
+    async getConnectionType(connectionTypeId) {
+      const result = await pool.query(
+        `
+          select *
+          from connection_types
+          where id = $1
+            and deleted_at is null
+          limit 1
+        `,
+        [connectionTypeId]
+      );
+      const row = result.rows[0];
+      return row ? connectionTypeFromRow(row) : null;
     },
 
     async createCardType(input) {
@@ -1805,6 +1977,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           insert into connections (
             workspace_id,
             board_id,
+            connection_type_id,
             source_card_id,
             target_card_id,
             source_port_key,
@@ -1813,12 +1986,13 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             label,
             status
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           returning *
         `,
         [
           input.workspaceId,
           input.boardId,
+          input.connectionTypeId ?? null,
           input.sourceCardId,
           input.targetCardId,
           input.sourcePortKey,
@@ -1839,6 +2013,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       const next = {
         title: input.title !== undefined ? input.title?.trim() || null : existing.title,
         description: input.description !== undefined ? input.description ?? null : existing.description,
+        connectionTypeId:
+          input.connectionTypeId !== undefined ? input.connectionTypeId : existing.connectionTypeId,
         sourceCardId: input.sourceCardId ?? existing.sourceCardId,
         targetCardId: input.targetCardId ?? existing.targetCardId,
         sourcePortKey: input.sourcePortKey ?? existing.sourcePortKey,
@@ -1855,12 +2031,13 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           update connections
           set title = $2,
               description = $3,
-              source_card_id = $4,
-              target_card_id = $5,
-              source_port_key = $6,
-              target_port_key = $7,
-              data = $8::jsonb,
-              visual_style = $9::jsonb,
+              connection_type_id = $4,
+              source_card_id = $5,
+              target_card_id = $6,
+              source_port_key = $7,
+              target_port_key = $8,
+              data = $9::jsonb,
+              visual_style = $10::jsonb,
               updated_at = now()
           where id = $1
             and deleted_at is null
@@ -1870,6 +2047,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           connectionId,
           next.title,
           next.description,
+          next.connectionTypeId,
           next.sourceCardId,
           next.targetCardId,
           next.sourcePortKey,

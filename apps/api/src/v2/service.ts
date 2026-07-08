@@ -17,6 +17,7 @@ import {
   type V2BoardDetail,
   type V2Card,
   type V2CardType,
+  type V2ConnectionType,
   type V2CardTypePortInput,
   type V2Connection,
   type V2CreateCardRequest,
@@ -364,6 +365,44 @@ export function createV2BoardService(
       updateCardType: repository.updateCardType.bind(repository),
       updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository)
     };
+  }
+
+  function requireConnectionTypeRepository(): {
+    listConnectionTypes(workspaceId: string): Promise<V2ConnectionType[]>;
+    getConnectionType(connectionTypeId: string): Promise<V2ConnectionType | null>;
+  } {
+    if (!repository.listConnectionTypes || !repository.getConnectionType) {
+      throw new V2ServiceError("conflict", "V2 connection type repository is not available");
+    }
+
+    return {
+      listConnectionTypes: repository.listConnectionTypes.bind(repository),
+      getConnectionType: repository.getConnectionType.bind(repository)
+    };
+  }
+
+  async function resolveConnectionTypeId(
+    workspaceId: string,
+    connectionTypeId: string | null | undefined,
+    options: { useGenericFallback: boolean }
+  ): Promise<string | null> {
+    const connectionTypeRepository = requireConnectionTypeRepository();
+    if (connectionTypeId !== undefined) {
+      if (connectionTypeId === null) return null;
+
+      const connectionType = await connectionTypeRepository.getConnectionType(connectionTypeId);
+      if (!connectionType || connectionType.workspaceId !== workspaceId) {
+        validationFailed("Connection type does not belong to the board workspace");
+      }
+      return connectionType.id;
+    }
+
+    if (!options.useGenericFallback) return null;
+
+    const generic = (await connectionTypeRepository.listConnectionTypes(workspaceId)).find(
+      (connectionType) => connectionType.key === "generic"
+    );
+    return generic?.id ?? null;
   }
 
   async function requireBoardForAccess(
@@ -829,6 +868,9 @@ export function createV2BoardService(
       return repository.createConnection({
         workspaceId: board.workspaceId,
         boardId: board.id,
+        connectionTypeId: await resolveConnectionTypeId(board.workspaceId, input.connectionTypeId, {
+          useGenericFallback: true
+        }),
         sourceCardId: input.sourceCardId,
         targetCardId: input.targetCardId,
         sourcePortKey: input.sourcePortKey,
@@ -854,6 +896,13 @@ export function createV2BoardService(
       if (!repository.updateConnection) {
         throw new V2ServiceError("conflict", "V2 connection update repository is not available");
       }
+
+      const nextConnectionTypeId =
+        input.connectionTypeId !== undefined
+          ? await resolveConnectionTypeId(existing.workspaceId, input.connectionTypeId, {
+              useGenericFallback: false
+            })
+          : existing.connectionTypeId;
 
       const nextEndpoint = {
         sourceCardId: input.sourceCardId ?? existing.sourceCardId,
@@ -920,7 +969,10 @@ export function createV2BoardService(
         }
       }
 
-      const updated = await repository.updateConnection(connectionId, input);
+      const updated = await repository.updateConnection(connectionId, {
+        ...input,
+        ...(input.connectionTypeId !== undefined ? { connectionTypeId: nextConnectionTypeId } : {})
+      });
       if (!updated) {
         notFound("Connection not found");
       }

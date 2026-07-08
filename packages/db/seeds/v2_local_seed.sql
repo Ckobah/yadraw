@@ -171,6 +171,71 @@ set workspace_id = excluded.workspace_id,
     updated_at = now(),
     deleted_at = null;
 
+insert into connection_types (
+  id,
+  workspace_id,
+  key,
+  name,
+  description,
+  schema,
+  default_visual_style
+)
+values
+  (
+    '99999999-9999-4999-8999-999999999991',
+    '11111111-1111-4111-8111-111111111111',
+    'generic',
+    'Generic',
+    'Default relationship type.',
+    '{"fields":[]}'::jsonb,
+    '{}'::jsonb
+  ),
+  (
+    '99999999-9999-4999-8999-999999999992',
+    '11111111-1111-4111-8111-111111111111',
+    'contains',
+    'Contains',
+    'One card contains another.',
+    '{"fields":[{"key":"quantity","label":"Quantity","type":"number"},{"key":"unit","label":"Unit","type":"text"},{"key":"note","label":"Note","type":"text"}]}'::jsonb,
+    '{}'::jsonb
+  ),
+  (
+    '99999999-9999-4999-8999-999999999993',
+    '11111111-1111-4111-8111-111111111111',
+    'supplies',
+    'Supplies',
+    'A supplier relationship.',
+    '{"fields":[{"key":"price","label":"Price","type":"number"},{"key":"currency","label":"Currency","type":"text"},{"key":"leadTimeDays","label":"Lead time days","type":"number"},{"key":"minOrderQty","label":"Minimum order quantity","type":"number"},{"key":"note","label":"Note","type":"text"}]}'::jsonb,
+    '{}'::jsonb
+  ),
+  (
+    '99999999-9999-4999-8999-999999999994',
+    '11111111-1111-4111-8111-111111111111',
+    'uses',
+    'Uses',
+    'One card uses another.',
+    '{"fields":[{"key":"quantity","label":"Quantity","type":"number"},{"key":"unit","label":"Unit","type":"text"},{"key":"note","label":"Note","type":"text"}]}'::jsonb,
+    '{}'::jsonb
+  ),
+  (
+    '99999999-9999-4999-8999-999999999995',
+    '11111111-1111-4111-8111-111111111111',
+    'depends_on',
+    'Depends on',
+    'A dependency relationship.',
+    '{"fields":[{"key":"dependencyType","label":"Dependency type","type":"text"},{"key":"lagDays","label":"Lag days","type":"number"},{"key":"note","label":"Note","type":"text"}]}'::jsonb,
+    '{}'::jsonb
+  )
+on conflict (id) do update
+set workspace_id = excluded.workspace_id,
+    key = excluded.key,
+    name = excluded.name,
+    description = excluded.description,
+    schema = excluded.schema,
+    default_visual_style = excluded.default_visual_style,
+    updated_at = now(),
+    deleted_at = null;
+
 insert into cards (
   id,
   workspace_id,
@@ -237,6 +302,7 @@ insert into connections (
   id,
   workspace_id,
   board_id,
+  connection_type_id,
   source_card_id,
   target_card_id,
   source_port_key,
@@ -249,6 +315,7 @@ values (
   '88888888-8888-4888-8888-888888888881',
   '11111111-1111-4111-8111-111111111111',
   '33333333-3333-4333-8333-333333333333',
+  '99999999-9999-4999-8999-999999999991',
   '77777777-7777-4777-8777-777777777771',
   '77777777-7777-4777-8777-777777777772',
   'payload',
@@ -260,6 +327,7 @@ values (
 on conflict (id) do update
 set workspace_id = excluded.workspace_id,
     board_id = excluded.board_id,
+    connection_type_id = excluded.connection_type_id,
     source_card_id = excluded.source_card_id,
     target_card_id = excluded.target_card_id,
     source_port_key = excluded.source_port_key,

@@ -285,6 +285,7 @@ export async function duplicateV2Card(cardId: string): Promise<V2Card> {
 export async function createV2Connection(
   boardId: string,
   input: {
+    connectionTypeId?: string | null;
     sourceCardId: string;
     targetCardId: string;
     sourcePortKey: string;
@@ -299,6 +300,7 @@ export async function createV2Connection(
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
+        ...(input.connectionTypeId !== undefined ? { connectionTypeId: input.connectionTypeId } : {}),
         sourceCardId: input.sourceCardId,
         targetCardId: input.targetCardId,
         sourcePortKey: input.sourcePortKey,
@@ -455,6 +457,7 @@ export async function updateV2Connection(
   patch: {
     title?: string | null;
     description?: string | null;
+    connectionTypeId?: string | null;
     sourceCardId?: string;
     targetCardId?: string;
     sourcePortKey?: string;
