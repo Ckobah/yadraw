@@ -1,4 +1,4 @@
-import type { V2CardTypeFieldSchema } from "@yadraw/shared";
+import type { V2CardTypeFieldSchema, V2ConnectionTypeFieldSchema } from "@yadraw/shared";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -11,11 +11,13 @@ export type DataFieldDraft = {
   value: string;
 };
 
+type SchemaFieldDefinition = V2CardTypeFieldSchema | V2ConnectionTypeFieldSchema;
+
 export type SchemaFieldDraft = {
   id: string;
   key: string;
   label: string;
-  type: V2CardTypeFieldSchema["type"];
+  type: SchemaFieldDefinition["type"];
   value: string;
   required: boolean;
   description?: string;
@@ -63,7 +65,7 @@ export function stringifyDataFieldValue(value: unknown): string {
 }
 
 export function splitSchemaAndExtraData(
-  schemaFields: V2CardTypeFieldSchema[],
+  schemaFields: SchemaFieldDefinition[],
   data: Record<string, unknown> | null | undefined
 ): { schemaKeys: Set<string>; extraData: Record<string, unknown> } {
   const schemaKeys = new Set(schemaFields.map((field) => field.key));
@@ -90,7 +92,7 @@ export function createDataDraftFromRecord(
 }
 
 function stringifySchemaFieldValue(
-  field: V2CardTypeFieldSchema,
+  field: SchemaFieldDefinition,
   value: unknown
 ): string {
   if (value === undefined || value === null) {
@@ -117,7 +119,7 @@ function stringifySchemaFieldValue(
 }
 
 export function createSchemaDraftFromData(
-  schemaFields: V2CardTypeFieldSchema[],
+  schemaFields: SchemaFieldDefinition[],
   data: Record<string, unknown> | null | undefined
 ): SchemaFieldDraft[] {
   return schemaFields.map((field) => ({

@@ -4418,6 +4418,18 @@ button:disabled {
   font-weight: 610;
 }
 
+.v2InspectorSubsectionHeader {
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.v2InspectorSubsectionHeader h4 {
+  margin: 0;
+  color: var(--yd-text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .v2InspectorDataKeyInput,
 .v2InspectorDataTypeSelect,
 .v2InspectorDataValue {

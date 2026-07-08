@@ -26,6 +26,7 @@ import type {
   V2BoardDetail,
   V2Card,
   V2Connection,
+  V2ConnectionType,
   V2ConnectionVisualStyle,
   V2CardType,
   V2CardVisualStyle,
@@ -353,7 +354,7 @@ function getMiniMapNodeColor(node: V2CardNode): string {
 }
 
 export function V2BoardCanvas({ boardDetail }: Props) {
-  const { board, cards, connections, cardTypes: initialCardTypes } = boardDetail;
+  const { board, cards, connections, cardTypes: initialCardTypes, connectionTypes } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
@@ -485,6 +486,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     () => connectionRecords.find((connection) => connection.id === selectedConnectionId) ?? null,
     [connectionRecords, selectedConnectionId]
   );
+  const selectedConnectionType = useMemo<V2ConnectionType | null>(() => {
+    if (!selectedConnection) return null;
+    return (
+      connectionTypes.find((connectionType) => connectionType.id === selectedConnection.connectionTypeId) ??
+      connectionTypes.find((connectionType) => connectionType.key === "generic") ??
+      null
+    );
+  }, [connectionTypes, selectedConnection]);
   const assistantCards = useMemo(
     () => nodes.map((node) => node.data.card),
     [nodes]
@@ -1707,6 +1716,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       ) : selectedConnection ? (
         <V2ConnectorInspector
           connection={selectedConnection}
+          connectionType={selectedConnectionType}
           sourceCard={cardById.get(selectedConnection.sourceCardId) ?? null}
           targetCard={cardById.get(selectedConnection.targetCardId) ?? null}
           saveStatus={saveStatus}

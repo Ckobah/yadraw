@@ -2,20 +2,26 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { GitBranch, Plus, Trash2, X } from "lucide-react";
-import type { V2Card, V2Connection } from "@yadraw/shared";
+import type { V2Card, V2Connection, V2ConnectionType } from "@yadraw/shared";
 import {
   createDataDraftFromRecord,
   createLocalFieldId,
+  createSchemaDraftFromData,
   normalizeDataDraftForCompare,
+  normalizeSchemaDraftForCompare,
+  splitSchemaAndExtraData,
   validateAndBuildDataRecord,
+  validateAndBuildSchemaDataRecord,
   type DataFieldDraft,
   type DataFieldType,
   type SaveStatus,
+  type SchemaFieldDraft,
 } from "./v2-card-inspector-helpers";
 import { V2ConnectorFilesSection } from "./v2-connector-files-section";
 
 type V2ConnectorInspectorProps = {
   connection: V2Connection;
+  connectionType: V2ConnectionType | null;
   sourceCard: V2Card | null;
   targetCard: V2Card | null;
   saveStatus: SaveStatus;
@@ -60,6 +66,7 @@ function formatDataValue(value: unknown): string {
 
 export function V2ConnectorInspector({
   connection,
+  connectionType,
   sourceCard,
   targetCard,
   saveStatus,
@@ -70,20 +77,39 @@ export function V2ConnectorInspector({
   const [titleDraft, setTitleDraft] = useState(connection.title ?? "");
   const [descriptionDraft, setDescriptionDraft] = useState(connection.description ?? "");
   const [basicError, setBasicError] = useState<string | null>(null);
+  const schemaFields = useMemo(
+    () => connectionType?.schema?.fields ?? [],
+    [connectionType]
+  );
+  const hasSchemaFields = schemaFields.length > 0;
+  const { schemaKeys, extraData } = splitSchemaAndExtraData(schemaFields, connection.data);
+  const dataRecordForDraft = hasSchemaFields ? extraData : connection.data;
   const [dataDraft, setDataDraft] = useState<DataFieldDraft[]>(() =>
-    createDataDraftFromRecord(connection.data)
+    createDataDraftFromRecord(dataRecordForDraft)
+  );
+  const [schemaDraftFields, setSchemaDraftFields] = useState<SchemaFieldDraft[]>(() =>
+    createSchemaDraftFromData(schemaFields, connection.data)
   );
   const [isDataEditing, setIsDataEditing] = useState(false);
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
+  const [schemaFieldErrors, setSchemaFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
 
   const initialDataSignature = useMemo(
-    () => normalizeDataDraftForCompare(createDataDraftFromRecord(connection.data)),
-    [connection.data]
+    () => normalizeDataDraftForCompare(createDataDraftFromRecord(dataRecordForDraft)),
+    [dataRecordForDraft]
+  );
+  const initialSchemaSignature = useMemo(
+    () => normalizeSchemaDraftForCompare(createSchemaDraftFromData(schemaFields, connection.data)),
+    [connection.data, schemaFields]
   );
   const currentDataSignature = useMemo(
     () => normalizeDataDraftForCompare(dataDraft),
     [dataDraft]
+  );
+  const currentSchemaSignature = useMemo(
+    () => normalizeSchemaDraftForCompare(schemaDraftFields),
+    [schemaDraftFields]
   );
   const connectionDataEntries = useMemo(
     () => Object.entries(connection.data ?? {}),
@@ -92,17 +118,22 @@ export function V2ConnectorInspector({
   const basicDirty =
     titleDraft !== (connection.title ?? "") ||
     descriptionDraft !== (connection.description ?? "");
-  const dataDirty = currentDataSignature !== initialDataSignature;
+  const dataDirty =
+    currentDataSignature !== initialDataSignature ||
+    (hasSchemaFields && currentSchemaSignature !== initialSchemaSignature);
 
   useEffect(() => {
     setTitleDraft(connection.title ?? "");
     setDescriptionDraft(connection.description ?? "");
     setBasicError(null);
-    setDataDraft(createDataDraftFromRecord(connection.data));
+    const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
+    setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
+    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
     setIsDataEditing(false);
     setDataFieldErrors({});
+    setSchemaFieldErrors({});
     setDataError(null);
-  }, [connection.id, connection.title, connection.description, connection.data]);
+  }, [connection.id, connection.title, connection.description, connection.data, hasSchemaFields, schemaFields]);
 
   async function saveBasics() {
     setBasicError(null);
@@ -145,6 +176,21 @@ export function V2ConnectorInspector({
     setDataError(null);
   }
 
+  function updateSchemaField(
+    fieldId: string,
+    patch: Partial<Pick<SchemaFieldDraft, "value">>
+  ) {
+    setSchemaDraftFields((current) =>
+      current.map((field) => (field.id === fieldId ? { ...field, ...patch } : field))
+    );
+    setSchemaFieldErrors((current) => {
+      const next = { ...current };
+      delete next[fieldId];
+      return next;
+    });
+    setDataError(null);
+  }
+
   function addDataField() {
     setIsDataEditing(true);
     setDataDraft((current) => [
@@ -169,17 +215,37 @@ export function V2ConnectorInspector({
   }
 
   async function saveData() {
-    const result = validateAndBuildDataRecord(dataDraft);
+    const schemaResult = hasSchemaFields
+      ? validateAndBuildSchemaDataRecord(schemaDraftFields)
+      : { ok: true as const, data: {} };
+    const result = validateAndBuildDataRecord(
+      dataDraft,
+      hasSchemaFields ? { reservedKeys: schemaKeys } : {}
+    );
+    if (!schemaResult.ok) {
+      setSchemaFieldErrors(schemaResult.errors);
+    } else {
+      setSchemaFieldErrors({});
+    }
     if (!result.ok) {
       setDataFieldErrors(result.errors);
       setDataError("Fix invalid fields before saving.");
+      return;
+    }
+    if (!schemaResult.ok) {
+      setDataError("Fix relationship fields before saving.");
       return;
     }
 
     setDataFieldErrors({});
     setDataError(null);
     try {
-      await onUpdateConnection(connection.id, { data: result.data });
+      await onUpdateConnection(connection.id, {
+        data: {
+          ...schemaResult.data,
+          ...result.data,
+        },
+      });
       setIsDataEditing(false);
     } catch {
       setDataError("Could not save connector data.");
@@ -187,9 +253,12 @@ export function V2ConnectorInspector({
   }
 
   function cancelData() {
-    setDataDraft(createDataDraftFromRecord(connection.data));
+    const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
+    setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
+    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
     setIsDataEditing(false);
     setDataFieldErrors({});
+    setSchemaFieldErrors({});
     setDataError(null);
   }
 
@@ -231,6 +300,64 @@ export function V2ConnectorInspector({
         value={field.value}
         placeholder={field.type === "number" ? "0" : "Value"}
         onChange={(event) => updateDataField(field.id, { value: event.target.value })}
+      />
+    );
+  }
+
+  function renderSchemaValueControl(field: SchemaFieldDraft) {
+    if (field.type === "boolean") {
+      return (
+        <select
+          className="v2InspectorDataValue"
+          value={field.value === "true" ? "true" : "false"}
+          aria-label={`${field.label} value`}
+          onChange={(event) => updateSchemaField(field.id, { value: event.target.value })}
+        >
+          <option value="true">true</option>
+          <option value="false">false</option>
+        </select>
+      );
+    }
+
+    if (field.type === "select") {
+      return (
+        <select
+          className="v2InspectorDataValue"
+          value={field.value}
+          aria-label={`${field.label} value`}
+          onChange={(event) => updateSchemaField(field.id, { value: event.target.value })}
+        >
+          <option value="">Choose value</option>
+          {field.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (field.type === "json") {
+      return (
+        <textarea
+          className="v2InspectorDataValue v2InspectorDataJsonValue"
+          rows={4}
+          value={field.value}
+          placeholder={field.placeholder ?? "{}"}
+          aria-label={`${field.label} value`}
+          onChange={(event) => updateSchemaField(field.id, { value: event.target.value })}
+        />
+      );
+    }
+
+    return (
+      <input
+        className="v2InspectorDataValue"
+        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+        value={field.value}
+        placeholder={field.placeholder ?? (field.type === "number" ? "0" : "Value")}
+        aria-label={`${field.label} value`}
+        onChange={(event) => updateSchemaField(field.id, { value: event.target.value })}
       />
     );
   }
@@ -348,11 +475,11 @@ export function V2ConnectorInspector({
 
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
-            <h3>Relationship data</h3>
-            {isDataEditing ? (
+            <h3>{hasSchemaFields ? "Relationship fields" : "Relationship data"}</h3>
+            {hasSchemaFields || isDataEditing ? (
               <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
                 <Plus size={14} strokeWidth={2.2} />
-                Add field
+                Add extra field
               </button>
             ) : (
               <button
@@ -365,7 +492,97 @@ export function V2ConnectorInspector({
               </button>
             )}
           </div>
-          {!isDataEditing ? (
+          {hasSchemaFields ? (
+            <>
+              <div className="v2InspectorDataEditor">
+                {schemaDraftFields.map((field) => (
+                  <div key={field.id} className="v2InspectorDataRow">
+                    <div className="v2InspectorSchemaFieldHeader">
+                      <div>
+                        <strong>
+                          {field.label}
+                          {field.required ? <span aria-label="required"> *</span> : null}
+                        </strong>
+                        <span>{field.key}</span>
+                      </div>
+                      <em>{field.type}</em>
+                    </div>
+                    {field.description ? (
+                      <p className="v2InspectorSchemaFieldDescription">{field.description}</p>
+                    ) : null}
+                    {renderSchemaValueControl(field)}
+                    {schemaFieldErrors[field.id] ? (
+                      <p className="v2InspectorDataError">{schemaFieldErrors[field.id]}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+
+              <div className="v2InspectorSubsectionHeader">
+                <h4>Extra data</h4>
+              </div>
+              {dataDraft.length === 0 ? (
+                <p className="v2InspectorEmpty">No extra data</p>
+              ) : (
+                <div className="v2InspectorDataEditor">
+                  {dataDraft.map((field) => (
+                    <div key={field.id} className="v2InspectorDataRow">
+                      <div className="v2InspectorDataRowGrid">
+                        <input
+                          className="v2InspectorDataKeyInput"
+                          value={field.key}
+                          placeholder="key"
+                          onChange={(event) => updateDataField(field.id, { key: event.target.value })}
+                        />
+                        <select
+                          className="v2InspectorDataTypeSelect"
+                          value={field.type}
+                          onChange={(event) =>
+                            updateDataField(field.id, { type: event.target.value as DataFieldType })
+                          }
+                        >
+                          <option value="text">text</option>
+                          <option value="number">number</option>
+                          <option value="boolean">boolean</option>
+                          <option value="json">json</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="v2InspectorDataDeleteButton"
+                          aria-label="Delete extra connector data field"
+                          onClick={() => deleteDataField(field.id)}
+                        >
+                          <Trash2 size={14} strokeWidth={2.1} />
+                        </button>
+                      </div>
+                      {renderValueControl(field)}
+                      {dataFieldErrors[field.id] ? (
+                        <p className="v2InspectorDataError">{dataFieldErrors[field.id]}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="v2InspectorDataFooter">
+                <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
+                  {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
+                </span>
+                <div className="v2InspectorEditActions">
+                  <button type="button" disabled={!dataDirty} onClick={cancelData}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="v2InspectorPrimaryAction"
+                    disabled={!dataDirty || saveStatus === "saving"}
+                    onClick={() => void saveData()}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : !isDataEditing ? (
             connectionDataEntries.length === 0 ? (
               <p className="v2InspectorEmpty">No relationship data</p>
             ) : (
@@ -420,7 +637,7 @@ export function V2ConnectorInspector({
               ))}
             </div>
           )}
-          {isDataEditing ? (
+          {!hasSchemaFields && isDataEditing ? (
             <div className="v2InspectorDataFooter">
               <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
                 {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
