@@ -1718,11 +1718,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         <MiniMap
           className="v2BoardMiniMap"
           position="bottom-left"
-          style={{
-            border: "1px solid var(--yd-border-default)",
-            borderRadius: 8,
-            overflow: "hidden",
-          }}
           nodeColor={(node) => getMiniMapNodeColor(node as V2CardNode)}
           maskColor="rgba(0,0,0,0.08)"
         />
