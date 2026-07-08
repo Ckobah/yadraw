@@ -22,6 +22,7 @@ import { V2ConnectorFilesSection } from "./v2-connector-files-section";
 type V2ConnectorInspectorProps = {
   connection: V2Connection;
   connectionType: V2ConnectionType | null;
+  connectionTypes: V2ConnectionType[];
   sourceCard: V2Card | null;
   targetCard: V2Card | null;
   saveStatus: SaveStatus;
@@ -30,6 +31,7 @@ type V2ConnectorInspectorProps = {
     patch: {
       title?: string | null;
       description?: string | null;
+      connectionTypeId?: string | null;
       data?: Record<string, unknown>;
     }
   ) => Promise<void>;
@@ -68,6 +70,7 @@ function formatDataValue(value: unknown): string {
 export function V2ConnectorInspector({
   connection,
   connectionType,
+  connectionTypes,
   sourceCard,
   targetCard,
   saveStatus,
@@ -79,10 +82,28 @@ export function V2ConnectorInspector({
   const [titleDraft, setTitleDraft] = useState(connection.title ?? "");
   const [descriptionDraft, setDescriptionDraft] = useState(connection.description ?? "");
   const [basicError, setBasicError] = useState<string | null>(null);
+  const [typeError, setTypeError] = useState<string | null>(null);
+  const [isTypeSaving, setIsTypeSaving] = useState(false);
   const schemaFields = useMemo(
     () => connectionType?.schema?.fields ?? [],
     [connectionType]
   );
+  const sortedConnectionTypes = useMemo(
+    () => [...connectionTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+    [connectionTypes]
+  );
+  const connectionTypeIds = useMemo(
+    () => new Set(connectionTypes.map((item) => item.id)),
+    [connectionTypes]
+  );
+  const genericConnectionType = useMemo(
+    () => connectionTypes.find((item) => item.key === "generic") ?? null,
+    [connectionTypes]
+  );
+  const selectedConnectionTypeValue =
+    connection.connectionTypeId && connectionTypeIds.has(connection.connectionTypeId)
+      ? connection.connectionTypeId
+      : genericConnectionType?.id ?? "";
   const hasSchemaFields = schemaFields.length > 0;
   const { schemaKeys, extraData } = splitSchemaAndExtraData(schemaFields, connection.data);
   const dataRecordForDraft = hasSchemaFields ? extraData : connection.data;
@@ -128,6 +149,7 @@ export function V2ConnectorInspector({
     setTitleDraft(connection.title ?? "");
     setDescriptionDraft(connection.description ?? "");
     setBasicError(null);
+    setTypeError(null);
     const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
     setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
     setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
@@ -153,6 +175,31 @@ export function V2ConnectorInspector({
     setTitleDraft(connection.title ?? "");
     setDescriptionDraft(connection.description ?? "");
     setBasicError(null);
+  }
+
+  async function updateConnectionTypeSelection(connectionTypeId: string) {
+    if (!connectionTypeId) {
+      setTypeError("Select a connection type.");
+      return;
+    }
+    if (!connectionTypeIds.has(connectionTypeId)) {
+      setTypeError("Connection type is not available.");
+      return;
+    }
+    if (connectionTypeId === connection.connectionTypeId) {
+      setTypeError(null);
+      return;
+    }
+
+    setIsTypeSaving(true);
+    setTypeError(null);
+    try {
+      await onUpdateConnection(connection.id, { connectionTypeId });
+    } catch {
+      setTypeError("Could not update connection type.");
+    } finally {
+      setIsTypeSaving(false);
+    }
   }
 
   function updateDataField(
@@ -478,17 +525,53 @@ export function V2ConnectorInspector({
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
             <div>
+              <h3>Connection type</h3>
+              <span>Choose which relationship schema this connector uses.</span>
+            </div>
+            <button
+              type="button"
+              className="v2InspectorAttachButton"
+              onClick={() => onManageConnectionType(connectionType?.id ?? (selectedConnectionTypeValue || null))}
+            >
+              Manage type
+            </button>
+          </div>
+          <label className="v2ConnectorTypeSelector">
+            <span>Type</span>
+            <select
+              className="v2InspectorDataValue"
+              value={selectedConnectionTypeValue}
+              disabled={isTypeSaving || sortedConnectionTypes.length === 0}
+              onChange={(event) => void updateConnectionTypeSelection(event.target.value)}
+            >
+              {connection.connectionTypeId && !connectionTypeIds.has(connection.connectionTypeId) ? (
+                <option value="">Missing type</option>
+              ) : null}
+              {sortedConnectionTypes.length === 0 ? (
+                <option value="">No connection types available</option>
+              ) : null}
+              {sortedConnectionTypes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ({item.key})
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className={typeError ? "v2InspectorDataError" : "v2ConnectorTypeHint"}>
+            {typeError ??
+              (isTypeSaving
+                ? "Saving type..."
+                : "Retyping preserves connector data, files, route, and visual style.")}
+          </p>
+        </section>
+
+        <section className="v2InspectorSection">
+          <div className="v2InspectorSectionHeader">
+            <div>
               <h3>{hasSchemaFields ? "Relationship fields" : "Relationship data"}</h3>
               <span>{connectionType?.name ?? "Generic"} type</span>
             </div>
             <div className="v2InspectorSectionActions">
-              <button
-                type="button"
-                className="v2InspectorAttachButton"
-                onClick={() => onManageConnectionType(connectionType?.id ?? null)}
-              >
-                Manage type
-              </button>
               {hasSchemaFields || isDataEditing ? (
                 <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
                   <Plus size={14} strokeWidth={2.2} />

@@ -500,6 +500,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       null
     );
   }, [connectionTypes, selectedConnection]);
+  const genericConnectionType = useMemo(
+    () => connectionTypes.find((connectionType) => connectionType.key === "generic") ?? null,
+    [connectionTypes]
+  );
   const assistantCards = useMemo(
     () => nodes.map((node) => node.data.card),
     [nodes]
@@ -1167,6 +1171,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       patch: {
         title?: string | null;
         description?: string | null;
+        connectionTypeId?: string | null;
         sourceCardId?: string;
         targetCardId?: string;
         sourcePortKey?: string;
@@ -1181,6 +1186,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         ...previous,
         ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
         ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
+        ...(patch.connectionTypeId !== undefined ? { connectionTypeId: patch.connectionTypeId } : {}),
         ...(patch.sourceCardId !== undefined ? { sourceCardId: patch.sourceCardId } : {}),
         ...(patch.targetCardId !== undefined ? { targetCardId: patch.targetCardId } : {}),
         ...(patch.sourcePortKey !== undefined ? { sourcePortKey: patch.sourcePortKey } : {}),
@@ -1342,6 +1348,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           };
       const createInput = {
         ...connectionInput,
+        connectionTypeId: genericConnectionType?.id ?? null,
         type: "data",
         label: connectionInput.sourcePortKey,
       };
@@ -1388,7 +1395,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         pendingConnectionKeysRef.current.delete(endpointKey);
       }
     },
-    [board.id, cardTypeMap, setEdges]
+    [board.id, cardTypeMap, genericConnectionType?.id, setEdges]
   );
 
   const handleReconnect = useCallback<OnReconnect>(
@@ -1771,6 +1778,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         <V2ConnectorInspector
           connection={selectedConnection}
           connectionType={selectedConnectionType}
+          connectionTypes={connectionTypes}
           sourceCard={cardById.get(selectedConnection.sourceCardId) ?? null}
           targetCard={cardById.get(selectedConnection.targetCardId) ?? null}
           saveStatus={saveStatus}
