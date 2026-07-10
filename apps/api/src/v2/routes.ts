@@ -78,6 +78,18 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.delete("/v2/boards/:boardId/card-types/:cardTypeId", async (request, reply) => {
+    try {
+      const { boardId, cardTypeId } = request.params as {
+        boardId: string;
+        cardTypeId: string;
+      };
+      return await service.deleteCardType(request.requestContext, boardId, cardTypeId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/boards/:boardId/connection-types", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

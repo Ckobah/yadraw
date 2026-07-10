@@ -72,6 +72,11 @@ export type V2CreateConnectionTypeRecordInput = {
   defaultVisualStyle: V2ConnectionType["defaultVisualStyle"];
 };
 
+export type V2DeleteCardTypeResult =
+  | { status: "deleted"; cardCount: 0 }
+  | { status: "in_use"; cardCount: number }
+  | { status: "not_found"; cardCount: 0 };
+
 export type V2UpdateConnectionTypeInput = {
   key?: string;
   name?: string;
@@ -149,6 +154,7 @@ export type V2Repository = {
   createCardType?(input: V2CreateCardTypeRecordInput): Promise<V2CardType>;
   updateCardType?(cardTypeId: string, input: V2UpdateCardTypeInput): Promise<V2CardType | null>;
   updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
+  deleteCardType?(cardTypeId: string): Promise<V2DeleteCardTypeResult>;
   getCard(cardId: string): Promise<V2Card | null>;
   createCard(input: V2CreateCardRecordInput): Promise<V2Card>;
   duplicateCard?(cardId: string): Promise<V2Card | null>;
@@ -966,6 +972,20 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       });
       state.cardTypes[index] = updated;
       return cloneJson(updated);
+    },
+
+    async deleteCardType(cardTypeId) {
+      if (deletedCardTypeIds.has(cardTypeId)) {
+        return { status: "not_found", cardCount: 0 };
+      }
+      const existing = state.cardTypes.find((cardType) => cardType.id === cardTypeId);
+      if (!existing) return { status: "not_found", cardCount: 0 };
+
+      const cardCount = activeCards().filter((card) => card.cardTypeId === cardTypeId).length;
+      if (cardCount > 0) return { status: "in_use", cardCount };
+
+      deletedCardTypeIds.add(cardTypeId);
+      return { status: "deleted", cardCount: 0 };
     },
 
     async getCard(cardId) {
@@ -1893,6 +1913,60 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
 
       const ports = await loadPortsForCardTypes([cardTypeId]);
       return cardTypeFromRow(row, ports.get(cardTypeId) ?? []);
+    },
+
+    async deleteCardType(cardTypeId) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const typeResult = await client.query(
+          `
+            select id
+            from card_types
+            where id = $1
+              and deleted_at is null
+            for update
+          `,
+          [cardTypeId]
+        );
+        if (!typeResult.rows[0]) {
+          await client.query("rollback");
+          return { status: "not_found", cardCount: 0 };
+        }
+
+        const countResult = await client.query(
+          `
+            select count(*)::int as card_count
+            from cards
+            where card_type_id = $1
+              and deleted_at is null
+          `,
+          [cardTypeId]
+        );
+        const cardCount = Number(countResult.rows[0]?.card_count ?? 0);
+        if (cardCount > 0) {
+          await client.query("rollback");
+          return { status: "in_use", cardCount };
+        }
+
+        await client.query(
+          `
+            update card_types
+            set deleted_at = now(),
+                updated_at = now()
+            where id = $1
+              and deleted_at is null
+          `,
+          [cardTypeId]
+        );
+        await client.query("commit");
+        return { status: "deleted", cardCount: 0 };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async getCard(cardId) {

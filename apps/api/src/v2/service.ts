@@ -85,6 +85,11 @@ export type V2BoardService = {
     cardTypeId: string,
     input: V2UpdateCardTypeSchemaRequest
   ): Promise<V2CardType>;
+  deleteCardType(
+    context: RequestContext,
+    boardId: string,
+    cardTypeId: string
+  ): Promise<{ deleted: true; id: string }>;
   listConnectionTypes(context: RequestContext, boardId: string): Promise<{ connectionTypes: V2ConnectionType[] }>;
   createConnectionType(
     context: RequestContext,
@@ -371,15 +376,24 @@ export function createV2BoardService(
     }): Promise<V2CardType>;
     updateCardType(cardTypeId: string, input: V2UpdateCardTypeRequest): Promise<V2CardType | null>;
     updateCardTypeSchema(cardTypeId: string, schema: V2CardType["schema"]): Promise<V2CardType | null>;
+    deleteCardType(
+      cardTypeId: string
+    ): ReturnType<NonNullable<V2Repository["deleteCardType"]>>;
   } {
-    if (!repository.createCardType || !repository.updateCardType || !repository.updateCardTypeSchema) {
+    if (
+      !repository.createCardType ||
+      !repository.updateCardType ||
+      !repository.updateCardTypeSchema ||
+      !repository.deleteCardType
+    ) {
       throw new V2ServiceError("conflict", "V2 card type schema repository is not available");
     }
 
     return {
       createCardType: repository.createCardType.bind(repository),
       updateCardType: repository.updateCardType.bind(repository),
-      updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository)
+      updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository),
+      deleteCardType: repository.deleteCardType.bind(repository)
     };
   }
 
@@ -597,6 +611,31 @@ export function createV2BoardService(
       }
 
       return updated;
+    },
+
+    async deleteCardType(context, boardId, cardTypeId) {
+      const board = await requireBoardForAccess(context, boardId, "write");
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType) {
+        notFound("Card type not found");
+      }
+      if (cardType.workspaceId !== board.workspaceId) {
+        validationFailed("Card type does not belong to the board workspace");
+      }
+
+      const result = await requireCardTypeSchemaRepository().deleteCardType(cardType.id);
+      if (result.status === "not_found") {
+        notFound("Card type not found");
+      }
+      if (result.status === "in_use") {
+        conflict(
+          `Cannot delete this type because it is used by ${result.cardCount} ${
+            result.cardCount === 1 ? "card" : "cards"
+          }. Delete or retype those cards first.`
+        );
+      }
+
+      return { deleted: true, id: cardType.id };
     },
 
     async listConnectionTypes(context, boardId) {

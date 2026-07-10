@@ -460,6 +460,8 @@ export const v2UpdateCardTypeParamsSchema = z.object({
   cardTypeId: v2UuidSchema
 });
 
+export const v2DeleteCardTypeParamsSchema = v2UpdateCardTypeParamsSchema;
+
 export const v2UpdateCardTypeBodySchema = z
   .object({
     key: z.string().trim().regex(/^[a-z][a-z0-9_]*$/).optional(),
@@ -670,6 +672,12 @@ export const v2ApiContracts = {
     params: v2UpdateCardTypeSchemaParamsSchema,
     body: v2UpdateCardTypeSchemaBodySchema,
     response: v2CardTypeSchema
+  },
+  deleteCardType: {
+    method: "DELETE",
+    path: "/v2/boards/{boardId}/card-types/{cardTypeId}",
+    params: v2DeleteCardTypeParamsSchema,
+    response: z.object({ deleted: z.literal(true), id: v2UuidSchema })
   },
   listConnectionTypes: {
     method: "GET",

@@ -5130,7 +5130,24 @@ button:disabled {
 }
 
 .v2CardTypeManagerActions {
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+
+.v2CardTypeManagerSaveActions {
+  display: flex;
+  gap: 6px;
+}
+
+.v2InspectorEditActions .v2CardTypeManagerDeleteAction {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b42318;
+}
+
+.v2InspectorEditActions .v2CardTypeManagerDeleteAction:hover:not(:disabled),
+.v2InspectorEditActions .v2CardTypeManagerDeleteAction:focus-visible:not(:disabled) {
+  border-color: #f97066;
+  background: #fff1f0;
 }
 
 .v2CardTypeSchemaEditor {

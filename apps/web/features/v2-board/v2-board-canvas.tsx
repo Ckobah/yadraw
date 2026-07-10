@@ -47,6 +47,7 @@ import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
   createV2CardType,
+  deleteV2CardType,
   createV2ConnectionType,
   createV2Card,
   updateV2CardPosition,
@@ -1002,6 +1003,22 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [applyCardTypeToState, board.id]
   );
 
+  const handleDeleteCardType = useCallback(
+    async (cardTypeId: string) => {
+      setSaveStatus("saving");
+      try {
+        await deleteV2CardType(board.id, cardTypeId);
+        setCardTypes((current) => current.filter((cardType) => cardType.id !== cardTypeId));
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error("Failed to delete card type:", error);
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [board.id]
+  );
+
   const handleCreateConnectionType = useCallback(
     async (input: Parameters<typeof createV2ConnectionType>[1]) => {
       setSaveStatus("saving");
@@ -1799,6 +1816,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           initialCardTypeId={cardTypeManagerInitialId}
           onCreateCardType={handleCreateCardType}
           onUpdateCardType={handleUpdateCardType}
+          onDeleteCardType={handleDeleteCardType}
           onClose={() => setIsCardTypeManagerOpen(false)}
         />
       ) : null}

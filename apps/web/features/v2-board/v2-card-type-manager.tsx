@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, Plus, Save, X } from "lucide-react";
+import { Check, Plus, Save, Trash2, X } from "lucide-react";
 import type {
   V2CardType,
   V2CreateCardTypeRequest,
@@ -41,6 +41,7 @@ type V2CardTypeManagerProps = {
     cardTypeId: string,
     input: V2UpdateCardTypeRequest
   ) => Promise<V2CardType>;
+  onDeleteCardType: (cardTypeId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -138,6 +139,7 @@ export function V2CardTypeManager({
   initialCardTypeId,
   onCreateCardType,
   onUpdateCardType,
+  onDeleteCardType,
   onClose,
 }: V2CardTypeManagerProps) {
   const sortedCardTypes = useMemo(
@@ -156,6 +158,18 @@ export function V2CardTypeManager({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  function actionErrorMessage(actionError: unknown, fallback: string): string {
+    if (typeof actionError !== "object" || actionError === null) return fallback;
+    const body = "body" in actionError ? actionError.body : null;
+    if (typeof body !== "object" || body === null || !("error" in body)) return fallback;
+    const apiError = body.error;
+    if (typeof apiError !== "object" || apiError === null || !("message" in apiError)) {
+      return fallback;
+    }
+    return typeof apiError.message === "string" ? apiError.message : fallback;
+  }
 
   useEffect(() => {
     if (mode !== "existing" || !selectedCardTypeId) return;
@@ -286,6 +300,36 @@ export function V2CardTypeManager({
     }
   }
 
+  async function deleteDraft() {
+    if (mode !== "existing" || !draft.id || isSaving || isDeleting) return;
+    const confirmed = window.confirm(
+      `Delete card type "${draft.name.trim() || draft.key.trim()}"?\nThis cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await onDeleteCardType(draft.id);
+      const nextType = sortedCardTypes.find((cardType) => cardType.id !== draft.id) ?? null;
+      if (nextType) {
+        setMode("existing");
+        setSelectedCardTypeId(nextType.id);
+        setDraft(draftFromCardType(nextType));
+      } else {
+        setMode("new");
+        setSelectedCardTypeId(null);
+        setDraft(emptyDraft());
+      }
+      setMessage("Card type deleted.");
+    } catch (actionError) {
+      setError(actionErrorMessage(actionError, "Could not delete card type."));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div
       className="v2ModalOverlay"
@@ -379,7 +423,7 @@ export function V2CardTypeManager({
                     className="v2InspectorDataValue"
                     value={draft.key}
                     placeholder="supplier"
-                    disabled={isSaving}
+                    disabled={isSaving || isDeleting}
                     onChange={(event) => updateDraft({ key: event.target.value })}
                   />
                 </label>
@@ -389,7 +433,7 @@ export function V2CardTypeManager({
                     className="v2InspectorDataValue"
                     value={draft.name}
                     placeholder="Supplier"
-                    disabled={isSaving}
+                    disabled={isSaving || isDeleting}
                     onChange={(event) => updateDraft({ name: event.target.value })}
                   />
                 </label>
@@ -400,7 +444,7 @@ export function V2CardTypeManager({
                   className="v2InspectorDataValue"
                   value={draft.description}
                   placeholder="What this card type represents"
-                  disabled={isSaving}
+                  disabled={isSaving || isDeleting}
                   rows={3}
                   onChange={(event) => updateDraft({ description: event.target.value })}
                 />
@@ -409,7 +453,7 @@ export function V2CardTypeManager({
 
             <V2CardTypeSchemaEditor
               fields={draft.fields}
-              disabled={isSaving}
+              disabled={isSaving || isDeleting}
               onChange={(fields) => updateDraft({ fields })}
             />
 
@@ -429,7 +473,7 @@ export function V2CardTypeManager({
                           className={`v2CardTypeAccentOption${
                             isSelected ? " v2CardTypeAccentOptionActive" : ""
                           }`}
-                          disabled={isSaving}
+                          disabled={isSaving || isDeleting}
                           style={{
                             ["--v2-accent-option-solid" as string]: `var(--yd-accent-${option.key}-solid)`,
                             ["--v2-accent-option-soft" as string]: `var(--yd-accent-${option.key}-soft)`,
@@ -458,7 +502,7 @@ export function V2CardTypeManager({
                           className={`v2CardTypeIconOption${
                             isSelected ? " v2CardTypeIconOptionActive" : ""
                           }`}
-                          disabled={isSaving}
+                          disabled={isSaving || isDeleting}
                           aria-pressed={isSelected}
                           title={option.label}
                           onClick={() => updateDraft({ iconKey: option.key })}
@@ -481,7 +525,7 @@ export function V2CardTypeManager({
                   <input
                     type="checkbox"
                     checked={draft.hasInputPort}
-                    disabled={isSaving}
+                    disabled={isSaving || isDeleting}
                     onChange={(event) => updateDraft({ hasInputPort: event.target.checked })}
                   />
                   <span>Input port</span>
@@ -490,7 +534,7 @@ export function V2CardTypeManager({
                   <input
                     type="checkbox"
                     checked={draft.hasOutputPort}
-                    disabled={isSaving}
+                    disabled={isSaving || isDeleting}
                     onChange={(event) => updateDraft({ hasOutputPort: event.target.checked })}
                   />
                   <span>Output port</span>
@@ -502,18 +546,31 @@ export function V2CardTypeManager({
             {message ? <p className="v2CardTypeManagerSuccess">{message}</p> : null}
 
             <div className="v2InspectorEditActions v2CardTypeManagerActions">
-              <button type="button" onClick={resetDraft} disabled={isSaving}>
-                Cancel changes
-              </button>
-              <button
-                type="button"
-                className="v2InspectorPrimaryAction"
-                onClick={() => void saveDraft()}
-                disabled={isSaving}
-              >
-                <Save size={13} strokeWidth={2.2} />
-                <span>{isSaving ? "Saving..." : "Save card type"}</span>
-              </button>
+              {mode === "existing" ? (
+                <button
+                  type="button"
+                  className="v2CardTypeManagerDeleteAction"
+                  onClick={() => void deleteDraft()}
+                  disabled={isSaving || isDeleting}
+                >
+                  <Trash2 size={13} strokeWidth={2.2} />
+                  <span>{isDeleting ? "Deleting..." : "Delete type"}</span>
+                </button>
+              ) : <span />}
+              <div className="v2CardTypeManagerSaveActions">
+                <button type="button" onClick={resetDraft} disabled={isSaving || isDeleting}>
+                  Cancel changes
+                </button>
+                <button
+                  type="button"
+                  className="v2InspectorPrimaryAction"
+                  onClick={() => void saveDraft()}
+                  disabled={isSaving || isDeleting}
+                >
+                  <Save size={13} strokeWidth={2.2} />
+                  <span>{isSaving ? "Saving..." : "Save card type"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

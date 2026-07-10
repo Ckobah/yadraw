@@ -268,6 +268,28 @@ export async function updateV2CardTypeSchema(
   return response.json() as Promise<V2CardType>;
 }
 
+export async function deleteV2CardType(
+  boardId: string,
+  cardTypeId: string
+): Promise<void> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/card-types/${encodeURIComponent(cardTypeId)}`,
+    {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Card type deletion failed with ${response.status}`,
+      body
+    );
+  }
+}
+
 export async function createV2ConnectionType(
   boardId: string,
   input: V2CreateConnectionTypeRequest

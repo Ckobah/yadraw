@@ -617,4 +617,58 @@ describe("v2 card type schema API", () => {
 
     await server.close();
   });
+
+  it("soft-deletes an unused card type without mutating board entities", async () => {
+    const { server, seed, repository } = createSchemaServer();
+    const createdResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/card-types`,
+      payload: { key: "unused", name: "Unused" }
+    });
+    const createdType = createdResponse.json();
+    const before = await repository.getBoardDetail(seed.board.id);
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/v2/boards/${seed.board.id}/card-types/${createdType.id}`
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ deleted: true, id: createdType.id });
+    const after = await repository.getBoardDetail(seed.board.id);
+    expect(after!.cardTypes.some((cardType) => cardType.id === createdType.id)).toBe(false);
+    expect(after!.cards).toEqual(before!.cards);
+    expect(after!.connections).toEqual(before!.connections);
+    expect(await repository.listLinkedFieldBindings?.(seed.board.id)).toEqual([]);
+
+    const secondResponse = await server.inject({
+      method: "DELETE",
+      url: `/v2/boards/${seed.board.id}/card-types/${createdType.id}`
+    });
+    expect(secondResponse.statusCode).toBe(404);
+
+    await server.close();
+  });
+
+  it("blocks deletion of a card type used by active cards", async () => {
+    const { server, seed, repository } = createSchemaServer();
+    const cardType = seed.cardTypes[0]!;
+    const before = await repository.getBoardDetail(seed.board.id);
+
+    const response = await server.inject({
+      method: "DELETE",
+      url: `/v2/boards/${seed.board.id}/card-types/${cardType.id}`
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: {
+        code: "conflict",
+        message: expect.stringContaining("used by")
+      }
+    });
+    expect(await repository.getBoardDetail(seed.board.id)).toEqual(before);
+
+    await server.close();
+  });
 });
