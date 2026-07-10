@@ -50,7 +50,8 @@ export const v2ConnectorSlotSchema = z.object({
   type: v2ConnectorSlotTypeSchema,
   side: v2ConnectorSlotSideSchema,
   offset: z.number().min(0).max(1),
-  label: z.string().optional()
+  label: z.string().optional(),
+  showLabel: z.boolean().optional()
 });
 
 export const v2CardVisualStyleSchema = z.object({

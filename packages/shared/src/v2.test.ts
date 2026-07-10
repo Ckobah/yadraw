@@ -470,6 +470,50 @@ describe("v2 API contracts", () => {
     });
   });
 
+  it("accepts connector slot labels as visual metadata", () => {
+    expect(
+      v2CardVisualStyleSchema.parse({
+        connectorSlots: [
+          {
+            id: "slot-output",
+            type: "output",
+            side: "right",
+            offset: 0.5,
+            label: "Approved orders",
+            showLabel: true
+          },
+          {
+            id: "slot-input",
+            type: "input",
+            side: "left",
+            offset: 0.5,
+            label: "",
+            showLabel: false
+          }
+        ]
+      })
+    ).toEqual({
+      connectorSlots: [
+        {
+          id: "slot-output",
+          type: "output",
+          side: "right",
+          offset: 0.5,
+          label: "Approved orders",
+          showLabel: true
+        },
+        {
+          id: "slot-input",
+          type: "input",
+          side: "left",
+          offset: 0.5,
+          label: "",
+          showLabel: false
+        }
+      ]
+    });
+  });
+
   it("accepts connection endpoint retarget updates", () => {
     expect(
       v2UpdateConnectionBodySchema.parse({

@@ -11,6 +11,7 @@ export type V2ConnectorSlot = {
   side: V2ConnectorSlotSide;
   offset: number;
   label?: string;
+  showLabel?: boolean;
 };
 
 export type V2PersistedConnectorSlot = Omit<V2ConnectorSlot, "portKey">;
@@ -84,6 +85,7 @@ export function buildV2ConnectorSlotsFromPorts(
       side: getFallbackSlotSide(type),
       offset: 0.5,
       label: port.label,
+      showLabel: false,
     } satisfies V2ConnectorSlot;
   });
 
@@ -113,6 +115,7 @@ export function toPersistedV2ConnectorSlot(
     side: slot.side,
     offset: clampEditableSlotOffset(slot.offset),
     ...(slot.label !== undefined ? { label: slot.label } : {}),
+    ...(slot.showLabel !== undefined ? { showLabel: slot.showLabel } : {}),
   };
 }
 
@@ -151,6 +154,9 @@ export function validateV2ConnectorSlots(
     if (slot.label !== undefined && typeof slot.label !== "string") {
       return { ok: false, message: `Connector slot "${id}" has an invalid label.` };
     }
+    if (slot.showLabel !== undefined && typeof slot.showLabel !== "boolean") {
+      return { ok: false, message: `Connector slot "${id}" has invalid label visibility.` };
+    }
   }
 
   return {
@@ -163,6 +169,7 @@ export function validateV2ConnectorSlots(
         side: slot.side,
         offset: clampEditableSlotOffset(slot.offset),
         ...(label ? { label } : {}),
+        ...(slot.showLabel !== undefined ? { showLabel: slot.showLabel } : {}),
       };
     }),
   };
@@ -197,6 +204,7 @@ function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
   if (!VALID_SLOT_TYPES.has(type) || !VALID_SLOT_SIDES.has(side)) return null;
 
   const label = typeof value.label === "string" ? value.label : undefined;
+  const showLabel = typeof value.showLabel === "boolean" ? value.showLabel : undefined;
 
   return {
     id,
@@ -204,7 +212,8 @@ function sanitizeSavedConnectorSlot(value: unknown): V2ConnectorSlot | null {
     type,
     side,
     offset: clampEditableSlotOffset(value.offset),
-    ...(label !== undefined ? { label } : {})
+    ...(label !== undefined ? { label } : {}),
+    ...(showLabel !== undefined ? { showLabel } : {})
   };
 }
 
