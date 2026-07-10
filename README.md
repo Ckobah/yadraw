@@ -52,11 +52,12 @@ Implemented in the v2 foundation:
 - v2 service layer with validation
 - unit tests for contracts and service behavior
 - optional PostgreSQL integration test
+- Supabase email/password authentication and server-side session validation
+- personal workspaces, dashboard, and account-scoped board access
 
 Still intentionally out of scope for the v2 foundation:
 
-- authentication
-- workspace membership and roles
+- workspace invitations and role management UI
 - file uploads
 - AI assistant
 - embeddings and semantic search
@@ -144,7 +145,13 @@ YADRAW_STORAGE=postgres
 DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
 DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
 DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
+
+Enable email/password authentication in Supabase and allow
+`http://127.0.0.1:3000/auth/callback` as a redirect URL. Apply all v2 migrations,
+including `012_users_and_workspace_ownership.sql`, before starting the app.
 
 If `YADRAW_STORAGE=postgres` is selected and PostgreSQL is unavailable, the API fails at startup instead of silently switching to memory storage.
 
@@ -231,9 +238,9 @@ Implemented baseline protections include:
 - parameterized SQL queries
 - `.env` excluded from Git
 
-Authentication and workspace authorization are still planned work.
-
-The prototype/core API already includes a development user context and minimal workspace role checks. A real auth provider, secure sessions, invites, and production permission policy are still planned work.
+The v2 web app validates Supabase sessions server-side and forwards the verified user
+identity to the API. Workspace membership is enforced for board and file access.
+Invitations and a production role-management UI are still planned work.
 
 ### Roadmap
 
@@ -248,7 +255,7 @@ Near-term v2 work:
 
 Later work:
 
-- authentication and roles
+- invitations and role management
 - undo/redo
 - files and attachments
 - search
@@ -391,7 +398,14 @@ YADRAW_STORAGE=postgres
 DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
 DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
 DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
+
+В Supabase нужно включить вход по email/password и добавить
+`http://127.0.0.1:3000/auth/callback` в список разрешённых redirect URL. Перед
+запуском примените все v2-миграции, включая
+`012_users_and_workspace_ownership.sql`.
 
 Если выбран `YADRAW_STORAGE=postgres`, а PostgreSQL недоступен, API завершает старт с ошибкой и не переключается в память молча.
 

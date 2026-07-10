@@ -432,6 +432,62 @@ export const v2BoardDetailSchema = z.object({
   connections: z.array(v2ConnectionSchema)
 });
 
+export const v2UserSummarySchema = z.object({
+  id: v2UuidSchema,
+  email: z.string().email(),
+  name: z.string(),
+  avatarUrl: z.string().url().nullable()
+});
+
+export const v2WorkspaceSummarySchema = z.object({
+  id: v2UuidSchema,
+  name: z.string().min(1),
+  slug: z.string().min(1),
+  role: v2WorkspaceRoleSchema,
+  updatedAt: v2TimestampSchema
+});
+
+export const v2BoardSummarySchema = z.object({
+  id: v2UuidSchema,
+  workspaceId: v2UuidSchema,
+  name: z.string().min(1),
+  updatedAt: v2TimestampSchema
+});
+
+export const v2ListWorkspacesResponseSchema = z.object({
+  workspaces: z.array(v2WorkspaceSummarySchema)
+});
+
+export const v2ListWorkspaceBoardsParamsSchema = z.object({
+  workspaceId: v2UuidSchema
+});
+
+export const v2ListWorkspaceBoardsResponseSchema = z.object({
+  boards: z.array(v2BoardSummarySchema)
+});
+
+export const v2CreateBoardBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120)
+  })
+  .strict();
+
+export const v2BootstrapSessionBodySchema = z
+  .object({
+    email: z.string().trim().toLowerCase().email(),
+    name: z.string().trim().max(160).default(""),
+    avatarUrl: z.string().url().nullable().default(null),
+    authProvider: z.literal("supabase")
+  })
+  .strict();
+
+export const v2BootstrapSessionResponseSchema = z.object({
+  created: z.boolean(),
+  user: v2UserSummarySchema,
+  workspace: v2WorkspaceSummarySchema,
+  board: v2BoardSummarySchema.nullable()
+});
+
 export const v2GetBoardParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -641,6 +697,30 @@ export const v2DryRunResultSchema = z.object({
 });
 
 export const v2ApiContracts = {
+  bootstrapSession: {
+    method: "POST",
+    path: "/v2/session/bootstrap",
+    body: v2BootstrapSessionBodySchema,
+    response: v2BootstrapSessionResponseSchema
+  },
+  listWorkspaces: {
+    method: "GET",
+    path: "/v2/workspaces",
+    response: v2ListWorkspacesResponseSchema
+  },
+  listWorkspaceBoards: {
+    method: "GET",
+    path: "/v2/workspaces/{workspaceId}/boards",
+    params: v2ListWorkspaceBoardsParamsSchema,
+    response: v2ListWorkspaceBoardsResponseSchema
+  },
+  createBoard: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/boards",
+    params: v2ListWorkspaceBoardsParamsSchema,
+    body: v2CreateBoardBodySchema,
+    response: v2BoardSummarySchema
+  },
   getBoard: {
     method: "GET",
     path: "/v2/boards/{boardId}",
@@ -841,6 +921,16 @@ export type V2LinkedFieldSourceMode = z.infer<typeof v2LinkedFieldSourceModeSche
 export type V2LinkedFieldDirection = z.infer<typeof v2LinkedFieldDirectionSchema>;
 export type V2LinkedFieldBinding = z.infer<typeof v2LinkedFieldBindingSchema>;
 export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
+export type V2UserSummary = z.infer<typeof v2UserSummarySchema>;
+export type V2WorkspaceSummary = z.infer<typeof v2WorkspaceSummarySchema>;
+export type V2BoardSummary = z.infer<typeof v2BoardSummarySchema>;
+export type V2ListWorkspacesResponse = z.infer<typeof v2ListWorkspacesResponseSchema>;
+export type V2ListWorkspaceBoardsResponse = z.infer<typeof v2ListWorkspaceBoardsResponseSchema>;
+export type V2CreateBoardInput = z.infer<typeof v2CreateBoardBodySchema>;
+export type V2CreateBoardRequest = z.input<typeof v2CreateBoardBodySchema>;
+export type V2BootstrapSessionInput = z.infer<typeof v2BootstrapSessionBodySchema>;
+export type V2BootstrapSessionRequest = z.input<typeof v2BootstrapSessionBodySchema>;
+export type V2BootstrapSessionResponse = z.infer<typeof v2BootstrapSessionResponseSchema>;
 export type V2CreateCardTypeInput = z.infer<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeInput = z.infer<typeof v2UpdateCardTypeBodySchema>;
 export type V2CreateConnectionTypeInput = z.infer<typeof v2CreateConnectionTypeBodySchema>;

@@ -32,8 +32,8 @@ export function V2BoardPage({ boardDetail }: Props) {
             {connCount > 0 && ` · ${connCount} connection${connCount !== 1 ? "s" : ""}`}
           </span>
         </div>
-        <a href="/" className="v2BoardHomeLink">
-          Home
+        <a href="/v2/dashboard" className="v2BoardHomeLink">
+          Dashboard
         </a>
       </header>
 

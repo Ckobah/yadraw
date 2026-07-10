@@ -10,13 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.110.2",
     "@xyflow/react": "^12.10.0",
+    "@yadraw/shared": "file:../../packages/shared",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zustand": "^5.0.2",
-    "@yadraw/shared": "file:../../packages/shared"
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

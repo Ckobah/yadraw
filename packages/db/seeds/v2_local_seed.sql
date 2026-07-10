@@ -1,12 +1,45 @@
-insert into workspaces (id, name, slug)
+insert into users (id, email, name, auth_provider, auth_subject)
+values
+  (
+    '02f38bb1-0cde-4473-95ef-1d50db3467e4',
+    'owner@local.invalid',
+    'Local owner',
+    'legacy',
+    '02f38bb1-0cde-4473-95ef-1d50db3467e4'
+  ),
+  (
+    'bb7ef8c4-91fd-4f3a-86d2-fb760a532c45',
+    'editor@local.invalid',
+    'Local editor',
+    'legacy',
+    'bb7ef8c4-91fd-4f3a-86d2-fb760a532c45'
+  ),
+  (
+    '9f18a762-53e5-4922-9b0b-8f168921bb0f',
+    'viewer@local.invalid',
+    'Local viewer',
+    'legacy',
+    '9f18a762-53e5-4922-9b0b-8f168921bb0f'
+  )
+on conflict (id) do update
+set email = excluded.email,
+    name = excluded.name,
+    auth_provider = excluded.auth_provider,
+    auth_subject = excluded.auth_subject,
+    updated_at = now(),
+    deleted_at = null;
+
+insert into workspaces (id, name, slug, owner_user_id)
 values (
   '11111111-1111-4111-8111-111111111111',
   'Local Workspace',
-  'local-workspace'
+  'local-workspace',
+  '02f38bb1-0cde-4473-95ef-1d50db3467e4'
 )
 on conflict (id) do update
 set name = excluded.name,
     slug = excluded.slug,
+    owner_user_id = excluded.owner_user_id,
     updated_at = now(),
     deleted_at = null;
 

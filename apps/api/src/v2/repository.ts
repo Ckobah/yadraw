@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Pool, type QueryResultRow } from "pg";
+import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import {
   v2BoardDetailSchema,
   v2CardAttachmentSchema,
@@ -11,6 +11,8 @@ import {
   v2ConnectionSchema,
   v2LinkedFieldBindingSchema,
   type V2Board,
+  type V2BoardSummary,
+  type V2BootstrapSessionResponse,
   type V2BoardDetail,
   type V2CardAttachment,
   type V2Card,
@@ -36,6 +38,7 @@ import {
   type V2UpdateLinkedFieldBindingInput,
   type V2Viewport,
   type V2Workspace,
+  type V2WorkspaceSummary,
   type V2WorkspaceRole
 } from "@yadraw/shared";
 
@@ -137,6 +140,15 @@ export type V2FileDownloadRecord = {
   sizeBytes?: number | null;
 };
 
+export type V2BootstrapUserInput = {
+  userId: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  authProvider: "supabase";
+  demoBoardId: string;
+};
+
 export type V2Repository = {
   close?(): Promise<void>;
   getWorkspaceRole(userId: string, workspaceId: string): Promise<V2WorkspaceRole | null>;
@@ -145,6 +157,10 @@ export type V2Repository = {
   getConnectionRole(userId: string, connectionId: string): Promise<V2WorkspaceRole | null>;
   getBoardDetail(boardId: string): Promise<V2BoardDetail | null>;
   getBoard(boardId: string): Promise<V2Board | null>;
+  bootstrapPersonalWorkspace?(input: V2BootstrapUserInput): Promise<V2BootstrapSessionResponse>;
+  listUserWorkspaces?(userId: string): Promise<V2WorkspaceSummary[]>;
+  listWorkspaceBoards?(workspaceId: string): Promise<V2BoardSummary[]>;
+  createBoard?(workspaceId: string, name: string): Promise<V2BoardSummary>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
   listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
@@ -296,6 +312,34 @@ function boardFromRow(row: QueryResultRow): V2Board {
     createdAt: toIso(row.board_created_at ?? row.created_at),
     updatedAt: toIso(row.board_updated_at ?? row.updated_at)
   };
+}
+
+function workspaceSummaryFromRow(row: QueryResultRow): V2WorkspaceSummary {
+  return {
+    id: String(row.workspace_id ?? row.id),
+    name: String(row.workspace_name ?? row.name),
+    slug: String(row.workspace_slug ?? row.slug),
+    role: row.role as V2WorkspaceRole,
+    updatedAt: toIso(row.workspace_updated_at ?? row.updated_at)
+  };
+}
+
+function boardSummaryFromRow(row: QueryResultRow): V2BoardSummary {
+  return {
+    id: String(row.board_id ?? row.id),
+    workspaceId: String(row.workspace_id),
+    name: String(row.board_name ?? row.name),
+    updatedAt: toIso(row.board_updated_at ?? row.updated_at)
+  };
+}
+
+function personalWorkspaceName(name: string, email: string): string {
+  const displayName = name.trim() || email.split("@")[0] || "Personal";
+  return `${displayName}'s workspace`;
+}
+
+function personalWorkspaceSlug(userId: string): string {
+  return `personal-${userId.replace(/-/g, "").slice(0, 20)}`;
 }
 
 function cardTypePortFromRow(row: QueryResultRow): V2CardTypePort {
@@ -1489,6 +1533,259 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     }
   }
 
+  async function findBootstrapResult(
+    client: PoolClient,
+    userId: string,
+    created: boolean
+  ): Promise<V2BootstrapSessionResponse | null> {
+    const result = await client.query(
+      `
+        select
+          u.id as user_id,
+          u.email,
+          u.name as user_name,
+          u.avatar_url,
+          w.id as workspace_id,
+          w.name as workspace_name,
+          w.slug as workspace_slug,
+          w.updated_at as workspace_updated_at,
+          wm.role,
+          b.id as board_id,
+          b.name as board_name,
+          b.updated_at as board_updated_at
+        from users u
+        join workspace_members wm
+          on wm.user_id = u.id
+          and wm.deleted_at is null
+        join workspaces w
+          on w.id = wm.workspace_id
+          and w.deleted_at is null
+        left join lateral (
+          select id, name, updated_at
+          from boards
+          where workspace_id = w.id
+            and deleted_at is null
+          order by updated_at desc, id asc
+          limit 1
+        ) b on true
+        where u.id = $1
+          and u.deleted_at is null
+          and w.slug = $2
+        order by wm.created_at asc, w.id asc
+        limit 1
+      `,
+      [userId, personalWorkspaceSlug(userId)]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+
+    return {
+      created,
+      user: {
+        id: String(row.user_id),
+        email: String(row.email),
+        name: String(row.user_name),
+        avatarUrl: row.avatar_url ? String(row.avatar_url) : null
+      },
+      workspace: workspaceSummaryFromRow(row),
+      board: row.board_id ? boardSummaryFromRow(row) : null
+    };
+  }
+
+  async function copyDemoBoard(
+    client: PoolClient,
+    demoBoardId: string,
+    workspaceId: string,
+    projectId: string,
+    boardId: string
+  ): Promise<void> {
+    const demoBoardResult = await client.query(
+      `select * from boards where id = $1 and deleted_at is null limit 1`,
+      [demoBoardId]
+    );
+    const demoBoard = demoBoardResult.rows[0];
+    if (!demoBoard) {
+      throw new Error(`Demo board ${demoBoardId} was not found`);
+    }
+
+    await client.query(
+      `
+        insert into boards (
+          id, workspace_id, project_id, name,
+          viewport_x, viewport_y, viewport_zoom
+        )
+        values ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        boardId,
+        workspaceId,
+        projectId,
+        "Demo board",
+        demoBoard.viewport_x,
+        demoBoard.viewport_y,
+        demoBoard.viewport_zoom
+      ]
+    );
+
+    const cardTypeMap = new Map<string, string>();
+    const cardTypes = await client.query(
+      `select * from card_types where workspace_id = $1 and deleted_at is null order by created_at, id`,
+      [demoBoard.workspace_id]
+    );
+    for (const row of cardTypes.rows) {
+      const newId = randomUUID();
+      cardTypeMap.set(String(row.id), newId);
+      await client.query(
+        `
+          insert into card_types (
+            id, workspace_id, key, name, description, default_data,
+            schema, default_width, default_height, default_visual_style
+          )
+          values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8, $9, $10::jsonb)
+        `,
+        [
+          newId,
+          workspaceId,
+          row.key,
+          row.name,
+          row.description,
+          JSON.stringify(row.default_data),
+          JSON.stringify(row.schema),
+          row.default_width,
+          row.default_height,
+          JSON.stringify(row.default_visual_style)
+        ]
+      );
+
+      const ports = await client.query(
+        `select * from card_type_ports where card_type_id = $1 and deleted_at is null order by sort_order, id`,
+        [row.id]
+      );
+      for (const port of ports.rows) {
+        await client.query(
+          `
+            insert into card_type_ports (
+              id, workspace_id, card_type_id, key, label,
+              direction, data_type, required, sort_order
+            )
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `,
+          [
+            randomUUID(), workspaceId, newId, port.key, port.label,
+            port.direction, port.data_type, port.required, port.sort_order
+          ]
+        );
+      }
+    }
+
+    const connectionTypeMap = new Map<string, string>();
+    const connectionTypes = await client.query(
+      `select * from connection_types where workspace_id = $1 and deleted_at is null order by created_at, id`,
+      [demoBoard.workspace_id]
+    );
+    for (const row of connectionTypes.rows) {
+      const newId = randomUUID();
+      connectionTypeMap.set(String(row.id), newId);
+      await client.query(
+        `
+          insert into connection_types (
+            id, workspace_id, key, name, description, schema, default_visual_style
+          )
+          values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+        `,
+        [
+          newId, workspaceId, row.key, row.name, row.description,
+          JSON.stringify(row.schema), JSON.stringify(row.default_visual_style)
+        ]
+      );
+    }
+
+    const cardMap = new Map<string, string>();
+    const cards = await client.query(
+      `select * from cards where board_id = $1 and deleted_at is null order by created_at, id`,
+      [demoBoardId]
+    );
+    for (const row of cards.rows) {
+      const newId = randomUUID();
+      const mappedTypeId = cardTypeMap.get(String(row.card_type_id));
+      if (!mappedTypeId) throw new Error("Demo card type mapping is incomplete");
+      cardMap.set(String(row.id), newId);
+      await client.query(
+        `
+          insert into cards (
+            id, workspace_id, board_id, card_type_id, title, description,
+            data, position_x, position_y, width, height, visual_style, status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13)
+        `,
+        [
+          newId, workspaceId, boardId, mappedTypeId, row.title, row.description,
+          JSON.stringify(row.data), row.position_x, row.position_y, row.width, row.height,
+          JSON.stringify(row.visual_style), row.status
+        ]
+      );
+    }
+
+    const connections = await client.query(
+      `select * from connections where board_id = $1 and deleted_at is null order by created_at, id`,
+      [demoBoardId]
+    );
+    for (const row of connections.rows) {
+      const sourceCardId = cardMap.get(String(row.source_card_id));
+      const targetCardId = cardMap.get(String(row.target_card_id));
+      if (!sourceCardId || !targetCardId) throw new Error("Demo connection card mapping is incomplete");
+      const connectionTypeId = row.connection_type_id
+        ? connectionTypeMap.get(String(row.connection_type_id)) ?? null
+        : null;
+      await client.query(
+        `
+          insert into connections (
+            id, workspace_id, board_id, connection_type_id,
+            source_card_id, target_card_id, source_port_key, target_port_key,
+            type, label, title, description, data, visual_style, status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15)
+        `,
+        [
+          randomUUID(), workspaceId, boardId, connectionTypeId,
+          sourceCardId, targetCardId, row.source_port_key, row.target_port_key,
+          row.type, row.label, row.title, row.description,
+          JSON.stringify(row.data), JSON.stringify(row.visual_style), row.status
+        ]
+      );
+    }
+
+    const bindings = await client.query(
+      `select * from v2_card_field_bindings where board_id = $1 and deleted_at is null and status = 'active'`,
+      [demoBoardId]
+    );
+    for (const row of bindings.rows) {
+      const targetCardId = cardMap.get(String(row.target_card_id));
+      const sourceCardId = row.source_card_id ? cardMap.get(String(row.source_card_id)) ?? null : null;
+      const sourceCardTypeId = row.source_card_type_id
+        ? cardTypeMap.get(String(row.source_card_type_id)) ?? null
+        : null;
+      if (!targetCardId || (row.source_card_id && !sourceCardId)) {
+        throw new Error("Demo linked field mapping is incomplete");
+      }
+      await client.query(
+        `
+          insert into v2_card_field_bindings (
+            id, workspace_id, board_id, target_card_id, target_field,
+            source_mode, connection_direction, source_card_id, source_card_type_id,
+            source_card_type_key, source_field_path, on_missing, on_multiple, status
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active')
+        `,
+        [
+          randomUUID(), workspaceId, boardId, targetCardId, row.target_field,
+          row.source_mode, row.connection_direction, sourceCardId, sourceCardTypeId,
+          row.source_card_type_key, row.source_field_path, row.on_missing, row.on_multiple
+        ]
+      );
+    }
+  }
+
   function roleFromRow(row: QueryResultRow | undefined): V2WorkspaceRole | null {
     return row?.role ? (String(row.role) as V2WorkspaceRole) : null;
   }
@@ -1496,6 +1793,154 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
   return {
     async close() {
       await pool.end();
+    },
+
+    async bootstrapPersonalWorkspace(input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(
+          `
+            insert into users (
+              id, email, name, avatar_url, auth_provider, auth_subject
+            )
+            values ($1, $2, $3, $4, $5, $6)
+            on conflict (id) do update
+            set email = excluded.email,
+                name = excluded.name,
+                avatar_url = excluded.avatar_url,
+                auth_provider = excluded.auth_provider,
+                auth_subject = excluded.auth_subject,
+                updated_at = now(),
+                deleted_at = null
+          `,
+          [
+            input.userId,
+            input.email.toLowerCase(),
+            input.name,
+            input.avatarUrl,
+            input.authProvider,
+            input.userId
+          ]
+        );
+        await client.query(`select id from users where id = $1 for update`, [input.userId]);
+
+        const existing = await findBootstrapResult(client, input.userId, false);
+        if (existing) {
+          await client.query("commit");
+          return existing;
+        }
+
+        const workspaceId = randomUUID();
+        const projectId = randomUUID();
+        const boardId = randomUUID();
+        await client.query(
+          `insert into workspaces (id, name, slug, owner_user_id) values ($1, $2, $3, $4)`,
+          [
+            workspaceId,
+            personalWorkspaceName(input.name, input.email),
+            personalWorkspaceSlug(input.userId),
+            input.userId
+          ]
+        );
+        await client.query(
+          `insert into workspace_members (workspace_id, user_id, role) values ($1, $2, 'owner')`,
+          [workspaceId, input.userId]
+        );
+        await client.query(
+          `insert into projects (id, workspace_id, name) values ($1, $2, $3)`,
+          [projectId, workspaceId, "Personal"]
+        );
+        await copyDemoBoard(client, input.demoBoardId, workspaceId, projectId, boardId);
+
+        const created = await findBootstrapResult(client, input.userId, true);
+        if (!created) throw new Error("Personal workspace bootstrap did not produce a result");
+        await client.query("commit");
+        return created;
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async listUserWorkspaces(userId) {
+      const result = await pool.query(
+        `
+          select
+            w.id as workspace_id,
+            w.name as workspace_name,
+            w.slug as workspace_slug,
+            w.updated_at as workspace_updated_at,
+            wm.role
+          from workspace_members wm
+          join workspaces w on w.id = wm.workspace_id and w.deleted_at is null
+          where wm.user_id = $1
+            and wm.deleted_at is null
+          order by w.updated_at desc, w.id asc
+        `,
+        [userId]
+      );
+      return result.rows.map(workspaceSummaryFromRow);
+    },
+
+    async listWorkspaceBoards(workspaceId) {
+      const result = await pool.query(
+        `
+          select
+            id as board_id,
+            workspace_id,
+            name as board_name,
+            updated_at as board_updated_at
+          from boards
+          where workspace_id = $1
+            and deleted_at is null
+          order by updated_at desc, id asc
+        `,
+        [workspaceId]
+      );
+      return result.rows.map(boardSummaryFromRow);
+    },
+
+    async createBoard(workspaceId, name) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        let projectResult = await client.query(
+          `
+            select id
+            from projects
+            where workspace_id = $1
+              and deleted_at is null
+            order by created_at asc, id asc
+            limit 1
+            for update
+          `,
+          [workspaceId]
+        );
+        if (!projectResult.rows[0]) {
+          projectResult = await client.query(
+            `insert into projects (workspace_id, name) values ($1, 'Boards') returning id`,
+            [workspaceId]
+          );
+        }
+        const result = await client.query(
+          `
+            insert into boards (workspace_id, project_id, name)
+            values ($1, $2, $3)
+            returning id as board_id, workspace_id, name as board_name, updated_at as board_updated_at
+          `,
+          [workspaceId, projectResult.rows[0].id, name]
+        );
+        await client.query("commit");
+        return boardSummaryFromRow(result.rows[0]);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async getWorkspaceRole(userId, workspaceId) {

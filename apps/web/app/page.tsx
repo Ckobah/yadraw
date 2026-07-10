@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
-import { v2DemoIds } from "@yadraw/shared";
+import { getCurrentV2User } from "../lib/auth/current-user";
 
-export default function Home() {
-  redirect(`/v2/boards/${v2DemoIds.board}`);
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const user = await getCurrentV2User();
+  redirect(user ? "/v2/dashboard" : "/login");
 }

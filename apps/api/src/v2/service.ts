@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  v2BootstrapSessionBodySchema,
+  v2CreateBoardBodySchema,
   type V2CardAttachment,
   type V2ConnectionAttachment,
   type V2CreateCardTypeRequest,
@@ -11,12 +13,16 @@ import {
   v2CreateConnectionTypeBodySchema,
   v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
+  v2DemoIds,
   v2RunDryRunBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
   type V2BoardDetail,
+  type V2BoardSummary,
+  type V2BootstrapSessionRequest,
+  type V2BootstrapSessionResponse,
   type V2Card,
   type V2CardType,
   type V2ConnectionType,
@@ -34,13 +40,15 @@ import {
   type V2UpdateCardTypeSchemaRequest,
   type V2UpdateConnectionRequest,
   v2UpdateConnectionTypeBodySchema,
-  type V2UpdateLinkedFieldBindingRequest
+  type V2UpdateLinkedFieldBindingRequest,
+  type V2WorkspaceSummary
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
 import type {
   V2CreateCardAttachmentRecordInput,
   V2CreateConnectionAttachmentRecordInput,
+  V2BootstrapUserInput,
   V2FileDownloadRecord,
   V2Repository
 } from "./repository.js";
@@ -66,6 +74,20 @@ export class V2ServiceError extends Error {
 }
 
 export type V2BoardService = {
+  bootstrapSession(
+    context: RequestContext,
+    input: V2BootstrapSessionRequest
+  ): Promise<V2BootstrapSessionResponse>;
+  listWorkspaces(context: RequestContext): Promise<{ workspaces: V2WorkspaceSummary[] }>;
+  listWorkspaceBoards(
+    context: RequestContext,
+    workspaceId: string
+  ): Promise<{ boards: V2BoardSummary[] }>;
+  createBoard(
+    context: RequestContext,
+    workspaceId: string,
+    input: { name: string }
+  ): Promise<V2BoardSummary>;
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
   createCardType(
@@ -397,6 +419,23 @@ export function createV2BoardService(
     };
   }
 
+  function requireDashboardRepository() {
+    if (
+      !repository.bootstrapPersonalWorkspace ||
+      !repository.listUserWorkspaces ||
+      !repository.listWorkspaceBoards ||
+      !repository.createBoard
+    ) {
+      throw new V2ServiceError("storage_unavailable", "V2 dashboard repository is not available");
+    }
+    return {
+      bootstrapPersonalWorkspace: repository.bootstrapPersonalWorkspace.bind(repository),
+      listUserWorkspaces: repository.listUserWorkspaces.bind(repository),
+      listWorkspaceBoards: repository.listWorkspaceBoards.bind(repository),
+      createBoard: repository.createBoard.bind(repository)
+    };
+  }
+
   function requireConnectionTypeRepository(): {
     listConnectionTypes(workspaceId: string): Promise<V2ConnectionType[]>;
     getConnectionType(connectionTypeId: string): Promise<V2ConnectionType | null>;
@@ -523,6 +562,40 @@ export function createV2BoardService(
   }
 
   return {
+    async bootstrapSession(context, rawInput) {
+      const parsedInput = v2BootstrapSessionBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid authenticated user profile");
+      const input: V2BootstrapUserInput = {
+        userId: context.userId,
+        email: parsedInput.data.email,
+        name: parsedInput.data.name,
+        avatarUrl: parsedInput.data.avatarUrl,
+        authProvider: parsedInput.data.authProvider,
+        demoBoardId: v2DemoIds.board
+      };
+      return requireDashboardRepository().bootstrapPersonalWorkspace(input);
+    },
+
+    async listWorkspaces(context) {
+      return {
+        workspaces: await requireDashboardRepository().listUserWorkspaces(context.userId)
+      };
+    },
+
+    async listWorkspaceBoards(context, workspaceId) {
+      await authorizeWorkspace(context, workspaceId, "read");
+      return {
+        boards: await requireDashboardRepository().listWorkspaceBoards(workspaceId)
+      };
+    },
+
+    async createBoard(context, workspaceId, rawInput) {
+      const parsedInput = v2CreateBoardBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid board payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+      return requireDashboardRepository().createBoard(workspaceId, parsedInput.data.name);
+    },
+
     async getBoard(context, boardId) {
       const board = await repository.getBoardDetail(boardId);
       if (!board) {

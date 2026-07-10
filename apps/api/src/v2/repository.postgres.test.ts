@@ -110,6 +110,99 @@ describePostgres("v2 Postgres repository", () => {
     await expect(repository?.getWorkspaceRole(ownerContext.userId, seedIds.workspace)).resolves.toBe("owner");
   });
 
+  it("backfills users and workspace ownership", async () => {
+    const client = new Client({ connectionString: isolatedDatabaseUrl });
+    await client.connect();
+    try {
+      const users = await client.query(`select count(*)::int as count from users where deleted_at is null`);
+      const owner = await client.query(
+        `select owner_user_id from workspaces where id = $1 and deleted_at is null`,
+        [seedIds.workspace]
+      );
+      expect(Number(users.rows[0]?.count)).toBeGreaterThanOrEqual(3);
+      expect(String(owner.rows[0]?.owner_user_id)).toBe(ownerContext.userId);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("bootstraps one isolated personal workspace and demo copy", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const userId = randomUUID();
+    const context = { userId, source: "header" as const };
+    const profile = {
+      email: `${userId}@example.com`,
+      name: "Personal owner",
+      avatarUrl: null,
+      authProvider: "supabase" as const
+    };
+
+    const original = await service.getBoard(ownerContext, seedIds.board);
+    const first = await service.bootstrapSession(context, profile);
+    const second = await service.bootstrapSession(context, profile);
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(second.workspace.id).toBe(first.workspace.id);
+    expect(second.board?.id).toBe(first.board?.id);
+    expect(first.workspace.role).toBe("owner");
+    expect(first.board).not.toBeNull();
+
+    const copy = await service.getBoard(context, first.board!.id);
+    expect(copy.cards).toHaveLength(original.cards.length);
+    expect(copy.cardTypes).toHaveLength(original.cardTypes.length);
+    expect(copy.connections).toHaveLength(original.connections.length);
+    expect(copy.cards.map((card) => card.id)).not.toEqual(original.cards.map((card) => card.id));
+    await expect(service.getBoard(ownerContext, first.board!.id)).rejects.toMatchObject({
+      code: "forbidden"
+    });
+
+    const workspaces = await service.listWorkspaces(context);
+    const boards = await service.listWorkspaceBoards(context, first.workspace.id);
+    expect(workspaces.workspaces.map((workspace) => workspace.id)).toContain(first.workspace.id);
+    expect(boards.boards.map((board) => board.id)).toContain(first.board!.id);
+
+    const createdBoard = await service.createBoard(context, first.workspace.id, { name: "Blank board" });
+    expect(createdBoard).toMatchObject({ workspaceId: first.workspace.id, name: "Blank board" });
+
+    const client = new Client({ connectionString: isolatedDatabaseUrl });
+    await client.connect();
+    try {
+      const copiedFiles = await client.query(
+        `select count(*)::int as count from card_files where workspace_id = $1 and deleted_at is null`,
+        [first.workspace.id]
+      );
+      const originalAfter = await client.query(
+        `select count(*)::int as count from cards where board_id = $1 and deleted_at is null`,
+        [seedIds.board]
+      );
+      expect(Number(copiedFiles.rows[0]?.count)).toBe(0);
+      expect(Number(originalAfter.rows[0]?.count)).toBe(original.cards.length);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("serializes concurrent first-login bootstrap calls", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const userId = randomUUID();
+    const context = { userId, source: "header" as const };
+    const profile = {
+      email: `${userId}@example.com`,
+      name: "Concurrent owner",
+      avatarUrl: null,
+      authProvider: "supabase" as const
+    };
+    const results = await Promise.all([
+      service.bootstrapSession(context, profile),
+      service.bootstrapSession(context, profile)
+    ]);
+    expect(new Set(results.map((result) => result.workspace.id)).size).toBe(1);
+    expect(results.filter((result) => result.created)).toHaveLength(1);
+  });
+
   it("persists the authorized core board workflow", async () => {
     if (!repository) throw new Error("Repository was not initialized");
     const service = createV2BoardService(repository);
@@ -195,6 +288,12 @@ describePostgres("v2 Postgres repository", () => {
     ).rejects.toMatchObject({
       code: "forbidden"
     });
+    await expect(service.listWorkspaceBoards(viewerContext, seedIds.workspace)).resolves.toMatchObject({
+      boards: expect.arrayContaining([expect.objectContaining({ id: seedIds.board })])
+    });
+    await expect(
+      service.createBoard(viewerContext, seedIds.workspace, { name: "Viewer board" })
+    ).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("filters orphan connections when a card is soft-deleted outside the normal delete path", async () => {

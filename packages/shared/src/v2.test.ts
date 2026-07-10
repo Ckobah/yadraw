@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   v2ApiContracts,
   v2BoardDetailSchema,
+  v2BootstrapSessionBodySchema,
+  v2BootstrapSessionResponseSchema,
   v2CardAttachmentSchema,
   v2CardFileSchema,
   v2CardTypeDefinitionSchema,
@@ -15,6 +17,7 @@ import {
   v2CreateConnectionTypeBodySchema,
   v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
+  v2CreateBoardBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
@@ -1228,6 +1231,45 @@ describe("v2UpdateCardBodySchema with visualStyle", () => {
         textDecoration: "underline"
       }
     });
+  });
+});
+
+describe("v2 dashboard and auth contracts", () => {
+  it("normalizes the verified Supabase profile", () => {
+    expect(
+      v2BootstrapSessionBodySchema.parse({
+        email: " User@Example.com ",
+        name: "User",
+        avatarUrl: null,
+        authProvider: "supabase"
+      })
+    ).toEqual({
+      email: "user@example.com",
+      name: "User",
+      avatarUrl: null,
+      authProvider: "supabase"
+    });
+  });
+
+  it("rejects unknown board creation fields", () => {
+    expect(() => v2CreateBoardBodySchema.parse({ name: "Board", userId: cardId })).toThrow();
+  });
+
+  it("accepts a personal bootstrap response", () => {
+    expect(() =>
+      v2BootstrapSessionResponseSchema.parse({
+        created: true,
+        user: { id: cardId, email: "user@example.com", name: "User", avatarUrl: null },
+        workspace: {
+          id: workspaceId,
+          name: "User's workspace",
+          slug: "personal-6666666666664666",
+          role: "owner",
+          updatedAt: timestamp
+        },
+        board: { id: boardId, workspaceId, name: "Demo board", updatedAt: timestamp }
+      })
+    ).not.toThrow();
   });
 });
 

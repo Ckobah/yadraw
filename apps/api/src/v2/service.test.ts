@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { createDefaultV2MemorySeed, createV2MemoryRepository } from "./repository.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  createDefaultV2MemorySeed,
+  createV2MemoryRepository,
+  type V2BootstrapUserInput
+} from "./repository.js";
 import { createV2BoardService, V2ServiceError } from "./service.js";
 
 const ownerContext = {
@@ -26,6 +30,73 @@ function getSeedParts() {
 }
 
 describe("v2 board service", () => {
+  it("uses authenticated context for dashboard and bootstrap operations", async () => {
+    const { seed } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const bootstrap = vi.fn(async (input: V2BootstrapUserInput) => ({
+      created: true,
+      user: {
+        id: input.userId,
+        email: input.email,
+        name: input.name,
+        avatarUrl: input.avatarUrl
+      },
+      workspace: {
+        id: seed.workspace.id,
+        name: seed.workspace.name,
+        slug: seed.workspace.slug,
+        role: "owner" as const,
+        updatedAt: timestamp
+      },
+      board: {
+        id: seed.board.id,
+        workspaceId: seed.workspace.id,
+        name: seed.board.name,
+        updatedAt: timestamp
+      }
+    }));
+    repository.bootstrapPersonalWorkspace = bootstrap;
+    repository.listUserWorkspaces = vi.fn(async () => [{
+      id: seed.workspace.id,
+      name: seed.workspace.name,
+      slug: seed.workspace.slug,
+      role: "owner" as const,
+      updatedAt: timestamp
+    }]);
+    repository.listWorkspaceBoards = vi.fn(async () => [{
+      id: seed.board.id,
+      workspaceId: seed.workspace.id,
+      name: seed.board.name,
+      updatedAt: timestamp
+    }]);
+    repository.createBoard = vi.fn(async (workspaceId: string, name: string) => ({
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      workspaceId,
+      name,
+      updatedAt: timestamp
+    }));
+    const service = createV2BoardService(repository);
+
+    await expect(service.bootstrapSession(ownerContext, {
+      email: "Owner@Example.com",
+      name: "Owner",
+      avatarUrl: null,
+      authProvider: "supabase"
+    })).resolves.toMatchObject({ created: true, user: { id: ownerContext.userId } });
+    expect(bootstrap).toHaveBeenCalledWith(expect.objectContaining({
+      userId: ownerContext.userId,
+      email: "owner@example.com"
+    }));
+    await expect(service.listWorkspaces(ownerContext)).resolves.toMatchObject({
+      workspaces: [expect.objectContaining({ id: seed.workspace.id })]
+    });
+    await expect(service.createBoard(ownerContext, seed.workspace.id, { name: "New board" }))
+      .resolves.toMatchObject({ name: "New board" });
+    await expect(service.createBoard(viewerContext, seed.workspace.id, { name: "Denied" }))
+      .rejects.toMatchObject({ code: "forbidden" });
+  });
+
   it("creates cards from minimal canvas input", async () => {
     const { seed, sourceType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));

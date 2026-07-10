@@ -12,6 +12,45 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
       timestamp: new Date().toISOString(),
     };
   });
+  server.post("/v2/session/bootstrap", async (request, reply) => {
+    try {
+      return await service.bootstrapSession(request.requestContext, request.body as any);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.get("/v2/workspaces", async (request, reply) => {
+    try {
+      return await service.listWorkspaces(request.requestContext);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.get("/v2/workspaces/:workspaceId/boards", async (request, reply) => {
+    try {
+      const { workspaceId } = request.params as { workspaceId: string };
+      return await service.listWorkspaceBoards(request.requestContext, workspaceId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/workspaces/:workspaceId/boards", async (request, reply) => {
+    try {
+      const { workspaceId } = request.params as { workspaceId: string };
+      const board = await service.createBoard(
+        request.requestContext,
+        workspaceId,
+        request.body as any
+      );
+      return reply.code(201).send(board);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/boards/:boardId", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

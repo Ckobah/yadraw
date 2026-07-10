@@ -2191,6 +2191,350 @@ button:disabled {
   --xy-selection-border: 1px solid var(--yd-graph-connector-selected, #2f8cff);
 }
 
+/* V2 authentication and personal dashboard */
+.v2AuthPage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background: #f4f6f8;
+  color: #101828;
+}
+
+.v2AuthPanel {
+  width: min(100%, 420px);
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 28px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.08);
+}
+
+.v2AuthBrand {
+  margin-bottom: 24px;
+  color: #175cd3;
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.v2AuthPanel h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.v2AuthPanel > p {
+  margin: 8px 0 24px;
+  color: #667085;
+  font-size: 14px;
+}
+
+.v2AuthForm {
+  display: grid;
+  gap: 16px;
+}
+
+.v2AuthMode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.v2AuthMode button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 10px 8px;
+  color: #667085;
+  font: inherit;
+  cursor: pointer;
+}
+
+.v2AuthMode button[aria-selected="true"] {
+  border-bottom-color: #175cd3;
+  color: #175cd3;
+  font-weight: 700;
+}
+
+.v2AuthForm label {
+  display: grid;
+  gap: 6px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.v2AuthForm input,
+.v2DashboardNewForm input,
+.v2DashboardWorkspaceSelector select {
+  min-width: 0;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 10px 12px;
+  color: #101828;
+  font: inherit;
+}
+
+.v2AuthForm input:focus,
+.v2DashboardNewForm input:focus,
+.v2DashboardWorkspaceSelector select:focus {
+  border-color: #2e90fa;
+  outline: 3px solid rgba(46, 144, 250, 0.16);
+}
+
+.v2AuthSubmit,
+.v2DashboardNewButton,
+.v2DashboardNewForm button,
+.v2DashboardPrimaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid #175cd3;
+  border-radius: 6px;
+  background: #175cd3;
+  padding: 10px 14px;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.v2AuthSubmit:disabled,
+.v2DashboardNewForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.v2AuthMessage {
+  margin: 0;
+  color: #027a48;
+  font-size: 13px;
+}
+
+.v2AuthMessageError {
+  color: #b42318;
+}
+
+.v2DashboardPage {
+  min-height: 100vh;
+  background: #f7f8fa;
+  color: #101828;
+}
+
+.v2DashboardHeader {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #ffffff;
+  padding: 10px clamp(16px, 4vw, 48px);
+}
+
+.v2DashboardBrand,
+.v2DashboardAccount,
+.v2DashboardAccount > div {
+  display: flex;
+  align-items: center;
+}
+
+.v2DashboardBrand {
+  gap: 9px;
+  color: #175cd3;
+}
+
+.v2DashboardAccount {
+  gap: 12px;
+}
+
+.v2DashboardAccount > div {
+  align-items: flex-end;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.v2DashboardAccount span {
+  max-width: 260px;
+  overflow: hidden;
+  color: #667085;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2DashboardIconButton {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #475467;
+  cursor: pointer;
+}
+
+.v2DashboardWorkspaceBar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #ffffff;
+  padding: 16px clamp(16px, 4vw, 48px);
+}
+
+.v2DashboardWorkspaceSelector {
+  display: grid;
+  gap: 5px;
+  width: min(100%, 360px);
+  color: #475467;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.v2DashboardContent {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 32px clamp(16px, 4vw, 48px) 64px;
+}
+
+.v2DashboardSectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.v2DashboardSectionHeading h1,
+.v2DashboardEmptyState h1,
+.v2DashboardEmptyState h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.v2DashboardSectionHeading p,
+.v2DashboardEmptyState p {
+  margin: 5px 0 0;
+  color: #667085;
+  font-size: 14px;
+}
+
+.v2DashboardSectionHeading > span {
+  color: #667085;
+  font-size: 13px;
+}
+
+.v2DashboardBoardList {
+  overflow: hidden;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.v2DashboardBoardRow {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 1px solid #eaecf0;
+  padding: 12px 16px;
+  color: #101828;
+  text-decoration: none;
+}
+
+.v2DashboardBoardRow:last-child {
+  border-bottom: 0;
+}
+
+.v2DashboardBoardRow:hover,
+.v2DashboardBoardRow:focus-visible {
+  background: #f0f6ff;
+}
+
+.v2DashboardBoardRow span {
+  color: #667085;
+  font-size: 12px;
+}
+
+.v2DashboardEmptyState {
+  border: 1px dashed #b8c0cc;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.v2DashboardPrimaryLink {
+  margin-top: 20px;
+}
+
+.v2DashboardErrorPage {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.v2DashboardNewForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.v2DashboardNewForm button:nth-of-type(2) {
+  border-color: #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+}
+
+.v2DashboardNewForm span[role="alert"] {
+  width: 100%;
+  color: #b42318;
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 680px) {
+  .v2DashboardHeader,
+  .v2DashboardWorkspaceBar,
+  .v2DashboardSectionHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .v2DashboardAccount {
+    justify-content: space-between;
+  }
+
+  .v2DashboardAccount > div {
+    align-items: flex-start;
+  }
+
+  .v2DashboardNewButton,
+  .v2DashboardWorkspaceSelector,
+  .v2DashboardNewForm,
+  .v2DashboardNewForm input {
+    width: 100%;
+  }
+
+  .v2DashboardNewForm button {
+    flex: 1;
+  }
+
+  .v2DashboardBoardRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .v2CanvasConnectionError {
   position: absolute;
   left: 50%;
