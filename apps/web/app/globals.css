@@ -2513,12 +2513,12 @@ button:disabled {
   user-select: none;
 }
 
-.v2ConnectorEdgeLabelEditable {
+.v2ConnectorEdgeLabelDraggable {
   cursor: grab;
   pointer-events: all;
 }
 
-.v2ConnectorEdgeLabelEditable:active {
+.v2ConnectorEdgeLabelDraggable:active {
   cursor: grabbing;
 }
 
@@ -3940,12 +3940,12 @@ button:disabled {
 
 .v2ConnectorSlotLabelTop {
   top: -20px;
-  transform: translate(-50%, -100%);
+  transform: translate(14px, -100%);
 }
 
 .v2ConnectorSlotLabelBottom {
   bottom: -20px;
-  transform: translate(-50%, 100%);
+  transform: translate(14px, 100%);
 }
 
 @media (max-width: 760px) {

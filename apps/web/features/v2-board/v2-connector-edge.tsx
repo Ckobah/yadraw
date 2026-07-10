@@ -19,6 +19,8 @@ import type { V2Connection, V2ConnectionVisualStyle, V2ConnectionWaypoint } from
 export type V2ConnectorEdgeData = {
   connection: V2Connection;
   isVisualEditing?: boolean;
+  onSelect?: (connectionId: string) => void;
+  onOpenEditor?: (connectionId: string) => void;
   onPreviewVisualStyle?: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => void;
   onSaveVisualStyle?: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => Promise<void> | void;
 };
@@ -537,9 +539,10 @@ export function V2ConnectorEdge({
   }
 
   function handleLabelPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!isVisualEditing || !connection) return;
+    if (!connection) return;
     event.preventDefault();
     event.stopPropagation();
+    data?.onSelect?.(connection.id);
 
     const startClient = { x: event.clientX, y: event.clientY };
     const currentLabelPosition = savedLabelPosition ?? labelPosition;
@@ -633,7 +636,10 @@ export function V2ConnectorEdge({
           }
           d={segmentPath}
           fill="none"
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (connection) data?.onSelect?.(connection.id);
+          }}
           onDoubleClick={(event) => handleSegmentDoubleClick(event, index)}
           onPointerDown={(event) => handleSegmentPointerDown(event, index)}
         />
@@ -651,13 +657,16 @@ export function V2ConnectorEdge({
         ) : null}
         {label ? (
           <div
-            className={`v2ConnectorEdgeLabel ${isVisualEditing ? "v2ConnectorEdgeLabelEditable nodrag nopan" : ""}`}
+            className="v2ConnectorEdgeLabel v2ConnectorEdgeLabelDraggable nodrag nopan"
             style={{
               transform: `translate(-50%, -50%) translate(${labelPosition.x}px, ${labelPosition.y}px)`,
             }}
             onPointerDown={handleLabelPointerDown}
             onClick={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              if (connection) data?.onOpenEditor?.(connection.id);
+            }}
           >
             {label}
           </div>
