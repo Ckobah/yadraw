@@ -502,6 +502,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const clearEditorHistory = useCallback(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+  }, []);
+
   const undoLastCommand = useCallback(async (): Promise<boolean> => {
     if (commandRunningRef.current) return false;
     const command = undoStackRef.current.at(-1);
@@ -1055,8 +1060,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   );
 
   const applyDeletedCardIds = useCallback(
-    (cardIds: string[]) => {
+    (cardIds: string[], invalidateHistory = false) => {
       const deletedIds = new Set(cardIds);
+      if (invalidateHistory) clearEditorHistory();
+      groupDragSnapshotRef.current = null;
       setNodes((current) => current.filter((node) => !deletedIds.has(node.id)));
       setEdges((current) =>
         current.filter((edge) => !deletedIds.has(edge.source) && !deletedIds.has(edge.target))
@@ -1079,7 +1086,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setInspectedConnectionId(null);
       setVisualEditingConnectionId(null);
     },
-    [setEdges, setNodes]
+    [clearEditorHistory, setEdges, setNodes]
   );
 
   const deleteCardsByIds = useCallback(
@@ -1087,7 +1094,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       const results = await Promise.allSettled(cardIds.map((cardId) => deleteV2Card(cardId)));
       const deletedIds = cardIds.filter((_cardId, index) => results[index]?.status === "fulfilled");
       const failedIds = cardIds.filter((_cardId, index) => results[index]?.status === "rejected");
-      if (deletedIds.length > 0) applyDeletedCardIds(deletedIds);
+      if (deletedIds.length > 0) applyDeletedCardIds(deletedIds, true);
       if (failedIds.length > 0) {
         throw new Error(
           deletedIds.length > 0
@@ -1661,10 +1668,20 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       const positionById = new Map(
         positions.map(({ cardId, position }) => [cardId, position])
       );
-      setNodes((current) =>
-        current.map((currentNode) => {
+      setNodes((current) => {
+        let changed = false;
+        const next = current.map((currentNode) => {
           const position = positionById.get(currentNode.id);
           if (!position) return currentNode;
+          if (
+            currentNode.position.x === position.x &&
+            currentNode.position.y === position.y &&
+            currentNode.data.card.position.x === position.x &&
+            currentNode.data.card.position.y === position.y
+          ) {
+            return currentNode;
+          }
+          changed = true;
           return {
             ...currentNode,
             position,
@@ -1676,8 +1693,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
               },
             },
           };
-        })
-      );
+        });
+        return changed ? next : current;
+      });
       setSaveStatus("saving");
       try {
         await Promise.all([
@@ -1767,24 +1785,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleNodeDragStop = useCallback<OnNodeDrag<V2CardNode>>(
     (_event, node, draggedNodes) => {
       const snapshot = groupDragSnapshotRef.current;
+      if (!snapshot || snapshot.draggedNodeId !== node.id) return;
       groupDragSnapshotRef.current = null;
-
-      if (!snapshot || snapshot.draggedNodeId !== node.id) {
-        setSaveStatus("saving");
-        void updateV2CardPosition(node.id, node.position)
-          .then(() => {
-            setMovementSaveError(null);
-            setSaveStatus("saved");
-          })
-          .catch((err) => {
-            console.error("Failed to save card position:", err);
-            setMovementSaveError(
-              "Card position could not be saved. Reload to restore it, then try again."
-            );
-            setSaveStatus("error");
-          });
-        return;
-      }
 
       const draggedStart = snapshot.positions.get(node.id);
       if (!draggedStart) return;
@@ -1866,9 +1868,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setSelectedConnectionId((current) => (current === connectionId ? null : current));
       setInspectedConnectionId((current) => (current === connectionId ? null : current));
       setVisualEditingConnectionId((current) => (current === connectionId ? null : current));
+      clearEditorHistory();
       setSaveStatus("saved");
     },
-    [setEdges]
+    [clearEditorHistory, setEdges]
   );
 
   const handleDeleteConnection = useCallback(
@@ -2113,6 +2116,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   // ── Delete connection ────────────────────────────────────────────
   const handleEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
+      if (deletedEdges.length > 0) clearEditorHistory();
       for (const edge of deletedEdges) {
         deleteV2Connection(edge.id).catch((err) =>
           console.error("Failed to delete connection:", err)
@@ -2126,7 +2130,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setVisualEditingConnectionId((current) => (current && deletedIds.has(current) ? null : current));
       setConnectionCreateError(null);
     },
-    []
+    [clearEditorHistory]
   );
 
   const deleteSelectedConnection = useCallback(async (): Promise<boolean> => {

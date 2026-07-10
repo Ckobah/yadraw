@@ -326,7 +326,7 @@ export function V2ConnectorEdge({
   const visualStyle = connection?.visualStyle ?? {};
   const storedWaypoints = getWaypoints(visualStyle);
   const isVisualEditing = Boolean(data?.isVisualEditing);
-  const canEditGeometry = isVisualEditing && visualStyle.routeMode === "manual";
+  const canEditGeometry = isVisualEditing;
   const sourcePoint = { x: sourceX, y: sourceY };
   const targetPoint = { x: targetX, y: targetY };
   const visibleSourcePoint = sourcePoint;
@@ -542,6 +542,7 @@ export function V2ConnectorEdge({
     if (!connection) return;
     event.preventDefault();
     event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
     data?.onSelect?.(connection.id);
 
     const startClient = { x: event.clientX, y: event.clientY };
@@ -638,7 +639,7 @@ export function V2ConnectorEdge({
           fill="none"
           onClick={(event) => {
             event.stopPropagation();
-            if (connection) data?.onSelect?.(connection.id);
+            if (connection && !isVisualEditing) data?.onSelect?.(connection.id);
           }}
           onDoubleClick={(event) => handleSegmentDoubleClick(event, index)}
           onPointerDown={(event) => handleSegmentPointerDown(event, index)}
