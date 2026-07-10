@@ -78,6 +78,13 @@ import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 import { V2CardTypeManager } from "./v2-card-type-manager";
 import { V2ConnectionTypeManager } from "./v2-connection-type-manager";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
+import {
+  buildV2ClipboardPayload,
+  isEditableShortcutTarget,
+  type V2ClipboardCard,
+  type V2ClipboardPayload,
+  type V2EditorCommand,
+} from "./v2-editor-commands";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -100,7 +107,19 @@ type GroupDragSnapshot = {
   manualConnections: V2Connection[];
 };
 
+type CardPositionUpdate = {
+  cardId: string;
+  position: { x: number; y: number };
+};
+
+type ConnectionVisualStyleUpdate = {
+  connectionId: string;
+  visualStyle: V2ConnectionVisualStyle;
+};
+
 const SHOW_EXPERIMENTAL_RUN_AI = false;
+const V2_PASTE_OFFSET = 40;
+const V2_HISTORY_LIMIT = 50;
 
 function getBoardViewportStorageKey(boardId: string): string {
   return `yadraw:v2-board:${boardId}:viewport`;
@@ -384,6 +403,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
   const [movementSaveError, setMovementSaveError] = useState<string | null>(null);
+  const [editorCommandError, setEditorCommandError] = useState<string | null>(null);
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
@@ -400,6 +420,12 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const pendingCardSelectionRef = useRef<string[] | null>(null);
   const lastInteractedCardIdRef = useRef<string | null>(null);
   const groupDragSnapshotRef = useRef<GroupDragSnapshot | null>(null);
+  const clipboardRef = useRef<V2ClipboardPayload | null>(null);
+  const clipboardPasteCountRef = useRef(0);
+  const clipboardPasteBlockedRef = useRef(false);
+  const undoStackRef = useRef<V2EditorCommand[]>([]);
+  const redoStackRef = useRef<V2EditorCommand[]>([]);
+  const commandRunningRef = useRef(false);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
@@ -438,6 +464,84 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     setSelectedCardIds([cardId]);
     setSelectedCardId(cardId);
     setInspectedConnectionId(null);
+  }, []);
+
+  const selectCards = useCallback((cardIds: string[]) => {
+    pendingCardSelectionRef.current = null;
+    selectedCardIdsRef.current = cardIds;
+    setSelectedCardIds(cardIds);
+    setSelectedCardId(cardIds.at(-1) ?? null);
+    setInspectedCardId(null);
+    setSelectedConnectionId(null);
+    setInspectedConnectionId(null);
+    setVisualEditingCardId(null);
+    setVisualEditingConnectionId(null);
+  }, []);
+
+  const runEditorCommand = useCallback(
+    async (command: V2EditorCommand): Promise<boolean> => {
+      if (commandRunningRef.current) return false;
+      commandRunningRef.current = true;
+      setEditorCommandError(null);
+      try {
+        await command.execute();
+        redoStackRef.current = [];
+        if (command.undo) {
+          undoStackRef.current = [...undoStackRef.current, command].slice(-V2_HISTORY_LIMIT);
+        }
+        return true;
+      } catch (error) {
+        setEditorCommandError(
+          error instanceof Error ? error.message : `${command.label} failed.`
+        );
+        return false;
+      } finally {
+        commandRunningRef.current = false;
+      }
+    },
+    []
+  );
+
+  const undoLastCommand = useCallback(async (): Promise<boolean> => {
+    if (commandRunningRef.current) return false;
+    const command = undoStackRef.current.at(-1);
+    if (!command?.undo) return false;
+    commandRunningRef.current = true;
+    setEditorCommandError(null);
+    try {
+      await command.undo();
+      undoStackRef.current = undoStackRef.current.slice(0, -1);
+      redoStackRef.current = [...redoStackRef.current, command].slice(-V2_HISTORY_LIMIT);
+      return true;
+    } catch (error) {
+      setEditorCommandError(
+        error instanceof Error ? error.message : `Could not undo ${command.label.toLowerCase()}.`
+      );
+      return false;
+    } finally {
+      commandRunningRef.current = false;
+    }
+  }, []);
+
+  const redoLastCommand = useCallback(async (): Promise<boolean> => {
+    if (commandRunningRef.current) return false;
+    const command = redoStackRef.current.at(-1);
+    if (!command) return false;
+    commandRunningRef.current = true;
+    setEditorCommandError(null);
+    try {
+      await command.execute();
+      redoStackRef.current = redoStackRef.current.slice(0, -1);
+      undoStackRef.current = [...undoStackRef.current, command].slice(-V2_HISTORY_LIMIT);
+      return true;
+    } catch (error) {
+      setEditorCommandError(
+        error instanceof Error ? error.message : `Could not redo ${command.label.toLowerCase()}.`
+      );
+      return false;
+    } finally {
+      commandRunningRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -950,6 +1054,51 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
   );
 
+  const applyDeletedCardIds = useCallback(
+    (cardIds: string[]) => {
+      const deletedIds = new Set(cardIds);
+      setNodes((current) => current.filter((node) => !deletedIds.has(node.id)));
+      setEdges((current) =>
+        current.filter((edge) => !deletedIds.has(edge.source) && !deletedIds.has(edge.target))
+      );
+      setConnectionRecords((current) =>
+        current.filter(
+          (connection) =>
+            !deletedIds.has(connection.sourceCardId) && !deletedIds.has(connection.targetCardId)
+        )
+      );
+      const remainingCardIds = selectedCardIdsRef.current.filter((id) => !deletedIds.has(id));
+      selectedCardIdsRef.current = remainingCardIds;
+      setSelectedCardIds(remainingCardIds);
+      setSelectedCardId((current) =>
+        current && deletedIds.has(current) ? remainingCardIds.at(-1) ?? null : current
+      );
+      setInspectedCardId((current) => (current && deletedIds.has(current) ? null : current));
+      setVisualEditingCardId((current) => (current && deletedIds.has(current) ? null : current));
+      setSelectedConnectionId(null);
+      setInspectedConnectionId(null);
+      setVisualEditingConnectionId(null);
+    },
+    [setEdges, setNodes]
+  );
+
+  const deleteCardsByIds = useCallback(
+    async (cardIds: string[]) => {
+      const results = await Promise.allSettled(cardIds.map((cardId) => deleteV2Card(cardId)));
+      const deletedIds = cardIds.filter((_cardId, index) => results[index]?.status === "fulfilled");
+      const failedIds = cardIds.filter((_cardId, index) => results[index]?.status === "rejected");
+      if (deletedIds.length > 0) applyDeletedCardIds(deletedIds);
+      if (failedIds.length > 0) {
+        throw new Error(
+          deletedIds.length > 0
+            ? `Deleted ${deletedIds.length} of ${cardIds.length} cards. ${failedIds.length} could not be deleted.`
+            : "Selected cards could not be deleted."
+        );
+      }
+    },
+    [applyDeletedCardIds]
+  );
+
   const handleDeleteCard = useCallback(
     async (cardId: string) => {
       if (cardActionLockRef.current) return;
@@ -974,27 +1123,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       setConnectionCreateError(null);
       setSaveStatus("saving");
       try {
-        await deleteV2Card(cardId);
-        setNodes((current) => current.filter((node) => node.id !== cardId));
-        setEdges((current) =>
-          current.filter((edge) => edge.source !== cardId && edge.target !== cardId)
-        );
-        setConnectionRecords((current) =>
-          current.filter(
-            (connection) =>
-              connection.sourceCardId !== cardId && connection.targetCardId !== cardId
-          )
-        );
-        const remainingCardIds = selectedCardIdsRef.current.filter((id) => id !== cardId);
-        selectedCardIdsRef.current = remainingCardIds;
-        setSelectedCardIds(remainingCardIds);
-        setSelectedCardId((current) =>
-          current === cardId ? remainingCardIds.at(-1) ?? null : current
-        );
-        setInspectedCardId((current) => (current === cardId ? null : current));
-        setSelectedConnectionId(null);
-        setVisualEditingCardId((current) => (current === cardId ? null : current));
-        setVisualEditingConnectionId(null);
+        await deleteCardsByIds([cardId]);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to delete card:", err);
@@ -1009,7 +1138,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setPendingCardAction(null);
       }
     },
-    [setEdges, setNodes]
+    [deleteCardsByIds]
   );
 
   const handleCreateCard = useCallback(
@@ -1047,6 +1176,160 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     },
     [board.id, board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
   );
+
+  const copySelectedCards = useCallback((): boolean => {
+    const selectedIds = new Set(selectedCardIdsRef.current);
+    const selectedCards = nodesRef.current
+      .filter((node) => selectedIds.has(node.id))
+      .map((node) => node.data.card);
+    if (selectedCards.length === 0) return false;
+    clipboardRef.current = buildV2ClipboardPayload(selectedCards);
+    clipboardPasteCountRef.current = 0;
+    clipboardPasteBlockedRef.current = false;
+    setEditorCommandError(null);
+    return true;
+  }, []);
+
+  const createClipboardCards = useCallback(
+    async (clipboardCards: V2ClipboardCard[], offset: number): Promise<V2Card[]> => {
+      const results = await Promise.allSettled(
+        clipboardCards.map((card) =>
+          createV2Card(board.id, {
+            cardTypeId: card.cardTypeId,
+            title: card.title,
+            description: card.description,
+            data: structuredClone(card.data),
+            position: {
+              x: card.position.x + offset,
+              y: card.position.y + offset,
+            },
+            size: { ...card.size },
+            visualStyle: structuredClone(card.visualStyle),
+          })
+        )
+      );
+      const createdCards = results.flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      );
+      const failedCount = results.length - createdCards.length;
+      if (failedCount > 0) {
+        const rollbackResults = await Promise.allSettled(
+          createdCards.map((card) => deleteV2Card(card.id))
+        );
+        const rollbackFailedCards = createdCards.filter(
+          (_card, index) => rollbackResults[index]?.status === "rejected"
+        );
+        if (rollbackFailedCards.length > 0) {
+          setNodes((current) => [
+            ...current,
+            ...rollbackFailedCards.map((card) =>
+              buildCardNode(card, cardTypeMap, board.workspaceId)
+            ),
+          ]);
+          selectCards(rollbackFailedCards.map((card) => card.id));
+          clipboardPasteBlockedRef.current = true;
+          throw new Error(
+            `Paste created ${rollbackFailedCards.length} cards that could not be rolled back. Copy again before retrying.`
+          );
+        }
+        throw new Error(`Paste failed for ${failedCount} cards. No pasted cards were kept.`);
+      }
+
+      setNodes((current) => [
+        ...current,
+        ...createdCards.map((card) => buildCardNode(card, cardTypeMap, board.workspaceId)),
+      ]);
+      selectCards(createdCards.map((card) => card.id));
+      return createdCards;
+    },
+    [board.id, board.workspaceId, cardTypeMap, selectCards, setNodes]
+  );
+
+  const pasteClipboardCards = useCallback(async (): Promise<boolean> => {
+    const payload = clipboardRef.current;
+    if (!payload || payload.cards.length === 0) return false;
+    if (clipboardPasteBlockedRef.current) {
+      setEditorCommandError("Paste is blocked after a partial failure. Copy again before retrying.");
+      return false;
+    }
+
+    const pasteIndex = clipboardPasteCountRef.current + 1;
+    const offset = V2_PASTE_OFFSET * pasteIndex;
+    let createdCardIds: string[] = [];
+    const command: V2EditorCommand = {
+      label: "Paste",
+      execute: async () => {
+        if (clipboardPasteBlockedRef.current) {
+          throw new Error("Paste is blocked after a partial failure. Copy again before retrying.");
+        }
+        setSaveStatus("saving");
+        try {
+          const createdCards = await createClipboardCards(payload.cards, offset);
+          createdCardIds = createdCards.map((card) => card.id);
+          setSaveStatus("saved");
+        } catch (error) {
+          setSaveStatus("error");
+          throw error;
+        }
+      },
+      undo: async () => {
+        setSaveStatus("saving");
+        const results = await Promise.allSettled(
+          createdCardIds.map((cardId) => deleteV2Card(cardId))
+        );
+        const deletedIds = createdCardIds.filter(
+          (_cardId, index) => results[index]?.status === "fulfilled"
+        );
+        const failedIds = createdCardIds.filter(
+          (_cardId, index) => results[index]?.status === "rejected"
+        );
+        if (deletedIds.length > 0) applyDeletedCardIds(deletedIds);
+        createdCardIds = failedIds;
+        if (failedIds.length > 0) {
+          setSaveStatus("error");
+          throw new Error(`Could not undo paste for ${failedIds.length} cards.`);
+        }
+        setSaveStatus("saved");
+      },
+    };
+    const succeeded = await runEditorCommand(command);
+    if (succeeded) clipboardPasteCountRef.current = pasteIndex;
+    return succeeded;
+  }, [applyDeletedCardIds, createClipboardCards, runEditorCommand]);
+
+  const deleteSelectedCards = useCallback(async (): Promise<boolean> => {
+    const cardIds = [...selectedCardIdsRef.current];
+    if (cardIds.length === 0) return false;
+    const selectedIds = new Set(cardIds);
+    const connectedCount = connectionRecordsRef.current.filter(
+      (connection) =>
+        selectedIds.has(connection.sourceCardId) || selectedIds.has(connection.targetCardId)
+    ).length;
+    const connectorWarning =
+      connectedCount > 0
+        ? ` ${connectedCount} connected connector${connectedCount === 1 ? "" : "s"} will also be removed.`
+        : "";
+    if (
+      !window.confirm(
+        `Delete ${cardIds.length} selected card${cardIds.length === 1 ? "" : "s"}?${connectorWarning} Files will stay in storage.`
+      )
+    ) {
+      return false;
+    }
+
+    setSaveStatus("saving");
+    const succeeded = await runEditorCommand({
+      label: "Delete cards",
+      execute: () => deleteCardsByIds(cardIds),
+    });
+    setSaveStatus(succeeded ? "saved" : "error");
+    return succeeded;
+  }, [deleteCardsByIds, runEditorCommand]);
+
+  const cutSelectedCards = useCallback(async (): Promise<boolean> => {
+    if (!copySelectedCards()) return false;
+    return deleteSelectedCards();
+  }, [copySelectedCards, deleteSelectedCards]);
 
   const applyCardTypeToState = useCallback(
     (cardType: V2CardType) => {
@@ -1370,6 +1653,54 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setEdges]
   );
 
+  const applyMovement = useCallback(
+    async (
+      positions: CardPositionUpdate[],
+      connectionStyles: ConnectionVisualStyleUpdate[]
+    ) => {
+      const positionById = new Map(
+        positions.map(({ cardId, position }) => [cardId, position])
+      );
+      setNodes((current) =>
+        current.map((currentNode) => {
+          const position = positionById.get(currentNode.id);
+          if (!position) return currentNode;
+          return {
+            ...currentNode,
+            position,
+            data: {
+              ...currentNode.data,
+              card: {
+                ...currentNode.data.card,
+                position,
+              },
+            },
+          };
+        })
+      );
+      setSaveStatus("saving");
+      try {
+        await Promise.all([
+          ...positions.map(({ cardId, position }) =>
+            updateV2CardPosition(cardId, position)
+          ),
+          ...connectionStyles.map(({ connectionId, visualStyle }) =>
+            handleUpdateConnection(connectionId, { visualStyle })
+          ),
+        ]);
+        setMovementSaveError(null);
+        setSaveStatus("saved");
+      } catch (error) {
+        setMovementSaveError(
+          "Some positions could not be saved. Reload to restore them, then try again."
+        );
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [handleUpdateConnection, setNodes]
+  );
+
   const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
     (_event, node, draggedNodes) => {
       const movingNodes = draggedNodes.length > 0 ? draggedNodes : [node];
@@ -1477,55 +1808,34 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           y: start.y + delta.y,
         },
       }));
-
-      const movedPositionById = new Map(
-        movedPositions.map(({ cardId, position }) => [cardId, position])
-      );
-      setNodes((current) =>
-        current.map((currentNode) => {
-          const position = movedPositionById.get(currentNode.id);
-          if (!position) return currentNode;
-          return {
-            ...currentNode,
-            position,
-            data: {
-              ...currentNode.data,
-              card: {
-                ...currentNode.data.card,
-                position,
-              },
-            },
-          };
-        })
-      );
-
-      const manualRouteUpdates = snapshot.manualConnections.flatMap((connection) => {
+      const previousPositions = Array.from(snapshot.positions, ([cardId, position]) => ({
+        cardId,
+        position,
+      }));
+      const manualRouteUpdates: ConnectionVisualStyleUpdate[] = snapshot.manualConnections.flatMap((connection) => {
         const visualStyle = translateInternalManualRoute(connection, movedCardIds, delta);
         return visualStyle ? [{ connectionId: connection.id, visualStyle }] : [];
       });
+      const previousManualRouteStyles: ConnectionVisualStyleUpdate[] =
+        snapshot.manualConnections.map((connection) => ({
+          connectionId: connection.id,
+          visualStyle: connection.visualStyle,
+        }));
 
-      setSaveStatus("saving");
-      void Promise.all([
-        ...movedPositions.map(({ cardId, position }) =>
-          updateV2CardPosition(cardId, position)
-        ),
-        ...manualRouteUpdates.map(({ connectionId, visualStyle }) =>
-          handleUpdateConnection(connectionId, { visualStyle })
-        ),
-      ])
-        .then(() => {
-          setMovementSaveError(null);
-          setSaveStatus("saved");
-        })
-        .catch((err) => {
-          console.error("Failed to save grouped card positions:", err);
-          setMovementSaveError(
-            "Some positions could not be saved. Reload to restore them, then try again."
-          );
-          setSaveStatus("error");
+      const movementCommand: V2EditorCommand = {
+        label: "Move cards",
+        execute: () => applyMovement(movedPositions, manualRouteUpdates),
+        undo: () => applyMovement(previousPositions, previousManualRouteStyles),
+      };
+      if (commandRunningRef.current) {
+        void applyMovement(movedPositions, manualRouteUpdates).catch((error) => {
+          console.error("Failed to save grouped card positions:", error);
         });
+        return;
+      }
+      void runEditorCommand(movementCommand);
     },
-    [handleUpdateConnection, setNodes]
+    [applyMovement, runEditorCommand]
   );
 
   const handlePreviewConnectionVisualStyle = useCallback(
@@ -1546,6 +1856,21 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setEdges]
   );
 
+  const deleteConnectionById = useCallback(
+    async (connectionId: string) => {
+      setSaveStatus("saving");
+      setConnectionCreateError(null);
+      await deleteV2Connection(connectionId);
+      setConnectionRecords((current) => current.filter((item) => item.id !== connectionId));
+      setEdges((current) => current.filter((edge) => edge.id !== connectionId));
+      setSelectedConnectionId((current) => (current === connectionId ? null : current));
+      setInspectedConnectionId((current) => (current === connectionId ? null : current));
+      setVisualEditingConnectionId((current) => (current === connectionId ? null : current));
+      setSaveStatus("saved");
+    },
+    [setEdges]
+  );
+
   const handleDeleteConnection = useCallback(
     async (connectionId: string) => {
       const connection = connectionRecordsRef.current.find((item) => item.id === connectionId);
@@ -1554,16 +1879,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         return;
       }
 
-      setSaveStatus("saving");
-      setConnectionCreateError(null);
       try {
-        await deleteV2Connection(connectionId);
-        setConnectionRecords((current) => current.filter((item) => item.id !== connectionId));
-        setEdges((current) => current.filter((edge) => edge.id !== connectionId));
-        setSelectedConnectionId((current) => (current === connectionId ? null : current));
-        setInspectedConnectionId((current) => (current === connectionId ? null : current));
-        setVisualEditingConnectionId((current) => (current === connectionId ? null : current));
-        setSaveStatus("saved");
+        await deleteConnectionById(connectionId);
       } catch (err) {
         console.error("Failed to delete connection:", err);
         setConnectionCreateError("Connector could not be deleted.");
@@ -1571,7 +1888,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         throw err;
       }
     },
-    [setEdges]
+    [deleteConnectionById]
   );
 
   const handleSelectConnection = useCallback(
@@ -1812,6 +2129,119 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     []
   );
 
+  const deleteSelectedConnection = useCallback(async (): Promise<boolean> => {
+    const connectionId = selectedConnectionId;
+    if (!connectionId) return false;
+    if (!window.confirm("Delete this connector? Cards and files will stay unchanged.")) {
+      return false;
+    }
+
+    const succeeded = await runEditorCommand({
+      label: "Delete connector",
+      execute: () => deleteConnectionById(connectionId),
+    });
+    if (!succeeded) setSaveStatus("error");
+    return succeeded;
+  }, [deleteConnectionById, runEditorCommand, selectedConnectionId]);
+
+  const shortcutsBlocked = Boolean(
+    inspectedCardId ||
+      inspectedConnectionId ||
+      visualEditingCardId ||
+      visualEditingConnectionId ||
+      isCardTypeManagerOpen ||
+      isConnectionTypeManagerOpen ||
+      isAssistantOpen ||
+      dryRunResult
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.repeat ||
+        shortcutsBlocked ||
+        commandRunningRef.current ||
+        isEditableShortcutTarget(event.target) ||
+        document.querySelector("[role='dialog'], [aria-modal='true']")
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const modifier = event.ctrlKey || event.metaKey;
+      const selectedCardsAvailable = selectedCardIdsRef.current.length > 0;
+
+      if (
+        key === "delete" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (selectedCardsAvailable || selectedConnectionId)
+      ) {
+        event.preventDefault();
+        if (selectedCardsAvailable) {
+          void deleteSelectedCards();
+        } else {
+          void deleteSelectedConnection();
+        }
+        return;
+      }
+
+      if (!modifier || event.altKey) return;
+
+      if (key === "c" && !event.shiftKey && selectedCardsAvailable) {
+        if (copySelectedCards()) event.preventDefault();
+        return;
+      }
+
+      if (
+        key === "v" &&
+        !event.shiftKey &&
+        clipboardRef.current &&
+        clipboardRef.current.cards.length > 0
+      ) {
+        event.preventDefault();
+        void pasteClipboardCards();
+        return;
+      }
+
+      if (key === "x" && !event.shiftKey && selectedCardsAvailable) {
+        event.preventDefault();
+        void cutSelectedCards();
+        return;
+      }
+
+      const isRedo =
+        (key === "z" && event.shiftKey) ||
+        (key === "y" && event.ctrlKey && !event.metaKey && !event.shiftKey);
+      if (isRedo && redoStackRef.current.length > 0) {
+        event.preventDefault();
+        void redoLastCommand();
+        return;
+      }
+
+      if (key === "z" && !event.shiftKey && undoStackRef.current.length > 0) {
+        event.preventDefault();
+        void undoLastCommand();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    copySelectedCards,
+    cutSelectedCards,
+    deleteSelectedCards,
+    deleteSelectedConnection,
+    pasteClipboardCards,
+    redoLastCommand,
+    selectedConnectionId,
+    shortcutsBlocked,
+    undoLastCommand,
+  ]);
+
   const edgeTypes = useMemo(
     () => ({
       v2Connector: V2ConnectorEdge,
@@ -2042,9 +2472,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           nodeColor={(node) => getMiniMapNodeColor(node as V2CardNode)}
           maskColor="rgba(0,0,0,0.08)"
         />
-        {(movementSaveError ?? connectionCreateError) ? (
+        {(editorCommandError ?? movementSaveError ?? connectionCreateError) ? (
           <div className="v2CanvasConnectionError" role="status">
-            {movementSaveError ?? connectionCreateError}
+            {editorCommandError ?? movementSaveError ?? connectionCreateError}
           </div>
         ) : null}
         {selectedCard && visualEditingCardId === selectedCard.id ? (
