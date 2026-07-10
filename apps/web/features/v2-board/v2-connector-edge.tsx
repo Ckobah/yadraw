@@ -29,7 +29,6 @@ type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
-const CONNECTOR_ENDPOINT_PORT_OFFSET = 8;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 
@@ -55,19 +54,6 @@ function buildManualPath(points: Point[]): string {
 
 function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function offsetEndpointToPortBoundary(
-  endpoint: Point,
-  handlePosition: unknown,
-  offset: number
-): Point {
-  const side = String(handlePosition).toLowerCase();
-  if (side === "right") return { x: endpoint.x + offset, y: endpoint.y };
-  if (side === "left") return { x: endpoint.x - offset, y: endpoint.y };
-  if (side === "bottom") return { x: endpoint.x, y: endpoint.y + offset };
-  if (side === "top") return { x: endpoint.x, y: endpoint.y - offset };
-  return endpoint;
 }
 
 function normalizeWaypoints(points: Point[]): Point[] {
@@ -341,16 +327,8 @@ export function V2ConnectorEdge({
   const canEditGeometry = isVisualEditing && visualStyle.routeMode === "manual";
   const sourcePoint = { x: sourceX, y: sourceY };
   const targetPoint = { x: targetX, y: targetY };
-  const visibleSourcePoint = offsetEndpointToPortBoundary(
-    sourcePoint,
-    sourcePosition,
-    CONNECTOR_ENDPOINT_PORT_OFFSET
-  );
-  const visibleTargetPoint = offsetEndpointToPortBoundary(
-    targetPoint,
-    targetPosition,
-    CONNECTOR_ENDPOINT_PORT_OFFSET
-  );
+  const visibleSourcePoint = sourcePoint;
+  const visibleTargetPoint = targetPoint;
 
   const automaticPathResult = getSmoothStepPath({
     sourceX: visibleSourcePoint.x,
@@ -433,11 +411,7 @@ export function V2ConnectorEdge({
   }
 
   function getRoutePoints(nextWaypoints: Point[]): Point[] {
-    return [
-      offsetEndpointToPortBoundary(sourcePoint, sourcePosition, CONNECTOR_ENDPOINT_PORT_OFFSET),
-      ...nextWaypoints,
-      offsetEndpointToPortBoundary(targetPoint, targetPosition, CONNECTOR_ENDPOINT_PORT_OFFSET),
-    ];
+    return [sourcePoint, ...nextWaypoints, targetPoint];
   }
 
   function handleSegmentDoubleClick(

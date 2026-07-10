@@ -2187,6 +2187,8 @@ button:disabled {
   --v2-minimap-controls-width: 32px;
   --v2-minimap-width: 202px;
   --v2-minimap-height: 124px;
+  --xy-selection-background-color: rgba(47, 140, 255, 0.1);
+  --xy-selection-border: 1px solid var(--yd-graph-connector-selected, #2f8cff);
 }
 
 .v2CanvasConnectionError {

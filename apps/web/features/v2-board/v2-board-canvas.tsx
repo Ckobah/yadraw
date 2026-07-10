@@ -6,11 +6,14 @@ import {
   Controls,
   MiniMap,
   ConnectionMode,
+  SelectionMode,
   useNodesState,
   useEdgesState,
   type Edge,
   type Connection,
+  type OnNodeDrag,
   type OnReconnect,
+  type OnSelectionChangeParams,
   type Viewport,
 } from "@xyflow/react";
 import {
@@ -90,6 +93,11 @@ type CardActionError = {
   cardId: string;
   message: string;
 } | null;
+
+type GroupDragSnapshot = {
+  draggedNodeId: string;
+  positions: Map<string, { x: number; y: number }>;
+};
 
 const SHOW_EXPERIMENTAL_RUN_AI = false;
 
@@ -366,11 +374,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [inspectedCardId, setInspectedCardId] = useState<string | null>(null);
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
   const [pendingCardAction, setPendingCardAction] = useState<PendingCardAction>(null);
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
+  const [movementSaveError, setMovementSaveError] = useState<string | null>(null);
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
@@ -383,6 +394,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
   const cardActionLockRef = useRef<PendingCardAction>(null);
+  const selectedCardIdsRef = useRef(selectedCardIds);
+  const pendingCardSelectionRef = useRef<string[] | null>(null);
+  const lastInteractedCardIdRef = useRef<string | null>(null);
+  const groupDragSnapshotRef = useRef<GroupDragSnapshot | null>(null);
 
   // ── Visual edit mode (state only — handlers below useNodesState) ──
   const [visualEditingCardId, setVisualEditingCardId] = useState<string | null>(null);
@@ -407,9 +422,39 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const connectionRecordsRef = useRef(connectionRecords);
   const pendingConnectionKeysRef = useRef(new Set<string>());
 
+  const clearCardSelection = useCallback(() => {
+    pendingCardSelectionRef.current = null;
+    selectedCardIdsRef.current = [];
+    setSelectedCardIds([]);
+    setSelectedCardId(null);
+    setInspectedCardId(null);
+  }, []);
+
+  const selectOnlyCard = useCallback((cardId: string) => {
+    pendingCardSelectionRef.current = null;
+    selectedCardIdsRef.current = [cardId];
+    setSelectedCardIds([cardId]);
+    setSelectedCardId(cardId);
+  }, []);
+
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+
+  useEffect(() => {
+    selectedCardIdsRef.current = selectedCardIds;
+    const selectedIds = new Set(selectedCardIds);
+    setNodes((current) => {
+      let changed = false;
+      const next = current.map((node) => {
+        const selected = selectedIds.has(node.id);
+        if (node.selected === selected) return node;
+        changed = true;
+        return { ...node, selected };
+      });
+      return changed ? next : current;
+    });
+  }, [selectedCardIds, setNodes]);
 
   useEffect(() => {
     edgesRef.current = edges;
@@ -474,22 +519,27 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [nodes, selectedCardId]
   );
   const selectedCard = selectedNode?.data.card ?? null;
-  const selectedCardType = selectedNode?.data.cardType ?? (
-    selectedCard ? cardTypeMap.get(selectedCard.cardTypeId) ?? null : null
+  const inspectedNode = useMemo(
+    () => nodes.find((node) => node.id === inspectedCardId) ?? null,
+    [inspectedCardId, nodes]
+  );
+  const inspectedCard = inspectedNode?.data.card ?? null;
+  const inspectedCardType = inspectedNode?.data.cardType ?? (
+    inspectedCard ? cardTypeMap.get(inspectedCard.cardTypeId) ?? null : null
   );
   const incomingConnections = useMemo(
     () =>
-      selectedCard
-        ? connectionRecords.filter((connection) => connection.targetCardId === selectedCard.id)
+      inspectedCard
+        ? connectionRecords.filter((connection) => connection.targetCardId === inspectedCard.id)
         : [],
-    [connectionRecords, selectedCard]
+    [connectionRecords, inspectedCard]
   );
   const outgoingConnections = useMemo(
     () =>
-      selectedCard
-        ? connectionRecords.filter((connection) => connection.sourceCardId === selectedCard.id)
+      inspectedCard
+        ? connectionRecords.filter((connection) => connection.sourceCardId === inspectedCard.id)
         : [],
-    [connectionRecords, selectedCard]
+    [connectionRecords, inspectedCard]
   );
   const selectedConnection = useMemo(
     () => connectionRecords.find((connection) => connection.id === selectedConnectionId) ?? null,
@@ -584,14 +634,67 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setNodes]
   );
 
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: OnSelectionChangeParams<V2CardNode, Edge>) => {
+      const pendingCardIds = pendingCardSelectionRef.current;
+      pendingCardSelectionRef.current = null;
+      const cardIds = pendingCardIds ?? selectedNodes.map((node) => node.id);
+      const selectedIdSet = new Set(cardIds);
+      const retainedIds = selectedCardIdsRef.current.filter((id) => selectedIdSet.has(id));
+      const retainedIdSet = new Set(retainedIds);
+      const orderedCardIds = [
+        ...retainedIds,
+        ...cardIds.filter((id) => !retainedIdSet.has(id)),
+      ];
+      selectedCardIdsRef.current = orderedCardIds;
+      setSelectedCardIds((current) =>
+        current.length === orderedCardIds.length &&
+        current.every((id, index) => id === orderedCardIds[index])
+          ? current
+          : orderedCardIds
+      );
+      setSelectedCardId((current) => {
+        const interactedId = lastInteractedCardIdRef.current;
+        if (interactedId && selectedIdSet.has(interactedId)) return interactedId;
+        if (current && selectedIdSet.has(current)) return current;
+        return orderedCardIds.at(-1) ?? null;
+      });
+      lastInteractedCardIdRef.current = null;
+      if (orderedCardIds.length > 0) {
+        setSelectedConnectionId(null);
+        setVisualEditingConnectionId(null);
+        setConnectionCreateError(null);
+      }
+    },
+    []
+  );
+
   const handleNodeClick = useCallback(
-    (_event: unknown, node: V2CardNode) => {
-      setSelectedCardId(node.id);
+    (event: ReactMouseEvent, node: V2CardNode) => {
+      lastInteractedCardIdRef.current = node.id;
+      if (event.ctrlKey || event.metaKey) {
+        const currentCardIds = selectedCardIdsRef.current;
+        const nextCardIds = currentCardIds.includes(node.id)
+          ? currentCardIds.filter((id) => id !== node.id)
+          : [...currentCardIds, node.id];
+        pendingCardSelectionRef.current = nextCardIds;
+        selectedCardIdsRef.current = nextCardIds;
+        setSelectedCardIds(nextCardIds);
+        setSelectedCardId((current) => {
+          if (nextCardIds.includes(node.id)) return node.id;
+          if (current && nextCardIds.includes(current)) return current;
+          return nextCardIds.at(-1) ?? null;
+        });
+      } else {
+        selectOnlyCard(node.id);
+      }
       setSelectedConnectionId(null);
       setVisualEditingConnectionId(null);
       setConnectionCreateError(null);
+      setMovementSaveError(null);
+      setInspectedCardId(null);
     },
-    []
+    [selectOnlyCard]
   );
 
   const handleUpdateVisualStyle = useCallback(
@@ -769,13 +872,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   );
 
   const handleStartVisualEditor = useCallback((cardId: string) => {
-    setSelectedCardId(cardId);
+    selectOnlyCard(cardId);
+    setInspectedCardId(cardId);
     setSelectedConnectionId(null);
     setVisualEditingCardId(cardId);
     setVisualEditingConnectionId(null);
     setCardActionError(null);
     setConnectionCreateError(null);
-  }, []);
+  }, [selectOnlyCard]);
 
   const handleConnectorSlotDragStart = useCallback(() => {
     ignoreNextPaneClickRef.current = true;
@@ -814,7 +918,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           ...current,
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
-        setSelectedCardId(created.id);
+        selectOnlyCard(created.id);
+        setInspectedCardId(null);
         setSelectedConnectionId(null);
         setVisualEditingCardId(null);
         setVisualEditingConnectionId(null);
@@ -832,7 +937,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         setPendingCardAction(null);
       }
     },
-    [board.workspaceId, cardTypeMap, setNodes]
+    [board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
   );
 
   const handleDeleteCard = useCallback(
@@ -870,7 +975,13 @@ export function V2BoardCanvas({ boardDetail }: Props) {
               connection.sourceCardId !== cardId && connection.targetCardId !== cardId
           )
         );
-        setSelectedCardId((current) => (current === cardId ? null : current));
+        const remainingCardIds = selectedCardIdsRef.current.filter((id) => id !== cardId);
+        selectedCardIdsRef.current = remainingCardIds;
+        setSelectedCardIds(remainingCardIds);
+        setSelectedCardId((current) =>
+          current === cardId ? remainingCardIds.at(-1) ?? null : current
+        );
+        setInspectedCardId((current) => (current === cardId ? null : current));
         setSelectedConnectionId(null);
         setVisualEditingCardId((current) => (current === cardId ? null : current));
         setVisualEditingConnectionId(null);
@@ -912,7 +1023,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           ...current,
           buildCardNode(created, cardTypeMap, board.workspaceId),
         ]);
-        setSelectedCardId(created.id);
+        selectOnlyCard(created.id);
+        setInspectedCardId(null);
         setSelectedConnectionId(null);
         setVisualEditingCardId(null);
         setVisualEditingConnectionId(null);
@@ -923,7 +1035,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         throw err;
       }
     },
-    [board.id, board.workspaceId, cardTypeMap, setNodes]
+    [board.id, board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
   );
 
   const applyCardTypeToState = useCallback(
@@ -1170,20 +1282,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     handleConnectorSlotDragEnd,
   ]);
 
-  // ── Drag save ────────────────────────────────────────────────────
-  const handleNodeDragStop = useCallback(
-    (_event: unknown, node: V2CardNode) => {
-      setSaveStatus("saving");
-      updateV2CardPosition(node.id, node.position)
-        .then(() => setSaveStatus("saved"))
-        .catch((err) => {
-          console.error("Failed to save card position:", err);
-          setSaveStatus("error");
-        });
-    },
-    []
-  );
-
   const handleUpdateConnection = useCallback(
     async (
       connectionId: string,
@@ -1199,7 +1297,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         visualStyle?: V2ConnectionVisualStyle;
       }
     ) => {
-      const previous = connectionRecords.find((connection) => connection.id === connectionId);
+      const previous = connectionRecordsRef.current.find(
+        (connection) => connection.id === connectionId
+      );
       if (!previous) return;
       const optimistic: V2Connection = {
         ...previous,
@@ -1257,7 +1357,123 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         throw err;
       }
     },
-    [connectionRecords, setEdges]
+    [setEdges]
+  );
+
+  const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
+    (_event, node, draggedNodes) => {
+      const movingNodes = draggedNodes.length > 0 ? draggedNodes : [node];
+      groupDragSnapshotRef.current = {
+        draggedNodeId: node.id,
+        positions: new Map(
+          movingNodes.map((movingNode) => [
+            movingNode.id,
+            { x: movingNode.position.x, y: movingNode.position.y },
+          ])
+        ),
+      };
+      lastInteractedCardIdRef.current = node.id;
+      setSelectedCardId(node.id);
+      setSelectedConnectionId(null);
+      setVisualEditingConnectionId(null);
+      setConnectionCreateError(null);
+    },
+    []
+  );
+
+  const handleNodeDragStop = useCallback<OnNodeDrag<V2CardNode>>(
+    (_event, node, draggedNodes) => {
+      const snapshot = groupDragSnapshotRef.current;
+      groupDragSnapshotRef.current = null;
+
+      if (!snapshot || snapshot.draggedNodeId !== node.id) {
+        setSaveStatus("saving");
+        void updateV2CardPosition(node.id, node.position)
+          .then(() => {
+            setMovementSaveError(null);
+            setSaveStatus("saved");
+          })
+          .catch((err) => {
+            console.error("Failed to save card position:", err);
+            setMovementSaveError(
+              "Card position could not be saved. Reload to restore it, then try again."
+            );
+            setSaveStatus("error");
+          });
+        return;
+      }
+
+      const draggedStart = snapshot.positions.get(node.id);
+      if (!draggedStart) return;
+      const delta = {
+        x: node.position.x - draggedStart.x,
+        y: node.position.y - draggedStart.y,
+      };
+      if (delta.x === 0 && delta.y === 0) return;
+
+      const finalPositionById = new Map(
+        draggedNodes.map((draggedNode) => [
+          draggedNode.id,
+          { x: draggedNode.position.x, y: draggedNode.position.y },
+        ])
+      );
+      const movedCardIds = new Set(snapshot.positions.keys());
+      const movedPositions = Array.from(snapshot.positions, ([cardId, start]) => ({
+        cardId,
+        position: finalPositionById.get(cardId) ?? {
+          x: start.x + delta.x,
+          y: start.y + delta.y,
+        },
+      }));
+
+      const movedPositionById = new Map(
+        movedPositions.map(({ cardId, position }) => [cardId, position])
+      );
+      setNodes((current) =>
+        current.map((currentNode) => {
+          const position = movedPositionById.get(currentNode.id);
+          if (!position) return currentNode;
+          return {
+            ...currentNode,
+            position,
+            data: {
+              ...currentNode.data,
+              card: {
+                ...currentNode.data.card,
+                position,
+              },
+            },
+          };
+        })
+      );
+
+      const manualRouteUpdates = connectionRecordsRef.current.flatMap((connection) => {
+        const visualStyle = translateInternalManualRoute(connection, movedCardIds, delta);
+        return visualStyle ? [{ connectionId: connection.id, visualStyle }] : [];
+      });
+
+      setSaveStatus("saving");
+      void Promise.all([
+        ...movedPositions.map(({ cardId, position }) =>
+          updateV2CardPosition(cardId, position)
+        ),
+        ...manualRouteUpdates.map(({ connectionId, visualStyle }) =>
+          handleUpdateConnection(connectionId, { visualStyle })
+        ),
+      ])
+        .then(() => {
+          setMovementSaveError(null);
+          setSaveStatus("saved");
+        })
+        .catch((err) => {
+          console.error("Failed to save grouped card positions:", err);
+          setMovementSaveError(
+            "Some positions could not be saved. Reload to restore them, then try again."
+          );
+          setSaveStatus("error");
+        });
+    },
+    [handleUpdateConnection, setNodes]
   );
 
   const handlePreviewConnectionVisualStyle = useCallback(
@@ -1305,25 +1521,31 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [setEdges]
   );
 
-  const handleEdgeClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
-    event.stopPropagation();
-    setSelectedConnectionId(edge.id);
-    setSelectedCardId(null);
-    setVisualEditingCardId(null);
-    setVisualEditingConnectionId((current) => (current === edge.id ? current : null));
-    setCardActionError(null);
-    setConnectionCreateError(null);
-  }, []);
+  const handleEdgeClick = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      setSelectedConnectionId(edge.id);
+      clearCardSelection();
+      setVisualEditingCardId(null);
+      setVisualEditingConnectionId((current) => (current === edge.id ? current : null));
+      setCardActionError(null);
+      setConnectionCreateError(null);
+    },
+    [clearCardSelection]
+  );
 
-  const handleEdgeDoubleClick = useCallback((event: ReactMouseEvent, edge: Edge) => {
-    event.stopPropagation();
-    setSelectedConnectionId(edge.id);
-    setSelectedCardId(null);
-    setVisualEditingCardId(null);
-    setVisualEditingConnectionId(edge.id);
-    setCardActionError(null);
-    setConnectionCreateError(null);
-  }, []);
+  const handleEdgeDoubleClick = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      setSelectedConnectionId(edge.id);
+      clearCardSelection();
+      setVisualEditingCardId(null);
+      setVisualEditingConnectionId(edge.id);
+      setCardActionError(null);
+      setConnectionCreateError(null);
+    },
+    [clearCardSelection]
+  );
 
   // ── Create connection ────────────────────────────────────────────
   const handleConnect = useCallback(
@@ -1376,7 +1598,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       );
       if (duplicate) {
         setSelectedConnectionId(duplicate.id);
-        setSelectedCardId(null);
+        clearCardSelection();
         setConnectionCreateError("Connection already exists.");
         setSaveStatus("error");
         return;
@@ -1414,7 +1636,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         pendingConnectionKeysRef.current.delete(endpointKey);
       }
     },
-    [board.id, cardTypeMap, genericConnectionType?.id, setEdges]
+    [board.id, cardTypeMap, clearCardSelection, genericConnectionType?.id, setEdges]
   );
 
   const handleReconnect = useCallback<OnReconnect>(
@@ -1479,7 +1701,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       );
       if (duplicate) {
         setSelectedConnectionId(duplicate.id);
-        setSelectedCardId(null);
+        clearCardSelection();
         setConnectionCreateError("Connection already exists.");
         setSaveStatus("error");
         return;
@@ -1489,7 +1711,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       try {
         await handleUpdateConnection(existing.id, endpointPatch);
         setSelectedConnectionId(existing.id);
-        setSelectedCardId(null);
+        clearCardSelection();
       } catch (err) {
         console.error("Failed to retarget connection:", err);
         setConnectionCreateError(
@@ -1499,7 +1721,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         );
       }
     },
-    [cardTypeMap, handleUpdateConnection]
+    [cardTypeMap, clearCardSelection, handleUpdateConnection]
   );
 
   // ── Delete connection ────────────────────────────────────────────
@@ -1583,7 +1805,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         edges={displayedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onSelectionChange={handleSelectionChange}
+        onSelectionStart={() => setInspectedCardId(null)}
         onNodeClick={handleNodeClick}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         onNodeDoubleClick={handleNodeDoubleClick}
         onEdgeClick={handleEdgeClick}
@@ -1596,7 +1821,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
             ignoreNextPaneClickRef.current = false;
             return;
           }
-          setSelectedCardId(null);
+          clearCardSelection();
           setSelectedConnectionId(null);
           setVisualEditingCardId(null);
           setVisualEditingConnectionId(null);
@@ -1619,7 +1844,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         proOptions={{ hideAttribution: true }}
         nodesConnectable={true}
         elementsSelectable={true}
-        panOnDrag={true}
+        selectionOnDrag={!visualEditingCardId && !visualEditingConnectionId}
+        selectionMode={SelectionMode.Full}
+        selectionKeyCode={null}
+        multiSelectionKeyCode={null}
+        panOnDrag={visualEditingCardId || visualEditingConnectionId ? true : [1, 2]}
         zoomOnScroll={true}
       >
         <svg className="v2ConnectorMarkerDefs" aria-hidden="true" focusable="false">
@@ -1738,9 +1967,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           nodeColor={(node) => getMiniMapNodeColor(node as V2CardNode)}
           maskColor="rgba(0,0,0,0.08)"
         />
-        {connectionCreateError ? (
+        {(movementSaveError ?? connectionCreateError) ? (
           <div className="v2CanvasConnectionError" role="status">
-            {connectionCreateError}
+            {movementSaveError ?? connectionCreateError}
           </div>
         ) : null}
         {selectedCard && visualEditingCardId === selectedCard.id ? (
@@ -1770,10 +1999,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           />
         ) : null}
       </ReactFlow>
-      {selectedCard ? (
+      {inspectedCard ? (
         <V2CardInspector
-          card={selectedCard}
-          cardType={selectedCardType}
+          card={inspectedCard}
+          cardType={inspectedCardType}
           cardTypes={cardTypes}
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}
@@ -1784,8 +2013,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           linkedFieldBindingsLoading={linkedFieldBindingsLoading}
           linkedFieldBindingsError={linkedFieldBindingsError}
           saveStatus={saveStatus}
-          pendingAction={pendingCardAction?.cardId === selectedCard.id ? pendingCardAction.action : null}
-          actionError={cardActionError?.cardId === selectedCard.id ? cardActionError.message : null}
+          pendingAction={pendingCardAction?.cardId === inspectedCard.id ? pendingCardAction.action : null}
+          actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
@@ -1794,7 +2023,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onManageCardType={handleOpenCardTypeManager}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
-          onClose={() => setSelectedCardId(null)}
+          onClose={() => setInspectedCardId(null)}
         />
       ) : selectedConnection ? (
         <V2ConnectorInspector
@@ -1831,4 +2060,53 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       ) : null}
     </>
   );
+}
+
+function isFiniteCanvasPoint(value: unknown): value is { x: number; y: number } {
+  if (!value || typeof value !== "object") return false;
+  const point = value as { x?: unknown; y?: unknown };
+  return (
+    typeof point.x === "number" &&
+    Number.isFinite(point.x) &&
+    typeof point.y === "number" &&
+    Number.isFinite(point.y)
+  );
+}
+
+function translateInternalManualRoute(
+  connection: V2Connection,
+  movedCardIds: Set<string>,
+  delta: { x: number; y: number }
+): V2ConnectionVisualStyle | null {
+  if (
+    connection.visualStyle.routeMode !== "manual" ||
+    !movedCardIds.has(connection.sourceCardId) ||
+    !movedCardIds.has(connection.targetCardId)
+  ) {
+    return null;
+  }
+
+  const hasWaypoints = Array.isArray(connection.visualStyle.waypoints);
+  const hasLabelPosition = isFiniteCanvasPoint(connection.visualStyle.labelPosition);
+  if (!hasWaypoints && !hasLabelPosition) return null;
+
+  return {
+    ...connection.visualStyle,
+    ...(hasWaypoints
+      ? {
+          waypoints: connection.visualStyle.waypoints!.map((point) => ({
+            x: point.x + delta.x,
+            y: point.y + delta.y,
+          })),
+        }
+      : {}),
+    ...(hasLabelPosition
+      ? {
+          labelPosition: {
+            x: connection.visualStyle.labelPosition!.x + delta.x,
+            y: connection.visualStyle.labelPosition!.y + delta.y,
+          },
+        }
+      : {}),
+  };
 }
