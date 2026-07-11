@@ -18,6 +18,7 @@ import {
   type SchemaFieldDraft,
 } from "./v2-card-inspector-helpers";
 import { V2ConnectorFilesSection } from "./v2-connector-files-section";
+import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
 
 type V2ConnectorInspectorProps = {
   connection: V2Connection;
@@ -46,13 +47,6 @@ function shortId(value: string): string {
 
 function cardTitle(card: V2Card | null, fallbackId: string): string {
   return card?.title?.trim() || `Card ${shortId(fallbackId)}`;
-}
-
-function formatSaveStatus(saveStatus: SaveStatus, fallback = "Unsaved changes"): string {
-  if (saveStatus === "saving") return "Saving...";
-  if (saveStatus === "saved") return "Saved";
-  if (saveStatus === "error") return "Save failed";
-  return fallback;
 }
 
 function formatDataValue(value: unknown): string {
@@ -429,17 +423,13 @@ export function V2ConnectorInspector({
           <GitBranch size={18} strokeWidth={2.1} />
         </span>
         <div className="v2InspectorHeaderText">
-          <span>{connection.title?.trim() || "Connector"}</span>
-          <strong>{shortId(connection.id)}</strong>
+          <span>Connector</span>
+          <strong title={connectionType?.name}>{connectionType?.name ?? "Generic"}</strong>
         </div>
-        <button
-          type="button"
-          className="v2InspectorDeleteButton v2ConnectorInspectorDeleteButton"
-          onClick={() => void onDeleteConnection(connection.id).catch(() => {})}
-        >
-          <Trash2 size={14} strokeWidth={2.2} />
-          <span>Delete</span>
-        </button>
+        <V2InspectorActionMenu
+          onManage={() => onManageConnectionType(connectionType?.id ?? (selectedConnectionTypeValue || null))}
+          onDelete={() => void onDeleteConnection(connection.id).catch(() => {})}
+        />
         <button
           type="button"
           className="v2InspectorCloseButton"
@@ -466,24 +456,24 @@ export function V2ConnectorInspector({
             />
           </div>
           <div className="v2InspectorField">
-            <label htmlFor={`connector-description-${connection.id}`}>Transfers / payload description</label>
+            <label htmlFor={`connector-description-${connection.id}`}>Description</label>
             <textarea
               id={`connector-description-${connection.id}`}
               className="v2InspectorTextarea"
               rows={4}
               value={descriptionDraft}
-              placeholder="Describe what information this connector transfers"
+              placeholder="Description"
               onChange={(event) => setDescriptionDraft(event.target.value)}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void saveBasics();
               }}
             />
           </div>
-          <div className="v2InspectorEditFooter">
+          {(basicError || basicDirty || saveStatus === "saving" || saveStatus === "error") ? <div className="v2InspectorEditFooter">
             <span className={basicError ? "v2InspectorSaveStatusError" : ""}>
-              {basicError ?? (basicDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
+              {basicError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
             </span>
-          </div>
+          </div> : null}
         </section>
 
         <section className="v2InspectorSection">
@@ -493,40 +483,11 @@ export function V2ConnectorInspector({
             <span aria-hidden="true">→</span>
             <strong>{cardTitle(targetCard, connection.targetCardId)}</strong>
           </div>
-          <dl className="v2InspectorAdvancedList">
-            <div>
-              <dt>From card</dt>
-              <dd>{cardTitle(sourceCard, connection.sourceCardId)}</dd>
-            </div>
-            <div>
-              <dt>Source slot</dt>
-              <dd>{connection.sourcePortKey}</dd>
-            </div>
-            <div>
-              <dt>To card</dt>
-              <dd>{cardTitle(targetCard, connection.targetCardId)}</dd>
-            </div>
-            <div>
-              <dt>Target slot</dt>
-              <dd>{connection.targetPortKey}</dd>
-            </div>
-          </dl>
+          <div className="v2ConnectorPortPair"><span>{connection.sourcePortKey}</span><span>{connection.targetPortKey}</span></div>
         </section>
 
         <section className="v2InspectorSection">
-          <div className="v2InspectorSectionHeader">
-            <div>
-              <h3>Connection type</h3>
-              <span>Choose which relationship schema this connector uses.</span>
-            </div>
-            <button
-              type="button"
-              className="v2InspectorAttachButton"
-              onClick={() => onManageConnectionType(connectionType?.id ?? (selectedConnectionTypeValue || null))}
-            >
-              Manage type
-            </button>
-          </div>
+          <h3>Type</h3>
           <label className="v2ConnectorTypeSelector">
             <span>Type</span>
             <select
@@ -543,30 +504,24 @@ export function V2ConnectorInspector({
               ) : null}
               {sortedConnectionTypes.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} ({item.key})
+                  {item.name}
                 </option>
               ))}
             </select>
           </label>
-          <p className={typeError ? "v2InspectorDataError" : "v2ConnectorTypeHint"}>
-            {typeError ??
-              (isTypeSaving
-                ? "Saving type..."
-                : "Retyping preserves connector data, files, route, and visual style.")}
-          </p>
+          {(typeError || isTypeSaving) ? <p className={typeError ? "v2InspectorDataError" : "v2ConnectorTypeHint"}>{typeError ?? "Saving..."}</p> : null}
         </section>
 
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
             <div>
               <h3>{hasSchemaFields ? "Relationship fields" : "Relationship data"}</h3>
-              <span>{connectionType?.name ?? "Generic"} type</span>
             </div>
             <div className="v2InspectorSectionActions">
               {hasSchemaFields || isDataEditing ? (
                 <button type="button" className="v2InspectorAttachButton" onClick={addDataField}>
                   <Plus size={14} strokeWidth={2.2} />
-                  Add extra field
+                  Add
                 </button>
               ) : (
                 <button
@@ -575,7 +530,7 @@ export function V2ConnectorInspector({
                   onClick={connectionDataEntries.length === 0 ? addDataField : startDataEditing}
                 >
                   <Plus size={14} strokeWidth={2.2} />
-                  {connectionDataEntries.length === 0 ? "Add field" : "Edit"}
+                  {connectionDataEntries.length === 0 ? "Add" : "Edit"}
                 </button>
               )}
             </div>
@@ -595,9 +550,6 @@ export function V2ConnectorInspector({
                       </div>
                       <em>{field.type}</em>
                     </div>
-                    {field.description ? (
-                      <p className="v2InspectorSchemaFieldDescription">{field.description}</p>
-                    ) : null}
                     {renderSchemaValueControl(field)}
                     {schemaFieldErrors[field.id] ? (
                       <p className="v2InspectorDataError">{schemaFieldErrors[field.id]}</p>
@@ -610,7 +562,7 @@ export function V2ConnectorInspector({
                 <h4>Extra data</h4>
               </div>
               {dataDraft.length === 0 ? (
-                <p className="v2InspectorEmpty">No extra data</p>
+                null
               ) : (
                 <div className="v2InspectorDataEditor">
                   {dataDraft.map((field) => (
@@ -651,15 +603,15 @@ export function V2ConnectorInspector({
                   ))}
                 </div>
               )}
-              <div className="v2InspectorDataFooter">
+              {(dataError || dataDirty || saveStatus === "saving" || saveStatus === "error") ? <div className="v2InspectorDataFooter">
                 <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                  {dataError ?? (dataDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
+                  {dataError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
                 </span>
-              </div>
+              </div> : null}
             </>
           ) : !isDataEditing ? (
             connectionDataEntries.length === 0 ? (
-              <p className="v2InspectorEmpty">No relationship data</p>
+                null
             ) : (
               <div className="v2InspectorDataReadList">
                 {connectionDataEntries.map(([key, value]) => (
@@ -671,7 +623,7 @@ export function V2ConnectorInspector({
               </div>
             )
           ) : dataDraft.length === 0 ? (
-            <p className="v2InspectorEmpty">No relationship data</p>
+            null
           ) : (
             <div className="v2InspectorDataEditor">
               {dataDraft.map((field) => (
@@ -712,47 +664,17 @@ export function V2ConnectorInspector({
               ))}
             </div>
           )}
-          {!hasSchemaFields && isDataEditing ? (
+          {!hasSchemaFields && isDataEditing && (dataError || dataDirty || saveStatus === "saving" || saveStatus === "error") ? (
             <div className="v2InspectorDataFooter">
               <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                {dataError ?? (dataDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
+                {dataError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
               </span>
             </div>
           ) : null}
-          <p className="v2InspectorHint">
-            Use fields like quantity, unit, note, or role. Formulas are a future layer on top of relationship data.
-          </p>
         </section>
 
         <V2ConnectorFilesSection connectionId={connection.id} />
 
-        <section className="v2InspectorSection">
-          <details className="v2InspectorDetails">
-            <summary>Advanced</summary>
-            <dl className="v2InspectorAdvancedList">
-              <div>
-                <dt>connection id</dt>
-                <dd>{connection.id}</dd>
-              </div>
-              <div>
-                <dt>sourceCardId</dt>
-                <dd>{connection.sourceCardId}</dd>
-              </div>
-              <div>
-                <dt>targetCardId</dt>
-                <dd>{connection.targetCardId}</dd>
-              </div>
-              <div>
-                <dt>sourcePortKey</dt>
-                <dd>{connection.sourcePortKey}</dd>
-              </div>
-              <div>
-                <dt>targetPortKey</dt>
-                <dd>{connection.targetPortKey}</dd>
-              </div>
-            </dl>
-          </details>
-        </section>
       </div>
     </aside>
   );

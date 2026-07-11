@@ -2681,7 +2681,6 @@ export function V2BoardCanvas({ boardDetail }: Props) {
               );
               setVisualEditingConnectionId(null);
             }}
-            onDelete={handleDeleteConnection}
           />
         ) : null}
       </ReactFlow>

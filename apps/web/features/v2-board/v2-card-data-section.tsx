@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import type { V2Card, V2CardType } from "@yadraw/shared";
 import {
   createDataDraftFromRecord,
@@ -197,20 +197,16 @@ export function V2CardDataSection({
     >
       {hasSchemaFields ? (
         <section className="v2InspectorSection">
-          <h3>Schema fields</h3>
+          <h3>Fields</h3>
           <div className="v2InspectorDataEditor">
             {schemaDraftFields.map((field) => (
               <div key={field.id} className="v2InspectorDataRow">
                 <div className="v2InspectorSchemaFieldHeader">
                   <div>
                     <strong>{field.label}</strong>
-                    <span>{field.key}</span>
                   </div>
-                  {field.required ? <em>Required</em> : null}
+                  {field.required ? <em aria-label="Required">*</em> : null}
                 </div>
-                {field.description ? (
-                  <p className="v2InspectorSchemaFieldDescription">{field.description}</p>
-                ) : null}
                 <SchemaFieldInput field={field} onChange={updateSchemaField} />
                 {schemaFieldErrors[field.id] ? (
                   <p className="v2InspectorDataError">{schemaFieldErrors[field.id]}</p>
@@ -224,7 +220,7 @@ export function V2CardDataSection({
       <section className="v2InspectorSection">
         <h3>{hasSchemaFields ? "Extra data" : "Data"}</h3>
         {dataDraftFields.length === 0 ? (
-          <p className="v2InspectorEmpty">{hasSchemaFields ? "No extra data" : "No data"}</p>
+          null
         ) : (
           <div className="v2InspectorDataEditor">
             {dataDraftFields.map((field) => (
@@ -305,16 +301,16 @@ export function V2CardDataSection({
           </div>
         )}
         <div className="v2InspectorDataFooter">
-          <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-            {dataError ?? (hasDataChanges ? "Saving..." : "Data saved")}
-          </span>
+          {(dataError || hasDataChanges || saveStatus === "saving") ? <span className={dataError ? "v2InspectorSaveStatusError" : ""}>{dataError ?? "Saving..."}</span> : <span />}
           <div className="v2InspectorEditActions">
-            <button
+            <button className="v2InspectorIconAction"
               type="button"
+              aria-label="Add field"
+              title="Add field"
               onMouseDown={(event) => event.preventDefault()}
               onClick={addDataField}
             >
-              + Add field
+              <Plus size={15} />
             </button>
           </div>
         </div>

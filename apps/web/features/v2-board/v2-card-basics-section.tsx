@@ -62,14 +62,6 @@ export function V2CardBasicsSection({
     }
   }
 
-  function getSaveStatusLabel() {
-    if (fieldError) return fieldError;
-    if (saveStatus === "saving") return "Saving...";
-    if (saveStatus === "saved") return "Saved";
-    if (saveStatus === "error") return "Save failed";
-    return hasChanges ? "Saving..." : "Saved";
-  }
-
   return (
     <section
       className="v2InspectorHero v2InspectorEditor"
@@ -109,11 +101,11 @@ export function V2CardBasicsSection({
           }}
         />
       </div>
-      <div className="v2InspectorEditFooter">
+      {(fieldError || saveStatus === "saving" || saveStatus === "error" || hasChanges) ? <div className="v2InspectorEditFooter">
         <span className={fieldError ? "v2InspectorSaveStatusError" : ""}>
-          {getSaveStatusLabel()}
+          {fieldError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
         </span>
-      </div>
+      </div> : null}
     </section>
   );
 }

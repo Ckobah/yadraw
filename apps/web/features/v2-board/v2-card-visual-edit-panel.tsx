@@ -7,6 +7,8 @@ import {
   Bold,
   ChevronsUpDown,
   Italic,
+  LoaderCircle,
+  CircleAlert,
   Underline,
   X,
 } from "lucide-react";
@@ -141,9 +143,8 @@ export function V2CardVisualEditPanel({
           />
         </label>
 
-        <span className="v2ConnectorVisualEditStatus" title="Status">
-          {saveStatus === "saving" ? "Saving..." : saveStatus === "error" ? "Save failed" : "Saved"}
-        </span>
+        {saveStatus === "saving" ? <LoaderCircle className="v2InspectorSpinner" size={15} aria-label="Saving" /> : null}
+        {saveStatus === "error" ? <CircleAlert className="v2ConnectorVisualEditError" size={15} aria-label="Save failed" /> : null}
 
         <button
           type="button"

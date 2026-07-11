@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Database, Trash2, X } from "lucide-react";
+import { Database, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -10,7 +10,6 @@ import type {
   V2LinkedFieldBinding,
   V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
-import { V2CardAdvancedSection } from "./v2-card-advanced-section";
 import { V2CardAttachmentsSection } from "./v2-card-attachments-section";
 import { V2CardBasicsSection } from "./v2-card-basics-section";
 import { V2CardConnectionsSection } from "./v2-card-connections-section";
@@ -18,6 +17,7 @@ import { V2CardDataSection } from "./v2-card-data-section";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
+import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -115,41 +115,15 @@ export function V2CardInspector({
           <Database size={18} strokeWidth={2.1} />
         </span>
         <div className="v2InspectorHeaderText">
-          <span>{cardType?.name ?? "Unknown type"}</span>
-          <strong>{cardType?.key ?? "unknown"}</strong>
-          <button
-            type="button"
-            className="v2InspectorManageTypeButton"
-            onClick={() => onManageCardType(cardType?.id ?? null)}
-          >
-            Manage type
-          </button>
+          <span>Card</span>
+          <strong title={cardType?.name}>{cardType?.name ?? "Unknown type"}</strong>
         </div>
-        <div className="v2InspectorActions" aria-live="polite">
-          <div className="v2InspectorActionRow">
-            <button
-              type="button"
-              className="v2InspectorDuplicateButton"
-              disabled={actionsDisabled}
-              onClick={() => void handleDuplicateClick()}
-            >
-              <Copy size={14} strokeWidth={2.2} />
-              <span>{pendingAction === "duplicate" ? "Duplicating..." : "Duplicate"}</span>
-            </button>
-            <button
-              type="button"
-              className="v2InspectorDeleteButton"
-              disabled={actionsDisabled}
-              onClick={() => void handleDeleteClick()}
-            >
-              <Trash2 size={14} strokeWidth={2.2} />
-              <span>{pendingAction === "delete" ? "Deleting..." : "Delete"}</span>
-            </button>
-          </div>
-          {actionError ? (
-            <p className="v2InspectorActionError">{actionError}</p>
-          ) : null}
-        </div>
+        <V2InspectorActionMenu
+          disabled={actionsDisabled}
+          onManage={() => onManageCardType(cardType?.id ?? null)}
+          onDuplicate={handleDuplicateClick}
+          onDelete={handleDeleteClick}
+        />
         <button
           type="button"
           className="v2InspectorCloseButton"
@@ -161,6 +135,7 @@ export function V2CardInspector({
       </header>
 
       <div className="v2InspectorContent">
+        {actionError ? <p className="v2InspectorActionError" role="alert">{actionError}</p> : null}
         <V2CardBasicsSection
           card={card}
           saveStatus={saveStatus}
@@ -172,7 +147,7 @@ export function V2CardInspector({
           saveStatus={saveStatus}
           onUpdateCardData={onUpdateCardData}
         />
-        <V2LinkedFieldsPreview
+        {(linkedFieldBindings.length > 0 || incomingConnections.length > 0 || outgoingConnections.length > 0) ? <V2LinkedFieldsPreview
           card={card}
           cardTypes={cardTypes}
           incomingConnections={incomingConnections}
@@ -187,7 +162,7 @@ export function V2CardInspector({
           onCreateBinding={onCreateLinkedFieldBinding}
           onUpdateBinding={onUpdateLinkedFieldBinding}
           onDeleteBinding={onDeleteLinkedFieldBinding}
-        />
+        /> : null}
         <V2CardAttachmentsSection
           cardId={card.id}
           attachments={attachments}
@@ -196,12 +171,11 @@ export function V2CardInspector({
           onAttachmentsChange={onAttachmentsChange}
           onPreview={onOpenAttachment}
         />
-        <V2CardConnectionsSection
+        {(incomingConnections.length + outgoingConnections.length) > 0 ? <V2CardConnectionsSection
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}
           cardById={cardById}
-        />
-        <V2CardAdvancedSection card={card} cardType={cardType} />
+        /> : null}
       </div>
     </aside>
   );

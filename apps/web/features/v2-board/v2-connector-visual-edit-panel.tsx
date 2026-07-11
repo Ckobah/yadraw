@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Trash2, X } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, LoaderCircle, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
 import type {
   V2Connection,
   V2ConnectionMarker,
@@ -15,7 +15,6 @@ type Props = {
   onPreview: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => void;
   onSave: (connectionId: string, visualStyle: V2ConnectionVisualStyle) => Promise<void>;
   onCancel: () => void;
-  onDelete: (connectionId: string) => Promise<void>;
 };
 
 type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition" | "labelSegmentIndex">> & {
@@ -58,7 +57,6 @@ export function V2ConnectorVisualEditPanel({
   onPreview,
   onSave,
   onCancel,
-  onDelete,
 }: Props) {
   const [draft, setDraft] = useState<VisualStyleDraft>(() =>
     normalizeStyle(connection.visualStyle)
@@ -143,8 +141,6 @@ export function V2ConnectorVisualEditPanel({
     >
       <div className="v2ConnectorVisualEditToolbar" role="toolbar" aria-label="Connector visual style">
         <label className="v2ConnectorVisualTool v2ConnectorVisualColorTool" title="Color">
-          <span aria-hidden="true" className="v2ConnectorVisualIcon">■</span>
-          <span className="visuallyHidden">Color</span>
           <input
             type="color"
             aria-label="Color"
@@ -153,7 +149,7 @@ export function V2ConnectorVisualEditPanel({
           />
         </label>
         <label className="v2ConnectorVisualTool" title="Width">
-          <span aria-hidden="true" className="v2ConnectorVisualIcon">━</span>
+          <Minus aria-hidden="true" size={14} />
           <span className="visuallyHidden">Width</span>
           <input
             type="number"
@@ -168,7 +164,7 @@ export function V2ConnectorVisualEditPanel({
           />
         </label>
         <label className="v2ConnectorVisualTool" title="Corner radius">
-          <span aria-hidden="true" className="v2ConnectorVisualIcon">⌜</span>
+          <Spline aria-hidden="true" size={14} />
           <span className="visuallyHidden">Corner radius</span>
           <input
             type="number"
@@ -183,7 +179,7 @@ export function V2ConnectorVisualEditPanel({
           />
         </label>
         <label className="v2ConnectorVisualTool" title="Start marker">
-          <span aria-hidden="true" className="v2ConnectorVisualIcon">⇤</span>
+          <ArrowLeftToLine aria-hidden="true" size={14} />
           <span className="visuallyHidden">Start marker</span>
           <select
             aria-label="Start marker"
@@ -198,7 +194,7 @@ export function V2ConnectorVisualEditPanel({
           </select>
         </label>
         <label className="v2ConnectorVisualTool" title="End marker">
-          <span aria-hidden="true" className="v2ConnectorVisualIcon">⇥</span>
+          <ArrowRightToLine aria-hidden="true" size={14} />
           <span className="visuallyHidden">End marker</span>
           <select
             aria-label="End marker"
@@ -219,7 +215,7 @@ export function V2ConnectorVisualEditPanel({
           aria-pressed={draft.routeMode === "manual"}
           onClick={toggleGeometry}
         >
-          <span aria-hidden="true">⌁</span>
+          <Waypoints aria-hidden="true" size={14} />
           <span className="visuallyHidden">Geometry</span>
         </button>
         <button
@@ -229,24 +225,11 @@ export function V2ConnectorVisualEditPanel({
           disabled={saveStatus === "saving" || (draft.routeMode === "auto" && draft.waypoints.length === 0)}
           onClick={() => void resetRoute()}
         >
-          <span aria-hidden="true">↺</span>
+          <RotateCcw aria-hidden="true" size={14} />
           <span className="visuallyHidden">Reset route</span>
         </button>
-        <span
-          className={error ? "v2ConnectorVisualEditError" : "v2ConnectorVisualEditStatus"}
-          title="Status"
-        >
-          {error ?? (saveStatus === "saving" || isDirty ? "Saving..." : "Saved")}
-        </span>
-        <button
-          type="button"
-          className="v2ConnectorVisualIconButton v2ConnectorVisualDeleteButton"
-          title="Delete connector"
-          aria-label="Delete connector"
-          onClick={() => void onDelete(connection.id).catch(() => {})}
-        >
-          <Trash2 size={14} strokeWidth={2.2} />
-        </button>
+        {(saveStatus === "saving" || isDirty) ? <LoaderCircle className="v2InspectorSpinner" size={15} aria-label="Saving" /> : null}
+        {error ? <CircleAlert className="v2ConnectorVisualEditError" size={15} aria-label={error} /> : null}
         <button
           type="button"
           className="v2ConnectorVisualIconButton"

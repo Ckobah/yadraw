@@ -156,9 +156,7 @@ export function V2CardAttachmentsSection({
 
       {isLoading ? (
         <p className="v2InspectorEmpty">Loading files...</p>
-      ) : !attachments || attachments.length === 0 ? (
-        <p className="v2InspectorEmpty">No files yet</p>
-      ) : (
+      ) : !attachments || attachments.length === 0 ? null : (
         <div className="v2InspectorAttachmentList">
           {attachments.map((attachment) => (
             <div key={attachment.id} className="v2InspectorAttachmentRow">
@@ -175,7 +173,7 @@ export function V2CardAttachmentsSection({
                   {attachment.filename}
                 </button>
                 <span>{getAttachmentMeta(attachment)}</span>
-                <em>{attachment.processingStatus}</em>
+                {attachment.processingStatus !== "processed" ? <em>{attachment.processingStatus}</em> : null}
               </div>
               <div className="v2InspectorAttachmentActions">
                 <button

@@ -158,9 +158,7 @@ export function V2ConnectorFilesSection({
 
       {isLoading ? (
         <p className="v2InspectorEmpty">Loading files...</p>
-      ) : attachments.length === 0 ? (
-        <p className="v2InspectorEmpty">No files attached to this connector yet.</p>
-      ) : (
+      ) : attachments.length === 0 ? null : (
         <div className="v2InspectorAttachmentList">
           {attachments.map((attachment) => (
             <div key={attachment.id} className="v2InspectorAttachmentRow">
@@ -170,7 +168,7 @@ export function V2ConnectorFilesSection({
               <div className="v2InspectorAttachmentText">
                 <strong title={attachment.filename}>{attachment.filename}</strong>
                 <span>{getAttachmentMeta(attachment)}</span>
-                <em>{attachment.processingStatus}</em>
+                {attachment.processingStatus !== "processed" ? <em>{attachment.processingStatus}</em> : null}
               </div>
               <div className="v2InspectorAttachmentActions">
                 <button
