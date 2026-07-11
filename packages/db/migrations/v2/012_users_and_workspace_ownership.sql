@@ -18,6 +18,18 @@ create table if not exists users (
 create unique index if not exists users_email_unique
   on users (lower(email));
 
+-- Older local databases may already have the legacy workspace_members table.
+alter table workspace_members
+  add column if not exists deleted_at timestamptz null;
+
+create index if not exists workspace_members_user_id_active_idx
+  on workspace_members (user_id)
+  where deleted_at is null;
+
+create index if not exists workspace_members_workspace_id_active_idx
+  on workspace_members (workspace_id)
+  where deleted_at is null;
+
 insert into users (id, email, name, auth_provider, auth_subject)
 select distinct
   wm.user_id,
