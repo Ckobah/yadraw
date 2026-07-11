@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { V2BoardCanvas } from "./v2-board-canvas";
 import type { V2BoardDetail } from "@yadraw/shared";
 import { createYadrawThemeVariables, lightYadrawTheme } from "./v2-theme-tokens";
+import { V2BoardEmptyState } from "./v2-board-empty-state";
 
 type Props = {
   boardDetail: V2BoardDetail;
@@ -39,6 +40,7 @@ export function V2BoardPage({ boardDetail }: Props) {
 
       {/* Canvas area */}
       <div className="v2BoardCanvasArea">
+        {cardCount === 0 ? <V2BoardEmptyState /> : null}
         <ReactFlowProvider>
           <V2BoardCanvas boardDetail={boardDetail} />
         </ReactFlowProvider>

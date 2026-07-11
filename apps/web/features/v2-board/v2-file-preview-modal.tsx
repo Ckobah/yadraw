@@ -1,9 +1,10 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Download, FileQuestion, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { V2CardAttachment } from "@yadraw/shared";
 import { getV2FileDownloadUrl } from "./api";
+import { useDialogFocus } from "./use-dialog-focus";
 
 type PreviewKind = "image" | "pdf" | "video" | "text" | "download";
 
@@ -51,6 +52,8 @@ export function V2FilePreviewModal({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  useDialogFocus(dialogRef, onClose);
 
   useEffect(() => {
     setObjectUrl(null);
@@ -96,7 +99,6 @@ export function V2FilePreviewModal({
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
       if (event.key === "ArrowLeft" && index > 0) onIndexChange(index - 1);
       if (event.key === "ArrowRight" && index < attachments.length - 1) onIndexChange(index + 1);
     }
@@ -109,6 +111,7 @@ export function V2FilePreviewModal({
   return (
     <div className="v2FilePreviewBackdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className="v2FilePreviewModal"
         role="dialog"
         aria-modal="true"

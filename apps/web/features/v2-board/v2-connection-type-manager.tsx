@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type {
   V2ConnectionType,
@@ -14,6 +14,7 @@ import {
   V2CardTypeSchemaEditor,
   type V2CardTypeSchemaFieldDraft,
 } from "./v2-card-type-schema-editor";
+import { useDialogFocus } from "./use-dialog-focus";
 
 type ConnectionTypeManagerMode = "existing" | "new";
 
@@ -82,6 +83,8 @@ export function V2ConnectionTypeManager({
   onUpdateConnectionType,
   onClose,
 }: V2ConnectionTypeManagerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, () => { void closeManager(); });
   const sortedConnectionTypes = useMemo(
     () => [...connectionTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [connectionTypes]
@@ -223,6 +226,7 @@ export function V2ConnectionTypeManager({
 
   return (
     <div
+      ref={dialogRef}
       className="v2ModalOverlay"
       role="dialog"
       aria-modal="true"

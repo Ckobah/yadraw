@@ -1,4 +1,4 @@
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut, Settings } from "lucide-react";
 import { redirect } from "next/navigation";
 import { getCurrentV2User } from "../../../lib/auth/current-user";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../../features/v2-dashboard/server-api";
 import { NewBoardForm } from "../../../features/v2-dashboard/new-board-form";
 import { WorkspaceSelector } from "../../../features/v2-dashboard/workspace-selector";
+import { BoardList } from "../../../features/v2-dashboard/board-list";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,7 @@ export default async function DashboardPage({
               <strong>{user.name}</strong>
               <span>{user.email}</span>
             </div>
+            <a href="/v2/account" className="v2DashboardIconButton" title="Account settings" aria-label="Account settings"><Settings size={18} /></a>
             <form action="/auth/signout" method="post">
               <button type="submit" className="v2DashboardIconButton" title="Sign out" aria-label="Sign out">
                 <LogOut size={18} />
@@ -85,16 +87,7 @@ export default async function DashboardPage({
             <span>{boards.length} total</span>
           </div>
 
-          {boards.length > 0 ? (
-            <div className="v2DashboardBoardList" role="list">
-              {boards.map((board) => (
-                <a key={board.id} href={`/v2/boards/${board.id}`} className="v2DashboardBoardRow" role="listitem">
-                  <strong>{board.name}</strong>
-                  <span>Updated {new Date(board.updatedAt).toLocaleDateString("en-US")}</span>
-                </a>
-              ))}
-            </div>
-          ) : (
+          {boards.length > 0 ? <BoardList boards={boards} /> : (
             <div className="v2DashboardEmptyState">
               <h2>No boards yet</h2>
               <p>Create a board to start arranging cards and connections.</p>

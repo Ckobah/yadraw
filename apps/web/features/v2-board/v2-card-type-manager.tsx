@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, Trash2, X } from "lucide-react";
 import type {
   V2CardType,
@@ -13,6 +13,7 @@ import {
   V2CardTypeSchemaEditor,
   type V2CardTypeSchemaFieldDraft,
 } from "./v2-card-type-schema-editor";
+import { useDialogFocus } from "./use-dialog-focus";
 import { getV2CardTypeIcon, V2_CARD_TYPE_ICON_OPTIONS } from "./v2-card-type-icons";
 import { V2CardTypePreview } from "./v2-card-type-preview";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
@@ -142,6 +143,8 @@ export function V2CardTypeManager({
   onDeleteCardType,
   onClose,
 }: V2CardTypeManagerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, () => { void closeManager(); });
   const sortedCardTypes = useMemo(
     () => [...cardTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [cardTypes]
@@ -343,6 +346,7 @@ export function V2CardTypeManager({
 
   return (
     <div
+      ref={dialogRef}
       className="v2ModalOverlay"
       role="dialog"
       aria-modal="true"

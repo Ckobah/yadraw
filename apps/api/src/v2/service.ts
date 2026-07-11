@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   v2BootstrapSessionBodySchema,
   v2CreateBoardBodySchema,
+  v2DuplicateBoardBodySchema,
   type V2CardAttachment,
   type V2ConnectionAttachment,
   type V2CreateCardTypeRequest,
@@ -16,11 +17,13 @@ import {
   v2DemoIds,
   v2RunDryRunBodySchema,
   v2UpdateBoardLayoutBodySchema,
+  v2UpdateBoardBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
   type V2BoardDetail,
+  type V2BoardExport,
   type V2BoardSummary,
   type V2BootstrapSessionRequest,
   type V2BootstrapSessionResponse,
@@ -91,6 +94,11 @@ export type V2BoardService = {
     workspaceId: string,
     input: { name: string }
   ): Promise<V2BoardSummary>;
+  updateBoard(context: RequestContext, boardId: string, input: unknown): Promise<V2BoardSummary>;
+  duplicateBoard(context: RequestContext, boardId: string, input: unknown): Promise<V2BoardSummary>;
+  deleteBoard(context: RequestContext, boardId: string): Promise<{ deleted: true; id: string }>;
+  exportBoard(context: RequestContext, boardId: string): Promise<V2BoardExport>;
+  deleteAccount(context: RequestContext): Promise<{ deleted: true; id: string }>;
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   updateBoardLayout(
     context: RequestContext,
@@ -432,7 +440,10 @@ export function createV2BoardService(
       !repository.bootstrapPersonalWorkspace ||
       !repository.listUserWorkspaces ||
       !repository.listWorkspaceBoards ||
-      !repository.createBoard
+      !repository.createBoard ||
+      !repository.updateBoard ||
+      !repository.duplicateBoard ||
+      !repository.deleteBoard
     ) {
       throw new V2ServiceError("storage_unavailable", "V2 dashboard repository is not available");
     }
@@ -440,7 +451,10 @@ export function createV2BoardService(
       bootstrapPersonalWorkspace: repository.bootstrapPersonalWorkspace.bind(repository),
       listUserWorkspaces: repository.listUserWorkspaces.bind(repository),
       listWorkspaceBoards: repository.listWorkspaceBoards.bind(repository),
-      createBoard: repository.createBoard.bind(repository)
+      createBoard: repository.createBoard.bind(repository),
+      updateBoard: repository.updateBoard.bind(repository),
+      duplicateBoard: repository.duplicateBoard.bind(repository),
+      deleteBoard: repository.deleteBoard.bind(repository)
     };
   }
 
@@ -602,6 +616,74 @@ export function createV2BoardService(
       if (!parsedInput.success) validationFailed("Invalid board payload");
       await authorizeWorkspace(context, workspaceId, "write");
       return requireDashboardRepository().createBoard(workspaceId, parsedInput.data.name);
+    },
+
+    async updateBoard(context, boardId, rawInput) {
+      const parsedInput = v2UpdateBoardBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid board update payload");
+      await requireBoardForAccess(context, boardId, "write");
+      const board = await requireDashboardRepository().updateBoard(boardId, parsedInput.data);
+      if (!board) notFound("Board not found");
+      return board;
+    },
+
+    async duplicateBoard(context, boardId, rawInput) {
+      const parsedInput = v2DuplicateBoardBodySchema.safeParse(rawInput ?? {});
+      if (!parsedInput.success) validationFailed("Invalid board duplicate payload");
+      await requireBoardForAccess(context, boardId, "write");
+      const board = await requireDashboardRepository().duplicateBoard(boardId, parsedInput.data);
+      if (!board) notFound("Board not found");
+      return board;
+    },
+
+    async deleteBoard(context, boardId) {
+      await requireBoardForAccess(context, boardId, "manage");
+      if (!(await requireDashboardRepository().deleteBoard(boardId))) notFound("Board not found");
+      return { deleted: true, id: boardId };
+    },
+
+    async exportBoard(context, boardId) {
+      const board = await repository.getBoardDetail(boardId);
+      if (!board) notFound("Board not found");
+      await authorizeWorkspace(context, board.workspace.id, "read");
+      const fieldBindings = repository.listLinkedFieldBindings
+        ? await repository.listLinkedFieldBindings(boardId)
+        : [];
+      const cardAttachments = Object.fromEntries(
+        await Promise.all(
+          board.cards.map(async (card) => [
+            card.id,
+            repository.listCardAttachments ? await repository.listCardAttachments(card.id) : []
+          ])
+        )
+      );
+      const connectionAttachments = Object.fromEntries(
+        await Promise.all(
+          board.connections.map(async (connection) => [
+            connection.id,
+            repository.listConnectionAttachments
+              ? await repository.listConnectionAttachments(connection.id)
+              : []
+          ])
+        )
+      );
+      return {
+        formatVersion: 1,
+        exportedAt: new Date().toISOString(),
+        board,
+        fieldBindings,
+        cardAttachments,
+        connectionAttachments,
+        attachmentPolicy: "metadata-only"
+      };
+    },
+
+    async deleteAccount(context) {
+      if (!repository.deleteUserData) {
+        throw new V2ServiceError("storage_unavailable", "Account deletion is unavailable");
+      }
+      if (!(await repository.deleteUserData(context.userId))) notFound("Account not found");
+      return { deleted: true, id: context.userId };
     },
 
     async getBoard(context, boardId) {
@@ -1283,6 +1365,7 @@ export function createV2BoardService(
           createdBy: context.userId
         });
       } catch (error) {
+        await storage.objectStorage.deleteObject?.(storage.bucket, storagePath).catch(() => undefined);
         console.warn(
           {
             fileId,
@@ -1290,7 +1373,7 @@ export function createV2BoardService(
             storageBucket: storage.bucket,
             storagePath
           },
-          "V2 attachment DB insert failed after object upload; orphan object may remain"
+          "V2 attachment DB insert failed after object upload"
         );
         throw error;
       }
@@ -1390,6 +1473,7 @@ export function createV2BoardService(
           createdBy: context.userId
         });
       } catch (error) {
+        await storage.objectStorage.deleteObject?.(storage.bucket, storagePath).catch(() => undefined);
         console.warn(
           {
             fileId,
@@ -1397,7 +1481,7 @@ export function createV2BoardService(
             storageBucket: storage.bucket,
             storagePath
           },
-          "V2 connection attachment DB insert failed after object upload; orphan object may remain"
+          "V2 connection attachment DB insert failed after object upload"
         );
         throw error;
       }

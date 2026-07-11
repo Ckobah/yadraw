@@ -1,12 +1,10 @@
 export function V2BoardEmptyState() {
   return (
-    <main className="loadStatePage">
-      <section className="loadStatePanel">
-        <div className="brandMark">Y</div>
-        <span className="eyebrow">Empty board</span>
+    <aside className="v2BoardFirstRun" aria-label="Empty board">
+      <section>
         <h1>No cards yet</h1>
-        <p>This board has no cards to display.</p>
+        <p>Use Add card in the toolbar to place the first item.</p>
       </section>
-    </main>
+    </aside>
   );
 }

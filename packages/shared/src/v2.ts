@@ -120,6 +120,7 @@ export const v2BoardSchema = z.object({
   projectId: v2UuidSchema,
   name: z.string().min(1),
   viewport: v2ViewportSchema,
+  archivedAt: v2TimestampSchema.nullable().optional(),
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
 });
@@ -452,6 +453,7 @@ export const v2BoardSummarySchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
   name: z.string().min(1),
+  archivedAt: v2TimestampSchema.nullable().optional(),
   updatedAt: v2TimestampSchema
 });
 
@@ -471,6 +473,20 @@ export const v2CreateBoardBodySchema = z
   .object({
     name: z.string().trim().min(1).max(120)
   })
+  .strict();
+
+export const v2UpdateBoardBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    archived: z.boolean().optional()
+  })
+  .strict()
+  .refine((input) => input.name !== undefined || input.archived !== undefined, {
+    message: "At least one board change is required"
+  });
+
+export const v2DuplicateBoardBodySchema = z
+  .object({ name: z.string().trim().min(1).max(120).optional() })
   .strict();
 
 export const v2BootstrapSessionBodySchema = z
@@ -611,6 +627,16 @@ export const v2DeleteCardParamsSchema = z.object({
   cardId: v2UuidSchema
 });
 
+export const v2BoardExportSchema = z.object({
+  formatVersion: z.literal(1),
+  exportedAt: v2TimestampSchema,
+  board: v2BoardDetailSchema,
+  fieldBindings: z.array(v2LinkedFieldBindingSchema),
+  cardAttachments: z.record(v2UuidSchema, z.array(v2CardAttachmentSchema)),
+  connectionAttachments: z.record(v2UuidSchema, z.array(v2ConnectionAttachmentSchema)),
+  attachmentPolicy: z.literal("metadata-only")
+});
+
 export const v2UpdateBoardLayoutParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -749,6 +775,32 @@ export const v2ApiContracts = {
     path: "/v2/boards/{boardId}",
     params: v2GetBoardParamsSchema,
     response: v2BoardDetailSchema
+  },
+  updateBoard: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}",
+    params: v2GetBoardParamsSchema,
+    body: v2UpdateBoardBodySchema,
+    response: v2BoardSummarySchema
+  },
+  duplicateBoard: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/duplicate",
+    params: v2GetBoardParamsSchema,
+    body: v2DuplicateBoardBodySchema,
+    response: v2BoardSummarySchema
+  },
+  deleteBoard: {
+    method: "DELETE",
+    path: "/v2/boards/{boardId}",
+    params: v2GetBoardParamsSchema,
+    response: v2DeleteResultSchema
+  },
+  exportBoard: {
+    method: "GET",
+    path: "/v2/boards/{boardId}/export",
+    params: v2GetBoardParamsSchema,
+    response: v2BoardExportSchema
   },
   updateBoardLayout: {
     method: "PATCH",
@@ -970,6 +1022,9 @@ export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2UpdateBoardLayoutInput = z.infer<typeof v2UpdateBoardLayoutBodySchema>;
 export type V2UpdateBoardLayoutRequest = z.input<typeof v2UpdateBoardLayoutBodySchema>;
 export type V2UpdateBoardLayoutResponse = z.infer<typeof v2UpdateBoardLayoutResponseSchema>;
+export type V2UpdateBoardRequest = z.input<typeof v2UpdateBoardBodySchema>;
+export type V2DuplicateBoardRequest = z.input<typeof v2DuplicateBoardBodySchema>;
+export type V2BoardExport = z.infer<typeof v2BoardExportSchema>;
 export type V2UpdateCardTypeSchemaInput = z.infer<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;

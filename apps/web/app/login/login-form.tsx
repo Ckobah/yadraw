@@ -30,12 +30,14 @@ export function LoginForm({
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(initialMessage);
+  const [canResend, setCanResend] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase || pending) return;
     setPending(true);
     setMessage(null);
+    setCanResend(false);
     const destination = safeNextPath(nextPath);
     try {
       if (mode === "signin") {
@@ -62,6 +64,7 @@ export function LoginForm({
         router.refresh();
       } else {
         setMessage("Check your email to confirm your account, then sign in.");
+        setCanResend(true);
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Authentication failed.");
@@ -124,8 +127,15 @@ export function LoginForm({
           required
         />
       </label>
+      {mode === "signin" ? <a className="v2AuthTextLink" href="/forgot-password">Forgot password?</a> : null}
 
       {message ? <p className="v2AuthMessage" role="status">{message}</p> : null}
+      {canResend ? <button className="v2AuthTextButton" type="button" onClick={async () => {
+        if (!supabase) return;
+        const callbackUrl = new URL("/auth/callback", window.location.origin);
+        const { error } = await supabase.auth.resend({ type: "signup", email, options: { emailRedirectTo: callbackUrl.toString() } });
+        setMessage(error ? error.message : "Confirmation email sent again.");
+      }}>Resend confirmation email</button> : null}
       {!supabase ? (
         <p className="v2AuthMessage v2AuthMessageError" role="alert">
           Authentication is not configured.
@@ -135,6 +145,7 @@ export function LoginForm({
         {mode === "signin" ? <LogIn size={18} /> : <UserPlus size={18} />}
         {pending ? "Please wait" : mode === "signin" ? "Sign in" : "Create account"}
       </button>
+      <p className="v2AuthLegal">By continuing, you agree to the <a href="/terms">Terms</a> and acknowledge the <a href="/privacy">Privacy Policy</a>.</p>
     </form>
   );
 }

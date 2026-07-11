@@ -3,6 +3,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
 
@@ -33,6 +34,7 @@ export interface V2ObjectStorage {
   healthCheck?(bucket: string): Promise<void>;
   putObject(input: PutObjectInput): Promise<void>;
   getObject(bucket: string, key: string): Promise<GetObjectResult>;
+  deleteObject?(bucket: string, key: string): Promise<void>;
 }
 
 export class V2StorageConfigError extends Error {
@@ -140,6 +142,10 @@ export function createS3ObjectStorage(config: V2StorageConfig): V2ObjectStorage 
         contentType: result.ContentType ?? null,
         contentLength: result.ContentLength ?? null
       };
+    },
+
+    async deleteObject(bucket, key) {
+      await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
     }
   };
 }

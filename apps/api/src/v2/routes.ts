@@ -60,6 +60,52 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.patch("/v2/boards/:boardId", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.updateBoard(request.requestContext, boardId, request.body);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/boards/:boardId/duplicate", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return reply.code(201).send(
+        await service.duplicateBoard(request.requestContext, boardId, request.body)
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.delete("/v2/boards/:boardId", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.deleteBoard(request.requestContext, boardId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.get("/v2/boards/:boardId/export", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.exportBoard(request.requestContext, boardId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.delete("/v2/account", async (request, reply) => {
+    try {
+      return await service.deleteAccount(request.requestContext);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.patch("/v2/boards/:boardId/layout", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

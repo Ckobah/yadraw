@@ -100,6 +100,18 @@ const v2Service = createV2BoardService(v2Repository, {
 });
 registerV2Routes(server, v2Service);
 
+server.addHook("onResponse", async (request, reply) => {
+  request.log.info({
+    event: "api_request_completed",
+    requestId: request.id,
+    route: request.routeOptions.url,
+    method: request.method,
+    statusCode: reply.statusCode,
+    responseTimeMs: Math.round(reply.elapsedTime),
+    userId: request.requestContext?.userId ?? null
+  }, "API request completed");
+});
+
 server.setErrorHandler((error, request, reply) => {
   if (error instanceof V2ServiceError) {
     switch (error.code) {

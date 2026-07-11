@@ -12,6 +12,7 @@ import {
   v2LinkedFieldBindingSchema,
   type V2Board,
   type V2BoardSummary,
+  type V2DuplicateBoardRequest,
   type V2BootstrapSessionResponse,
   type V2BoardDetail,
   type V2CardAttachment,
@@ -168,6 +169,10 @@ export type V2Repository = {
   listUserWorkspaces?(userId: string): Promise<V2WorkspaceSummary[]>;
   listWorkspaceBoards?(workspaceId: string): Promise<V2BoardSummary[]>;
   createBoard?(workspaceId: string, name: string): Promise<V2BoardSummary>;
+  updateBoard?(boardId: string, input: { name?: string; archived?: boolean }): Promise<V2BoardSummary | null>;
+  duplicateBoard?(boardId: string, input: V2DuplicateBoardRequest): Promise<V2BoardSummary | null>;
+  deleteBoard?(boardId: string): Promise<boolean>;
+  deleteUserData?(userId: string): Promise<boolean>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
   listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
@@ -316,6 +321,7 @@ function boardFromRow(row: QueryResultRow): V2Board {
     projectId: String(row.project_id),
     name: String(row.board_name ?? row.name),
     viewport,
+    archivedAt: row.archived_at ? toIso(row.archived_at) : null,
     createdAt: toIso(row.board_created_at ?? row.created_at),
     updatedAt: toIso(row.board_updated_at ?? row.updated_at)
   };
@@ -336,6 +342,7 @@ function boardSummaryFromRow(row: QueryResultRow): V2BoardSummary {
     id: String(row.board_id ?? row.id),
     workspaceId: String(row.workspace_id),
     name: String(row.board_name ?? row.name),
+    archivedAt: row.archived_at ? toIso(row.archived_at) : null,
     updatedAt: toIso(row.board_updated_at ?? row.updated_at)
   };
 }
@@ -911,6 +918,37 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async getBoard(boardId) {
       return boardId === state.board.id ? cloneJson(state.board) : null;
+    },
+
+    async updateBoard(boardId, input) {
+      if (boardId !== state.board.id) return null;
+      if (input.name !== undefined) state.board.name = input.name;
+      if (input.archived !== undefined) {
+        state.board.archivedAt = input.archived ? nowIso() : null;
+      }
+      state.board.updatedAt = nowIso();
+      return boardSummaryFromRow({
+        board_id: state.board.id,
+        workspace_id: state.board.workspaceId,
+        board_name: state.board.name,
+        archived_at: state.board.archivedAt,
+        board_updated_at: state.board.updatedAt
+      });
+    },
+
+    async duplicateBoard(boardId, input) {
+      if (boardId !== state.board.id) return null;
+      return {
+        id: randomUUID(),
+        workspaceId: state.board.workspaceId,
+        name: input.name ?? `${state.board.name} copy`,
+        archivedAt: null,
+        updatedAt: nowIso()
+      };
+    },
+
+    async deleteBoard(boardId) {
+      return boardId === state.board.id;
     },
 
     async updateBoardLayout(boardId, input) {
@@ -1945,6 +1983,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             id as board_id,
             workspace_id,
             name as board_name,
+            archived_at,
             updated_at as board_updated_at
           from boards
           where workspace_id = $1
@@ -1982,12 +2021,177 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           `
             insert into boards (workspace_id, project_id, name)
             values ($1, $2, $3)
-            returning id as board_id, workspace_id, name as board_name, updated_at as board_updated_at
+            returning id as board_id, workspace_id, name as board_name, archived_at, updated_at as board_updated_at
           `,
           [workspaceId, projectResult.rows[0].id, name]
         );
         await client.query("commit");
         return boardSummaryFromRow(result.rows[0]);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async updateBoard(boardId, input) {
+      const result = await pool.query(
+        `
+          update boards
+          set name = coalesce($2, name),
+              archived_at = case
+                when $3::boolean is null then archived_at
+                when $3 then coalesce(archived_at, now())
+                else null
+              end,
+              updated_at = now()
+          where id = $1 and deleted_at is null
+          returning id as board_id, workspace_id, name as board_name, archived_at,
+                    updated_at as board_updated_at
+        `,
+        [boardId, input.name ?? null, input.archived ?? null]
+      );
+      return result.rows[0] ? boardSummaryFromRow(result.rows[0]) : null;
+    },
+
+    async duplicateBoard(boardId, input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const sourceResult = await client.query(
+          `select * from boards where id = $1 and deleted_at is null for share`,
+          [boardId]
+        );
+        const source = sourceResult.rows[0];
+        if (!source) {
+          await client.query("rollback");
+          return null;
+        }
+        const createdResult = await client.query(
+          `
+            insert into boards (
+              workspace_id, project_id, name, viewport_x, viewport_y, viewport_zoom
+            ) values ($1, $2, $3, $4, $5, $6)
+            returning id as board_id, workspace_id, name as board_name, archived_at,
+                      updated_at as board_updated_at
+          `,
+          [
+            source.workspace_id,
+            source.project_id,
+            input.name ?? `${source.name} copy`,
+            source.viewport_x,
+            source.viewport_y,
+            source.viewport_zoom
+          ]
+        );
+        const created = createdResult.rows[0];
+        const cards = await client.query(
+          `select * from cards where board_id = $1 and deleted_at is null order by created_at, id`,
+          [boardId]
+        );
+        const cardIds = new Map<string, string>();
+        for (const card of cards.rows) {
+          const copied = await client.query(
+            `
+              insert into cards (
+                workspace_id, board_id, card_type_id, title, description, data,
+                position_x, position_y, width, height, visual_style, status
+              ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+              returning id
+            `,
+            [card.workspace_id, created.board_id, card.card_type_id, card.title,
+             card.description, card.data, card.position_x, card.position_y,
+             card.width, card.height, card.visual_style, card.status]
+          );
+          cardIds.set(String(card.id), String(copied.rows[0].id));
+        }
+        const connections = await client.query(
+          `select * from connections where board_id = $1 and deleted_at is null order by created_at, id`,
+          [boardId]
+        );
+        for (const connection of connections.rows) {
+          const sourceCardId = cardIds.get(String(connection.source_card_id));
+          const targetCardId = cardIds.get(String(connection.target_card_id));
+          if (!sourceCardId || !targetCardId) continue;
+          await client.query(
+            `
+              insert into connections (
+                workspace_id, board_id, connection_type_id, source_card_id, target_card_id,
+                source_port_key, target_port_key, title, description, data, visual_style,
+                type, label, status
+              ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            `,
+            [connection.workspace_id, created.board_id, connection.connection_type_id,
+             sourceCardId, targetCardId, connection.source_port_key, connection.target_port_key,
+             connection.title, connection.description, connection.data, connection.visual_style,
+             connection.type, connection.label, connection.status]
+          );
+        }
+        const bindings = await client.query(
+          `select * from v2_card_field_bindings where board_id = $1 and deleted_at is null`,
+          [boardId]
+        );
+        for (const binding of bindings.rows) {
+          const targetCardId = cardIds.get(String(binding.target_card_id));
+          const sourceCardId = binding.source_card_id
+            ? cardIds.get(String(binding.source_card_id)) ?? null
+            : null;
+          if (!targetCardId) continue;
+          await client.query(
+            `
+              insert into v2_card_field_bindings (
+                workspace_id, board_id, target_card_id, target_field, source_mode,
+                connection_direction, source_card_id, source_card_type_id, source_card_type_key,
+                source_field_path, on_missing, on_multiple, status
+              ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            `,
+            [binding.workspace_id, created.board_id, targetCardId, binding.target_field,
+             binding.source_mode, binding.connection_direction, sourceCardId, binding.source_card_type_id,
+             binding.source_card_type_key, binding.source_field_path, binding.on_missing,
+             binding.on_multiple, binding.status]
+          );
+        }
+        await client.query("commit");
+        return boardSummaryFromRow(created);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async deleteBoard(boardId) {
+      const result = await pool.query(
+        `update boards set deleted_at = now(), updated_at = now()
+         where id = $1 and deleted_at is null`,
+        [boardId]
+      );
+      return (result.rowCount ?? 0) === 1;
+    },
+
+    async deleteUserData(userId) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(
+          `update workspaces set deleted_at = now(), updated_at = now()
+           where owner_user_id = $1 and deleted_at is null`,
+          [userId]
+        );
+        await client.query(
+          `update workspace_members set deleted_at = now(), updated_at = now()
+           where user_id = $1 and deleted_at is null`,
+          [userId]
+        );
+        const result = await client.query(
+          `update users set deleted_at = now(), updated_at = now()
+           where id = $1 and deleted_at is null`,
+          [userId]
+        );
+        await client.query("commit");
+        return (result.rowCount ?? 0) === 1;
       } catch (error) {
         await client.query("rollback");
         throw error;

@@ -2318,6 +2318,11 @@ button:disabled {
   color: #b42318;
 }
 
+.v2AuthTextLink, .v2AuthLegal a { color: #175cd3; }
+.v2AuthTextLink { font-size: 13px; }
+.v2AuthTextButton { width: fit-content; border: 0; background: transparent; padding: 0; color: #175cd3; font: inherit; font-size: 13px; cursor: pointer; }
+.v2AuthLegal { margin: 0; color: #667085; font-size: 11px; line-height: 1.5; }
+
 .v2DashboardPage {
   min-height: 100vh;
   background: #f7f8fa;
@@ -2345,6 +2350,7 @@ button:disabled {
 .v2DashboardBrand {
   gap: 9px;
   color: #175cd3;
+  text-decoration: none;
 }
 
 .v2DashboardAccount {
@@ -2440,6 +2446,7 @@ button:disabled {
 .v2DashboardBoardRow {
   min-height: 58px;
   display: grid;
+  position: relative;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
@@ -2448,6 +2455,37 @@ button:disabled {
   color: #101828;
   text-decoration: none;
 }
+
+.v2DashboardBoardRow > a:first-child { position: absolute; inset: 0 52px 0 0; }
+.v2DashboardBoardRow > div { display: grid; gap: 3px; min-width: 0; z-index: 1; pointer-events: none; }
+.v2DashboardBoardRow input { width: 100%; border: 1px solid transparent; background: transparent; padding: 3px 5px; color: #101828; font: inherit; font-weight: 700; pointer-events: auto; }
+.v2DashboardBoardRow input:focus { border-color: #2e90fa; outline: 2px solid rgba(46,144,250,.16); background: #fff; }
+.v2DashboardBoardGroup { margin-top: 24px; }
+.v2DashboardBoardGroup h2 { margin: 0 0 8px; font-size: 14px; color: #475467; }
+.v2DashboardBoardMenu { position: relative; z-index: 3; }
+.v2DashboardBoardMenu summary { width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; list-style: none; }
+.v2DashboardBoardMenu summary::-webkit-details-marker { display: none; }
+.v2DashboardBoardMenu > div { position: absolute; right: 0; top: 40px; z-index: 10; width: 180px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; padding: 5px; box-shadow: 0 10px 24px rgba(16,24,40,.14); }
+.v2DashboardBoardMenu button, .v2DashboardBoardMenu > div a { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 8px; color: #344054; font: inherit; font-size: 13px; text-decoration: none; cursor: pointer; }
+.v2DashboardBoardMenu .danger { color: #b42318; }
+.v2DashboardError { color: #b42318; font-size: 13px; }
+
+.v2AccountPanel, .v2PublicDocument article { width: min(100% - 32px, 720px); margin: 40px auto; }
+.v2AccountPanel h1, .v2PublicDocument h1 { font-size: 28px; }
+.v2AccountSections { display: grid; gap: 20px; }
+.v2AccountSections section { border-top: 1px solid #e4e7ec; padding-top: 20px; }
+.v2AccountSections label { display: grid; gap: 6px; max-width: 440px; font-size: 13px; }
+.v2AccountSections input { border: 1px solid #d0d5dd; border-radius: 6px; padding: 10px 12px; font: inherit; }
+.v2AccountSections button { display: inline-flex; gap: 8px; border: 1px solid #d92d20; border-radius: 6px; background: #fff; padding: 9px 12px; color: #b42318; cursor: pointer; }
+.v2PublicDocument { min-height: 100vh; color: #101828; background: #fff; }
+.v2PublicDocument nav { display: flex; justify-content: space-between; border-bottom: 1px solid #e4e7ec; padding: 18px clamp(16px,4vw,48px); }
+.v2PublicDocument nav a { color: #175cd3; text-decoration: none; font-weight: 700; }
+.v2PublicDocument article { line-height: 1.65; }
+.v2PublicDocument h2 { margin-top: 28px; font-size: 18px; }
+.v2PublicDocument .updated { color: #667085; font-size: 13px; }
+.v2BoardFirstRun { position: absolute; left: 50%; top: 50%; z-index: 4; transform: translate(-50%,-50%); width: min(360px,calc(100% - 48px)); border: 1px dashed #98a2b3; border-radius: 8px; background: rgba(255,255,255,.94); padding: 24px; text-align: center; pointer-events: none; }
+.v2BoardFirstRun h1 { margin: 0; font-size: 18px; }
+.v2BoardFirstRun p { margin: 8px 0 0; color: #667085; font-size: 13px; }
 
 .v2DashboardBoardRow:last-child {
   border-bottom: 0;
