@@ -11,7 +11,7 @@ rollback() {
   echo "Deployment failed; restoring ${previous_commit}"
   git reset --hard "$previous_commit"
   if [[ "$deployment_started" == "1" ]]; then
-    npm ci
+    npm ci --include=dev
     set -a
     source .env
     set +a
@@ -34,7 +34,7 @@ set -a
 source .env
 set +a
 
-npm ci
+npm ci --include=dev
 bash scripts/backup-production.sh
 npm run v2:migrations:apply --workspace @yadraw/api
 npm run build

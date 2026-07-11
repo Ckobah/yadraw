@@ -18,16 +18,15 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 snapshot="${backup_root}/${timestamp}"
 mkdir -p "${snapshot}/objects"
 
-if command -v pg_dump >/dev/null 2>&1; then
-  pg_dump "${V2_DATABASE_URL}" --format=custom --no-owner --file="${snapshot}/database.dump"
-else
-  command -v docker >/dev/null 2>&1 || {
-    echo "Neither pg_dump nor docker is available for database backup" >&2
-    exit 1
-  }
+if command -v docker >/dev/null 2>&1; then
   docker run --rm --network host -e V2_DATABASE_URL \
     -v "${snapshot}:/backup" pgvector/pgvector:pg17 \
     pg_dump "${V2_DATABASE_URL}" --format=custom --no-owner --file=/backup/database.dump
+elif command -v pg_dump >/dev/null 2>&1; then
+  pg_dump "${V2_DATABASE_URL}" --format=custom --no-owner --file="${snapshot}/database.dump"
+else
+  echo "Neither docker nor pg_dump is available for database backup" >&2
+  exit 1
 fi
 
 mirror_objects() {

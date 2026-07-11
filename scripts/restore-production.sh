@@ -37,18 +37,17 @@ finish() {
 }
 trap finish EXIT
 
-if command -v pg_restore >/dev/null 2>&1; then
-  pg_restore --clean --if-exists --no-owner --dbname="${V2_DATABASE_URL}" \
-    "${snapshot}/database.dump"
-else
-  command -v docker >/dev/null 2>&1 || {
-    echo "Neither pg_restore nor docker is available for database restore" >&2
-    exit 1
-  }
+if command -v docker >/dev/null 2>&1; then
   docker run --rm --network host -e V2_DATABASE_URL \
     -v "${snapshot}:/backup:ro" pgvector/pgvector:pg17 \
     pg_restore --clean --if-exists --no-owner --dbname="${V2_DATABASE_URL}" \
       /backup/database.dump
+elif command -v pg_restore >/dev/null 2>&1; then
+  pg_restore --clean --if-exists --no-owner --dbname="${V2_DATABASE_URL}" \
+    "${snapshot}/database.dump"
+else
+  echo "Neither docker nor pg_restore is available for database restore" >&2
+  exit 1
 fi
 
 if command -v mc >/dev/null 2>&1; then
