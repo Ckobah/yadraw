@@ -25,6 +25,8 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             "cd /opt/yadraw && \
+             if command -v tailscale >/dev/null 2>&1; then sudo -n tailscale set --ssh; fi && \
+             if systemctl cat ssh.service >/dev/null 2>&1; then sudo -n systemctl enable --now ssh; elif systemctl cat sshd.service >/dev/null 2>&1; then sudo -n systemctl enable --now sshd; fi && \
              git fetch origin main && git reset --hard origin/main && \
              npm install && \
              npm run build && \
