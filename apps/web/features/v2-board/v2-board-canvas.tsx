@@ -54,7 +54,7 @@ import {
   deleteV2CardType,
   createV2ConnectionType,
   createV2Card,
-  updateV2CardPosition,
+  updateV2BoardLayout,
   updateV2CardSize,
   updateV2CardVisualStyle,
   updateV2CardBasics,
@@ -1776,6 +1776,18 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       positions: CardPositionUpdate[],
       connectionStyles: ConnectionVisualStyleUpdate[]
     ) => {
+      const previousPositions = new Map(
+        nodesRef.current
+          .filter((node) => positions.some((update) => update.cardId === node.id))
+          .map((node) => [node.id, { ...node.data.card.position }])
+      );
+      const previousConnections = new Map(
+        connectionRecordsRef.current
+          .filter((connection) =>
+            connectionStyles.some((update) => update.connectionId === connection.id)
+          )
+          .map((connection) => [connection.id, connection])
+      );
       const positionById = new Map(
         positions.map(({ cardId, position }) => [cardId, position])
       );
@@ -1807,27 +1819,61 @@ export function V2BoardCanvas({ boardDetail }: Props) {
         });
         return changed ? next : current;
       });
+      const visualStyleById = new Map(
+        connectionStyles.map(({ connectionId, visualStyle }) => [connectionId, visualStyle])
+      );
+      setConnectionRecords((current) =>
+        current.map((connection) => {
+          const visualStyle = visualStyleById.get(connection.id);
+          return visualStyle ? { ...connection, visualStyle } : connection;
+        })
+      );
+      setEdges((current) =>
+        current.map((edge) => {
+          const visualStyle = visualStyleById.get(edge.id);
+          const connection = connectionRecordsRef.current.find((item) => item.id === edge.id);
+          return visualStyle && connection
+            ? applyConnectionToEdge(edge, { ...connection, visualStyle })
+            : edge;
+        })
+      );
       setSaveStatus("saving");
       try {
-        await Promise.all([
-          ...positions.map(({ cardId, position }) =>
-            updateV2CardPosition(cardId, position)
-          ),
-          ...connectionStyles.map(({ connectionId, visualStyle }) =>
-            handleUpdateConnection(connectionId, { visualStyle })
-          ),
-        ]);
+        await updateV2BoardLayout(board.id, {
+          cards: positions.map(({ cardId, position }) => ({ id: cardId, position })),
+          connections: connectionStyles.map(({ connectionId, visualStyle }) => ({
+            id: connectionId,
+            visualStyle
+          }))
+        });
         setMovementSaveError(null);
         setSaveStatus("saved");
       } catch (error) {
+        setNodes((current) =>
+          current.map((node) => {
+            const position = previousPositions.get(node.id);
+            return position
+              ? { ...node, position, data: { ...node.data, card: { ...node.data.card, position } } }
+              : node;
+          })
+        );
+        setConnectionRecords((current) =>
+          current.map((connection) => previousConnections.get(connection.id) ?? connection)
+        );
+        setEdges((current) =>
+          current.map((edge) => {
+            const connection = previousConnections.get(edge.id);
+            return connection ? applyConnectionToEdge(edge, connection) : edge;
+          })
+        );
         setMovementSaveError(
-          "Some positions could not be saved. Reload to restore them, then try again."
+          "Movement could not be saved. The previous layout was restored."
         );
         setSaveStatus("error");
         throw error;
       }
     },
-    [handleUpdateConnection, setNodes]
+    [board.id, setEdges, setNodes]
   );
 
   const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
@@ -2228,20 +2274,40 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const handleEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
       if (deletedEdges.length > 0) clearEditorHistory();
-      for (const edge of deletedEdges) {
-        deleteV2Connection(edge.id).catch((err) =>
-          console.error("Failed to delete connection:", err)
-        );
-      }
-      const deletedIds = new Set(deletedEdges.map((edge) => edge.id));
-      setConnectionRecords((current) =>
-        current.filter((connection) => !deletedIds.has(connection.id))
+      void Promise.allSettled(deletedEdges.map((edge) => deleteV2Connection(edge.id))).then(
+        (results) => {
+          const deletedIds = new Set(
+            deletedEdges
+              .filter((_edge, index) => results[index]?.status === "fulfilled")
+              .map((edge) => edge.id)
+          );
+          const failedEdges = deletedEdges.filter(
+            (_edge, index) => results[index]?.status === "rejected"
+          );
+          setConnectionRecords((current) =>
+            current.filter((connection) => !deletedIds.has(connection.id))
+          );
+          if (failedEdges.length > 0) {
+            setEdges((current) => [
+              ...current,
+              ...failedEdges.filter((edge) => !current.some((item) => item.id === edge.id)),
+            ]);
+            setConnectionCreateError(
+              `${failedEdges.length} connector${failedEdges.length === 1 ? "" : "s"} could not be deleted and were restored.`
+            );
+          } else {
+            setConnectionCreateError(null);
+          }
+          setSelectedConnectionId((current) =>
+            current && deletedIds.has(current) ? null : current
+          );
+          setVisualEditingConnectionId((current) =>
+            current && deletedIds.has(current) ? null : current
+          );
+        }
       );
-      setSelectedConnectionId((current) => (current && deletedIds.has(current) ? null : current));
-      setVisualEditingConnectionId((current) => (current && deletedIds.has(current) ? null : current));
-      setConnectionCreateError(null);
     },
-    [clearEditorHistory]
+    [clearEditorHistory, setEdges]
   );
 
   const deleteSelectedConnection = useCallback(async (): Promise<boolean> => {

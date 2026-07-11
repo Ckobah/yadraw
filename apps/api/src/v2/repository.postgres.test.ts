@@ -325,6 +325,54 @@ describePostgres("v2 Postgres repository", () => {
     ).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("commits or rolls back a complete board layout batch", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const source = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.sourceType,
+      position: { x: 30, y: 40 }
+    });
+    const task = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.taskType,
+      position: { x: 330, y: 40 }
+    });
+    const connection = await service.createConnection(ownerContext, seedIds.board, {
+      sourceCardId: source.id,
+      targetCardId: task.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+    const visualStyle = {
+      routeMode: "manual" as const,
+      waypoints: [{ x: 240, y: 180 }],
+      labelPosition: { x: 250, y: 160 }
+    };
+
+    await expect(
+      service.updateBoardLayout(ownerContext, seedIds.board, {
+        cards: [
+          { id: source.id, position: { x: 130, y: 140 } },
+          { id: task.id, position: { x: 430, y: 140 } }
+        ],
+        connections: [{ id: connection.id, visualStyle }]
+      })
+    ).resolves.toEqual({ updatedCards: 2, updatedConnections: 1 });
+
+    await expect(
+      service.updateBoardLayout(ownerContext, seedIds.board, {
+        cards: [
+          { id: source.id, position: { x: 999, y: 999 } },
+          { id: randomUUID(), position: { x: 1, y: 1 } }
+        ]
+      })
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    await expect(repository.getCard(source.id)).resolves.toMatchObject({
+      position: { x: 130, y: 140 }
+    });
+    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({ visualStyle });
+  });
+
   it("filters orphan connections when a card is soft-deleted outside the normal delete path", async () => {
     if (!repository) throw new Error("Repository was not initialized");
     const service = createV2BoardService(repository);

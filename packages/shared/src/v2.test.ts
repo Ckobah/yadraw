@@ -28,6 +28,7 @@ import {
   v2LinkedFieldBindingSchema,
   v2LinkedFieldBindingListResponseSchema,
   v2RunDryRunBodySchema,
+  v2UpdateBoardLayoutBodySchema,
   v2UpdateCardTypeBodySchema,
   v2UpdateConnectionTypeBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
@@ -564,6 +565,27 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
     expect(v2ApiContracts.updateLinkedFieldBinding.body).toBe(v2UpdateLinkedFieldBindingBodySchema);
+    expect(v2ApiContracts.updateBoardLayout.body).toBe(v2UpdateBoardLayoutBodySchema);
+  });
+
+  it("validates atomic board layout batches", () => {
+    expect(
+      v2UpdateBoardLayoutBodySchema.parse({
+        cards: [{ id: cardId, position: { x: 120, y: 240 } }],
+        connections: [
+          {
+            id: connectionId,
+            visualStyle: {
+              routeMode: "manual",
+              waypoints: [{ x: 300, y: 240 }],
+              labelPosition: { x: 320, y: 220 }
+            }
+          }
+        ]
+      })
+    ).toMatchObject({ cards: [{ id: cardId }], connections: [{ id: connectionId }] });
+
+    expect(() => v2UpdateBoardLayoutBodySchema.parse({})).toThrow();
   });
 
   it("parses card type create and update requests", () => {

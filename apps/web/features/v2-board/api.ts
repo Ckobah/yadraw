@@ -16,6 +16,8 @@ import type {
   V2LinkedFieldBinding,
   V2LinkedFieldBindingListResponse,
   V2UpdateCardTypeRequest,
+  V2UpdateBoardLayoutRequest,
+  V2UpdateBoardLayoutResponse,
   V2UpdateConnectionTypeRequest,
   V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
@@ -266,6 +268,26 @@ export async function updateV2CardTypeSchema(
     );
   }
   return response.json() as Promise<V2CardType>;
+}
+
+export async function updateV2BoardLayout(
+  boardId: string,
+  input: V2UpdateBoardLayoutRequest
+): Promise<V2UpdateBoardLayoutResponse> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/layout`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input)
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(response.status, `Layout update failed with ${response.status}`, body);
+  }
+  return response.json() as Promise<V2UpdateBoardLayoutResponse>;
 }
 
 export async function deleteV2CardType(

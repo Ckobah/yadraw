@@ -1,0 +1,22 @@
+name: Production backup
+
+on:
+  schedule:
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.DEPLOY_KEY }}
+          known_hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          if_key_exists: replace
+          name: id_ed25519
+      - name: Create and verify production snapshot
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd /opt/yadraw && bash scripts/backup-production.sh"

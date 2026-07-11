@@ -15,6 +15,7 @@ import {
   v2ConnectorSlotSchema,
   v2DemoIds,
   v2RunDryRunBodySchema,
+  v2UpdateBoardLayoutBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema,
   v2UpdateConnectionBodySchema,
@@ -34,6 +35,8 @@ import {
   type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
   type V2UpdateCardTypeRequest,
+  type V2UpdateBoardLayoutRequest,
+  type V2UpdateBoardLayoutResponse,
   type V2UpdateConnectionTypeRequest,
   type V2UpdateCardRequest,
   v2UpdateCardTypeBodySchema,
@@ -89,6 +92,11 @@ export type V2BoardService = {
     input: { name: string }
   ): Promise<V2BoardSummary>;
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
+  updateBoardLayout(
+    context: RequestContext,
+    boardId: string,
+    input: V2UpdateBoardLayoutRequest
+  ): Promise<V2UpdateBoardLayoutResponse>;
   listCardTypes(context: RequestContext, workspaceId: string): Promise<{ cardTypes: V2CardType[] }>;
   createCardType(
     context: RequestContext,
@@ -604,6 +612,18 @@ export function createV2BoardService(
       await authorizeWorkspace(context, board.workspace.id, "read");
 
       return board;
+    },
+
+    async updateBoardLayout(context, boardId, rawInput) {
+      const input = v2UpdateBoardLayoutBodySchema.safeParse(rawInput);
+      if (!input.success) validationFailed("Invalid board layout payload");
+      await requireBoardForAccess(context, boardId, "write");
+      if (!repository.updateBoardLayout) {
+        throw new V2ServiceError("conflict", "Board layout updates are unavailable");
+      }
+      const result = await repository.updateBoardLayout(boardId, input.data);
+      if (!result) conflict("Board layout contains missing or stale items");
+      return result;
     },
 
     async listCardTypes(context, workspaceId) {

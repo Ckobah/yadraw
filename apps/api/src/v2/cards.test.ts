@@ -34,6 +34,68 @@ function createCardServer(
 }
 
 describe("v2 card API", () => {
+  it("updates card positions and manual connector geometry atomically", async () => {
+    const { server, seed, repository } = createCardServer();
+    const cards = seed.cards.slice(0, 2);
+    const connection = seed.connections[0]!;
+    const payload = {
+      cards: cards.map((card, index) => ({
+        id: card.id,
+        position: { x: card.position.x + 80 + index, y: card.position.y + 40 }
+      })),
+      connections: [
+        {
+          id: connection.id,
+          visualStyle: {
+            routeMode: "manual" as const,
+            waypoints: [{ x: 360, y: 260 }],
+            labelPosition: { x: 380, y: 240 }
+          }
+        }
+      ]
+    };
+
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ updatedCards: 2, updatedConnections: 1 });
+    const detail = await repository.getBoardDetail(seed.board.id);
+    expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.position).toEqual(
+      payload.cards[0]!.position
+    );
+    expect(detail?.connections.find((item) => item.id === connection.id)?.visualStyle).toEqual(
+      payload.connections[0]!.visualStyle
+    );
+    await server.close();
+  });
+
+  it("rolls back the full layout batch when an item is stale", async () => {
+    const { server, seed, repository } = createCardServer();
+    const card = seed.cards[0]!;
+    const originalPosition = { ...card.position };
+    const response = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: {
+        cards: [
+          { id: card.id, position: { x: 999, y: 999 } },
+          {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            position: { x: 1, y: 1 }
+          }
+        ]
+      }
+    });
+
+    expect(response.statusCode).toBe(409);
+    await expect(repository.getCard(card.id)).resolves.toMatchObject({ position: originalPosition });
+    await server.close();
+  });
+
   it("creates a card for an accessible board", async () => {
     const { server, seed } = createCardServer();
     const cardType = seed.cardTypes[0]!;

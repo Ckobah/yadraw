@@ -6,7 +6,49 @@ on:
   workflow_dispatch:
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: yadraw_test
+          POSTGRES_USER: yadraw
+          POSTGRES_PASSWORD: yadraw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U yadraw -d yadraw_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run test:postgres
+        env:
+          DATABASE_URL_TEST: postgres://yadraw:yadraw@127.0.0.1:5432/yadraw_test
+      - run: npm run v2:migrations:apply --workspace @yadraw/api
+        env:
+          V2_DATABASE_URL: postgres://yadraw:yadraw@127.0.0.1:5432/yadraw_test
+      - run: npm run v2:migrations:apply --workspace @yadraw/api
+        env:
+          V2_DATABASE_URL: postgres://yadraw:yadraw@127.0.0.1:5432/yadraw_test
+      - run: npm run build
+      - name: Reject server secrets in browser bundle
+        run: |
+          if grep -R -E "V2_USER_ID|x-yadraw-user-id|x-yadraw-internal-secret|S3_SECRET_ACCESS_KEY|SUPABASE_SERVICE_ROLE_KEY" apps/web/.next/static; then
+            exit 1
+          fi
+
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,12 +69,15 @@ jobs:
             "cd /opt/yadraw && \
              if command -v tailscale >/dev/null 2>&1; then sudo -n tailscale set --ssh; fi && \
              if systemctl cat ssh.service >/dev/null 2>&1; then sudo -n systemctl enable --now ssh; elif systemctl cat sshd.service >/dev/null 2>&1; then sudo -n systemctl enable --now sshd; fi && \
-             git fetch origin main && git reset --hard origin/main && \
-             npm install && \
-             npm run build && \
-             set -a && source .env && set +a && \
-             pm2 restart yadraw-api yadraw-web --update-env && \
-             echo '=== DIAGNOSTICS ===' && \
-             pwd && \
-             git rev-parse --short HEAD && \
-             pm2 list"
+             git fetch origin main && git show origin/main:scripts/deploy-production.sh > /tmp/yadraw-deploy.sh && \
+             chmod +x /tmp/yadraw-deploy.sh && /tmp/yadraw-deploy.sh"
+
+  smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/smoke-production.mjs

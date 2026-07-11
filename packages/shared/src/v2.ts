@@ -611,6 +611,28 @@ export const v2DeleteCardParamsSchema = z.object({
   cardId: v2UuidSchema
 });
 
+export const v2UpdateBoardLayoutParamsSchema = z.object({
+  boardId: v2UuidSchema
+});
+
+export const v2UpdateBoardLayoutBodySchema = z
+  .object({
+    cards: z.array(z.object({ id: v2UuidSchema, position: v2PositionSchema })).max(500).default([]),
+    connections: z
+      .array(z.object({ id: v2UuidSchema, visualStyle: v2ConnectionVisualStyleSchema }))
+      .max(500)
+      .default([])
+  })
+  .strict()
+  .refine((input) => input.cards.length > 0 || input.connections.length > 0, {
+    message: "At least one layout item is required"
+  });
+
+export const v2UpdateBoardLayoutResponseSchema = z.object({
+  updatedCards: z.number().int().nonnegative(),
+  updatedConnections: z.number().int().nonnegative()
+});
+
 export const v2CreateConnectionParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -727,6 +749,13 @@ export const v2ApiContracts = {
     path: "/v2/boards/{boardId}",
     params: v2GetBoardParamsSchema,
     response: v2BoardDetailSchema
+  },
+  updateBoardLayout: {
+    method: "PATCH",
+    path: "/v2/boards/{boardId}/layout",
+    params: v2UpdateBoardLayoutParamsSchema,
+    body: v2UpdateBoardLayoutBodySchema,
+    response: v2UpdateBoardLayoutResponseSchema
   },
   listCardTypes: {
     method: "GET",
@@ -938,6 +967,9 @@ export type V2CreateConnectionTypeInput = z.infer<typeof v2CreateConnectionTypeB
 export type V2UpdateConnectionTypeInput = z.infer<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
+export type V2UpdateBoardLayoutInput = z.infer<typeof v2UpdateBoardLayoutBodySchema>;
+export type V2UpdateBoardLayoutRequest = z.input<typeof v2UpdateBoardLayoutBodySchema>;
+export type V2UpdateBoardLayoutResponse = z.infer<typeof v2UpdateBoardLayoutResponseSchema>;
 export type V2UpdateCardTypeSchemaInput = z.infer<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionInput = z.infer<typeof v2CreateConnectionBodySchema>;
 export type V2UpdateConnectionInput = z.infer<typeof v2UpdateConnectionBodySchema>;

@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import {
   GetObjectCommand,
+  HeadBucketCommand,
   PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
@@ -29,6 +30,7 @@ export type GetObjectResult = {
 };
 
 export interface V2ObjectStorage {
+  healthCheck?(bucket: string): Promise<void>;
   putObject(input: PutObjectInput): Promise<void>;
   getObject(bucket: string, key: string): Promise<GetObjectResult>;
 }
@@ -88,6 +90,10 @@ export function createS3ObjectStorage(config: V2StorageConfig): V2ObjectStorage 
   });
 
   return {
+    async healthCheck(bucket) {
+      await client.send(new HeadBucketCommand({ Bucket: bucket }));
+    },
+
     async putObject(input) {
       await client.send(
         new PutObjectCommand({

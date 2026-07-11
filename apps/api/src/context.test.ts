@@ -8,17 +8,28 @@ describe("request context", () => {
       getRequestContext(
         {
           headers: {
-            "x-yadraw-user-id": demoUserIds.editor
+            "x-yadraw-user-id": demoUserIds.editor,
+            "x-yadraw-internal-secret": "a".repeat(32)
           }
         },
         {
-          NODE_ENV: "production"
+          NODE_ENV: "production",
+          INTERNAL_API_SECRET: "a".repeat(32)
         }
       )
     ).toEqual({
       userId: demoUserIds.editor,
       source: "header"
     });
+  });
+
+  it("rejects spoofed production identity headers without the internal secret", () => {
+    expect(
+      getRequestContext(
+        { headers: { "x-yadraw-user-id": demoUserIds.editor } },
+        { NODE_ENV: "production", INTERNAL_API_SECRET: "a".repeat(32) }
+      )
+    ).toBeNull();
   });
 
   it("uses DEV_USER_ID outside production", () => {

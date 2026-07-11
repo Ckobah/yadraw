@@ -60,6 +60,19 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.patch("/v2/boards/:boardId/layout", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.updateBoardLayout(
+        request.requestContext,
+        boardId,
+        request.body as any
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/workspaces/:workspaceId/card-types", async (request, reply) => {
     try {
       const { workspaceId } = request.params as { workspaceId: string };
@@ -309,7 +322,9 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
-  server.post("/v2/connections/:connectionId/attachments", async (request, reply) => {
+  server.post("/v2/connections/:connectionId/attachments", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     try {
       const { connectionId } = request.params as { connectionId: string };
       const input = await readAttachmentUpload(request);
@@ -350,7 +365,9 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
-  server.post("/v2/cards/:cardId/attachments", async (request, reply) => {
+  server.post("/v2/cards/:cardId/attachments", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } }
+  }, async (request, reply) => {
     try {
       const { cardId } = request.params as { cardId: string };
       const input = await readAttachmentUpload(request);
@@ -457,6 +474,9 @@ async function readAttachmentUpload(request: any): Promise<UploadInput> {
           throw new V2ServiceError("validation_failed", "File exceeds 25MB limit");
         }
         chunks.push(buffer);
+      }
+      if (part.file.truncated) {
+        throw new V2ServiceError("validation_failed", "File exceeds 25MB limit");
       }
 
       file = {

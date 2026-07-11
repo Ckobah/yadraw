@@ -1,9 +1,10 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import { config } from "dotenv";
 import Fastify from "fastify";
 import type { RequestContext } from "./context.js";
-import { getRequestContext } from "./context.js";
+import { getRequestContext, hasValidInternalApiSecret } from "./context.js";
 import { sendApiError } from "./http.js";
 import { V2ServiceError, V2_MAX_ATTACHMENT_BYTES, createV2BoardService } from "./v2/service.js";
 import { createV2PostgresRepository } from "./v2/repository.js";
@@ -34,7 +35,26 @@ await server.register(cors, {
   origin: corsOrigins
 });
 
-await server.register(multipart);
+await server.register(rateLimit, {
+  max: 600,
+  timeWindow: "1 minute",
+  keyGenerator(request) {
+    const userId = request.headers["x-yadraw-user-id"];
+    return hasValidInternalApiSecret(request) && typeof userId === "string"
+      ? `user:${userId}`
+      : `ip:${request.ip}`;
+  }
+});
+
+await server.register(multipart, {
+  limits: {
+    files: 1,
+    fields: 3,
+    parts: 4,
+    fileSize: V2_MAX_ATTACHMENT_BYTES,
+    fieldSize: 64 * 1024
+  }
+});
 
 function readV2StorageMode(): "v2-postgres" | "memory" {
   const mode = process.env.YADRAW_V2_STORAGE ?? "v2-postgres";
@@ -45,7 +65,11 @@ function readV2StorageMode(): "v2-postgres" | "memory" {
     );
   }
 
-  validateV2RuntimeConfig(process.env.NODE_ENV, mode);
+  validateV2RuntimeConfig(
+    process.env.NODE_ENV,
+    mode,
+    process.env.INTERNAL_API_SECRET
+  );
 
   return mode;
 }
@@ -69,8 +93,9 @@ async function createV2Repository() {
 // Create v2 service and register v2 routes
 const v2Repository = await createV2Repository();
 const v2StorageConfig = readV2StorageConfig();
+const objectStorage = v2StorageConfig ? createS3ObjectStorage(v2StorageConfig) : null;
 const v2Service = createV2BoardService(v2Repository, {
-  objectStorage: v2StorageConfig ? createS3ObjectStorage(v2StorageConfig) : null,
+  objectStorage,
   storageBucket: v2StorageConfig?.bucket ?? null
 });
 registerV2Routes(server, v2Service);
@@ -106,7 +131,21 @@ server.addHook("preHandler", async (request, reply) => {
   request.requestContext = requestContext;
 });
 
-server.get("/health", async () => ({ ok: true, service: "yadraw-api", storage: "v2-postgres" }));
+server.get("/health", async (_request, reply) => {
+  const dependencies = { postgres: false, objectStorage: objectStorage === null };
+  try {
+    await v2Repository.healthCheck?.();
+    dependencies.postgres = true;
+    if (objectStorage && v2StorageConfig) {
+      await objectStorage.healthCheck?.(v2StorageConfig.bucket);
+      dependencies.objectStorage = true;
+    }
+    return { ok: true, service: "yadraw-api", dependencies };
+  } catch (error) {
+    server.log.error({ error, dependencies }, "Health dependency check failed");
+    return reply.code(503).send({ ok: false, service: "yadraw-api", dependencies });
+  }
+});
 
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "127.0.0.1";

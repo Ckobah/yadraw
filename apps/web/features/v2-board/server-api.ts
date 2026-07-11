@@ -2,6 +2,7 @@ import "server-only";
 
 import type { V2BoardDetail, V2CardType } from "@yadraw/shared";
 import { getCurrentV2User } from "../../lib/auth/current-user";
+import { buildInternalApiHeaders } from "../../lib/api/internal-api";
 
 import { V2ApiError } from "./api";
 
@@ -15,7 +16,7 @@ async function buildHeaders(): Promise<Record<string, string>> {
   if (!user) throw new V2ApiError(401, "Authentication required");
   return {
     Accept: "application/json",
-    "x-yadraw-user-id": user.id
+    ...buildInternalApiHeaders(user.id)
   };
 }
 

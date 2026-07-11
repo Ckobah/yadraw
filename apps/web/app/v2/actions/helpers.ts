@@ -6,6 +6,7 @@
  */
 import "server-only";
 import { getCurrentV2User } from "../../../lib/auth/current-user";
+import { buildInternalApiHeaders } from "../../../lib/api/internal-api";
 
 const apiBaseUrl =
   process.env.API_URL ??
@@ -17,7 +18,7 @@ async function serverHeaders(includeContentType: boolean): Promise<Record<string
   if (!user) return null;
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "x-yadraw-user-id": user.id,
+    ...buildInternalApiHeaders(user.id),
   };
   if (includeContentType) headers["Content-Type"] = "application/json";
   return headers;

@@ -33,6 +33,8 @@ import {
   type V2Project,
   type V2Size,
   type V2UpdateCardTypeInput,
+  type V2UpdateBoardLayoutInput,
+  type V2UpdateBoardLayoutResponse,
   type V2UpdateCardInput,
   type V2UpdateConnectionInput,
   type V2UpdateLinkedFieldBindingInput,
@@ -151,12 +153,17 @@ export type V2BootstrapUserInput = {
 
 export type V2Repository = {
   close?(): Promise<void>;
+  healthCheck?(): Promise<void>;
   getWorkspaceRole(userId: string, workspaceId: string): Promise<V2WorkspaceRole | null>;
   getBoardRole(userId: string, boardId: string): Promise<V2WorkspaceRole | null>;
   getCardRole(userId: string, cardId: string): Promise<V2WorkspaceRole | null>;
   getConnectionRole(userId: string, connectionId: string): Promise<V2WorkspaceRole | null>;
   getBoardDetail(boardId: string): Promise<V2BoardDetail | null>;
   getBoard(boardId: string): Promise<V2Board | null>;
+  updateBoardLayout?(
+    boardId: string,
+    input: V2UpdateBoardLayoutInput
+  ): Promise<V2UpdateBoardLayoutResponse | null>;
   bootstrapPersonalWorkspace?(input: V2BootstrapUserInput): Promise<V2BootstrapSessionResponse>;
   listUserWorkspaces?(userId: string): Promise<V2WorkspaceSummary[]>;
   listWorkspaceBoards?(workspaceId: string): Promise<V2BoardSummary[]>;
@@ -853,6 +860,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
   return {
     async close() {},
+    async healthCheck() {},
 
     async getWorkspaceRole(userId, workspaceId) {
       return roleForWorkspace(userId, workspaceId);
@@ -903,6 +911,36 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async getBoard(boardId) {
       return boardId === state.board.id ? cloneJson(state.board) : null;
+    },
+
+    async updateBoardLayout(boardId, input) {
+      if (boardId !== state.board.id) return null;
+      const cards = input.cards.map((update) =>
+        state.cards.find(
+          (card) => card.id === update.id && card.boardId === boardId && !deletedCardIds.has(card.id)
+        )
+      );
+      const connections = input.connections.map((update) =>
+        state.connections.find(
+          (connection) =>
+            connection.id === update.id &&
+            connection.boardId === boardId &&
+            !deletedConnectionIds.has(connection.id)
+        )
+      );
+      if (cards.some((card) => !card) || connections.some((connection) => !connection)) return null;
+      const timestamp = nowIso();
+      input.cards.forEach((update, index) => {
+        const card = cards[index]!;
+        card.position = cloneJson(update.position);
+        card.updatedAt = timestamp;
+      });
+      input.connections.forEach((update, index) => {
+        const connection = connections[index]!;
+        connection.visualStyle = cloneJson(update.visualStyle);
+        connection.updatedAt = timestamp;
+      });
+      return { updatedCards: cards.length, updatedConnections: connections.length };
     },
 
     async listCardTypes(workspaceId) {
@@ -1802,6 +1840,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
   }
 
   return {
+    async healthCheck() {
+      await pool.query("select 1");
+    },
+
     async close() {
       await pool.end();
     },
@@ -2147,6 +2189,51 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       );
       const row = result.rows[0];
       return row ? boardFromRow(row) : null;
+    },
+
+    async updateBoardLayout(boardId, input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        for (const update of input.cards) {
+          const result = await client.query(
+            `
+              update cards
+              set position_x = $3, position_y = $4, updated_at = now()
+              where id = $1 and board_id = $2 and deleted_at is null
+            `,
+            [update.id, boardId, update.position.x, update.position.y]
+          );
+          if ((result.rowCount ?? 0) !== 1) {
+            await client.query("rollback");
+            return null;
+          }
+        }
+        for (const update of input.connections) {
+          const result = await client.query(
+            `
+              update connections
+              set visual_style = $3::jsonb, updated_at = now()
+              where id = $1 and board_id = $2 and deleted_at is null
+            `,
+            [update.id, boardId, JSON.stringify(update.visualStyle)]
+          );
+          if ((result.rowCount ?? 0) !== 1) {
+            await client.query("rollback");
+            return null;
+          }
+        }
+        await client.query("commit");
+        return {
+          updatedCards: input.cards.length,
+          updatedConnections: input.connections.length
+        };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async listCardTypes(workspaceId) {

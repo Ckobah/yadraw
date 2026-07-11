@@ -6,6 +6,7 @@ import type {
   V2ListWorkspacesResponse
 } from "@yadraw/shared";
 import type { CurrentV2User } from "../../lib/auth/current-user";
+import { buildInternalApiHeaders } from "../../lib/api/internal-api";
 
 const apiBaseUrl =
   process.env.API_URL ??
@@ -22,7 +23,7 @@ async function requestApi<T>(
     cache: "no-store",
     headers: {
       Accept: "application/json",
-      "x-yadraw-user-id": user.id,
+      ...buildInternalApiHeaders(user.id),
       ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...init.headers
     }
