@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -56,7 +56,14 @@ export function NewBoardForm({ workspaceId }: { workspaceId: string }) {
         required
       />
       <button type="submit" disabled={pending}>{pending ? "Creating" : "Create"}</button>
-      <button type="button" onClick={() => { setOpen(false); setError(null); }}>Cancel</button>
+      <button
+        type="button"
+        aria-label="Close new board form"
+        title="Close"
+        onClick={() => { setOpen(false); setError(null); }}
+      >
+        <X size={16} />
+      </button>
       {error ? <span role="alert">{error}</span> : null}
     </form>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import type {
   V2ConnectionType,
   V2ConnectionTypeSchema,
@@ -100,6 +100,12 @@ export function V2ConnectionTypeManager({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const selectedConnectionType =
+    connectionTypes.find((connectionType) => connectionType.id === selectedConnectionTypeId) ?? null;
+  const hasDraftChanges =
+    mode === "existing" && selectedConnectionType
+      ? JSON.stringify(draft) !== JSON.stringify(draftFromConnectionType(selectedConnectionType))
+      : false;
 
   useEffect(() => {
     if (mode !== "existing" || !selectedConnectionTypeId) return;
@@ -108,7 +114,15 @@ export function V2ConnectionTypeManager({
     setDraft(draftFromConnectionType(selected));
   }, [connectionTypes, mode, selectedConnectionTypeId]);
 
-  function selectExisting(connectionType: V2ConnectionType) {
+  useEffect(() => {
+    if (!hasDraftChanges || isSaving) return;
+    const timeout = window.setTimeout(() => void saveDraft(), 700);
+    return () => window.clearTimeout(timeout);
+  }, [draft, mode, selectedConnectionTypeId, isSaving]);
+
+  async function selectExisting(connectionType: V2ConnectionType) {
+    if (isSaving) return;
+    if (hasDraftChanges && !(await saveDraft())) return;
     setMode("existing");
     setSelectedConnectionTypeId(connectionType.id);
     setDraft(draftFromConnectionType(connectionType));
@@ -116,7 +130,9 @@ export function V2ConnectionTypeManager({
     setMessage(null);
   }
 
-  function selectNewType() {
+  async function selectNewType() {
+    if (isSaving) return;
+    if (hasDraftChanges && !(await saveDraft())) return;
     setMode("new");
     setSelectedConnectionTypeId(null);
     setDraft(emptyDraft());
@@ -145,31 +161,16 @@ export function V2ConnectionTypeManager({
     return null;
   }
 
-  function resetDraft() {
-    if (mode === "new") {
-      setDraft(emptyDraft());
-      setError(null);
-      setMessage(null);
-      return;
-    }
-    const selected = connectionTypes.find((connectionType) => connectionType.id === selectedConnectionTypeId);
-    if (selected) {
-      setDraft(draftFromConnectionType(selected));
-    }
-    setError(null);
-    setMessage(null);
-  }
-
-  async function saveDraft() {
+  async function saveDraft(): Promise<boolean> {
     const validationError = validateDraft();
     if (validationError) {
       setError(validationError);
-      return;
+      return false;
     }
     const schemaResult = buildConnectionSchemaFromDrafts(draft.fields);
     if (!schemaResult.ok) {
       setError(schemaResult.error);
-      return;
+      return false;
     }
 
     setIsSaving(true);
@@ -188,12 +189,12 @@ export function V2ConnectionTypeManager({
         setSelectedConnectionTypeId(created.id);
         setDraft(draftFromConnectionType(created));
         setMessage("Connection type created.");
-        return;
+        return true;
       }
 
       if (!draft.id) {
         setError("Select a connection type to update.");
-        return;
+        return false;
       }
       const updated = await onUpdateConnectionType(draft.id, {
         key: draft.key.trim(),
@@ -204,11 +205,20 @@ export function V2ConnectionTypeManager({
       });
       setDraft(draftFromConnectionType(updated));
       setMessage("Connection type saved.");
+      return true;
     } catch {
       setError("Could not save connection type.");
+      return false;
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function closeManager() {
+    if (hasDraftChanges) {
+      if (!(await saveDraft())) return;
+    }
+    onClose();
   }
 
   return (
@@ -219,7 +229,7 @@ export function V2ConnectionTypeManager({
       aria-label="Connection Type Manager"
       onPointerDown={(event) => {
         if (event.target === event.currentTarget) {
-          onClose();
+          void closeManager();
         }
       }}
     >
@@ -229,7 +239,7 @@ export function V2ConnectionTypeManager({
             <h2>Connection Type Manager</h2>
             <p>Edit relationship type schemas. Values remain on each connector.</p>
           </div>
-          <button type="button" className="v2InspectorCloseButton" aria-label="Close manager" onClick={onClose}>
+          <button type="button" className="v2InspectorCloseButton" aria-label="Close manager" onClick={() => void closeManager()}>
             <X size={16} strokeWidth={2.2} />
           </button>
         </header>
@@ -239,7 +249,7 @@ export function V2ConnectionTypeManager({
             <button
               type="button"
               className={`v2CardTypeManagerNewButton${mode === "new" ? " v2CardTypeManagerRowActive" : ""}`}
-              onClick={selectNewType}
+              onClick={() => void selectNewType()}
             >
               <Plus size={14} strokeWidth={2.2} />
               <span>New type</span>
@@ -256,7 +266,7 @@ export function V2ConnectionTypeManager({
                       ? " v2CardTypeManagerRowActive"
                       : ""
                   }`}
-                  onClick={() => selectExisting(connectionType)}
+                  onClick={() => void selectExisting(connectionType)}
                 >
                   <strong>{connectionType.name}</strong>
                   <span>{connectionType.key}</span>
@@ -319,18 +329,19 @@ export function V2ConnectionTypeManager({
             {message ? <p className="v2CardTypeManagerSuccess">{message}</p> : null}
 
             <div className="v2InspectorEditActions v2CardTypeManagerActions">
-              <button type="button" onClick={resetDraft} disabled={isSaving}>
-                Cancel changes
-              </button>
-              <button
-                type="button"
-                className="v2InspectorPrimaryAction"
-                onClick={() => void saveDraft()}
-                disabled={isSaving}
-              >
-                <Save size={13} strokeWidth={2.2} />
-                <span>{isSaving ? "Saving..." : "Save connection type"}</span>
-              </button>
+              {mode === "existing" ? (
+                <span>{error ? "Auto-save failed" : isSaving || hasDraftChanges ? "Saving..." : "Saved"}</span>
+              ) : (
+                <button
+                  type="button"
+                  className="v2InspectorPrimaryAction"
+                  onClick={() => void saveDraft()}
+                  disabled={isSaving}
+                >
+                  <Plus size={13} strokeWidth={2.2} />
+                  <span>{isSaving ? "Creating..." : "Create connection type"}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

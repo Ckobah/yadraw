@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Link2, Pencil, X } from "lucide-react";
 import type {
   V2Card,
@@ -182,6 +182,32 @@ export function V2LinkedFieldsPreview({
     sourceMode === "connectedCard" && selectedSourceCard && !selectedSourceType
       ? "Dynamic mode needs a stable source card type. Use exact card mode for now."
       : null;
+  const editingBinding = editingBindingId
+    ? targetBindings.find((binding) => binding.id === editingBindingId) ?? null
+    : null;
+  const editingDirty = Boolean(
+    editingBinding &&
+      (targetField.trim() !== editingBinding.targetField ||
+        sourceMode !== editingBinding.sourceMode ||
+        direction !== editingBinding.direction ||
+        sourceCardId !== (editingBinding.sourceCardId ?? "") ||
+        sourceFieldPath.trim() !== editingBinding.sourceFieldPath)
+  );
+
+  useEffect(() => {
+    if (!editingBindingId || !editingDirty || isSaving) return;
+    const timeout = window.setTimeout(() => void handleSaveBinding(), 600);
+    return () => window.clearTimeout(timeout);
+  }, [
+    editingBindingId,
+    editingDirty,
+    targetField,
+    sourceMode,
+    direction,
+    sourceCardId,
+    sourceFieldPath,
+    isSaving,
+  ]);
 
   function resetForm() {
     setTargetField("");
@@ -332,8 +358,8 @@ export function V2LinkedFieldsPreview({
         await onUpdateBinding(editingBindingId, input);
       } else {
         await onCreateBinding(input);
+        resetForm();
       }
-      resetForm();
     } catch {
       setDraftError(editingBindingId ? "Could not save linked field changes." : "Could not save linked field.");
     } finally {
@@ -411,14 +437,26 @@ export function V2LinkedFieldsPreview({
         </div>
       </div>
 
-      <div className="v2LinkedFieldsBuilder">
+      <div
+        className="v2LinkedFieldsBuilder"
+        onBlur={(event) => {
+          if (
+            editingBindingId &&
+            editingDirty &&
+            !event.currentTarget.contains(event.relatedTarget)
+          ) {
+            void handleSaveBinding();
+          }
+        }}
+      >
         <div className="v2LinkedFieldDraftHeader">
-          <span>{editingBindingId ? "Editing saved rule" : "Draft - not saved"}</span>
-          {editingBindingId ? (
-            <button type="button" onClick={resetForm}>
-              Cancel edit
-            </button>
-          ) : null}
+          <span>
+            {editingBindingId
+              ? isSaving || editingDirty
+                ? "Saving changes..."
+                : "Changes saved"
+              : "New linked field"}
+          </span>
         </div>
         <label className="v2LinkedFieldControl">
           <span>Target field</span>
@@ -530,15 +568,17 @@ export function V2LinkedFieldsPreview({
         {draftError ? <p className="v2LinkedFieldError">{draftError}</p> : null}
         {error ? <p className="v2LinkedFieldError">{error}</p> : null}
 
-        <button
-          type="button"
-          className="v2LinkedFieldAddButton"
-          disabled={isSaving || isLoading}
-          onClick={() => void handleSaveBinding()}
-        >
-          <Link2 size={14} strokeWidth={2.3} />
-          <span>{editingBindingId ? "Save changes" : "Add linked field"}</span>
-        </button>
+        {!editingBindingId ? (
+          <button
+            type="button"
+            className="v2LinkedFieldAddButton"
+            disabled={isSaving || isLoading}
+            onClick={() => void handleSaveBinding()}
+          >
+            <Link2 size={14} strokeWidth={2.3} />
+            <span>Add linked field</span>
+          </button>
+        ) : null}
       </div>
 
       {isLoading ? (

@@ -32,34 +32,11 @@ export function V2CardBasicsSection({
   const hasDescriptionChanges = draftDescription !== (card.description ?? "");
   const hasChanges = hasTitleChanges || hasDescriptionChanges;
 
-  async function saveTitle() {
-    const nextTitle = draftTitle.trim();
-    if (nextTitle === card.title) return;
-    if (!nextTitle) {
-      setDraftTitle(card.title ?? "");
-      setFieldError("Title cannot be empty");
-      return;
-    }
-
-    setFieldError(null);
-    try {
-      await onUpdateCardBasics(card.id, { title: nextTitle });
-    } catch {
-      setFieldError("Could not save title");
-    }
-  }
-
-  async function saveDescription() {
-    const currentDescription = card.description ?? "";
-    if (draftDescription === currentDescription) return;
-
-    setFieldError(null);
-    try {
-      await onUpdateCardBasics(card.id, { description: draftDescription });
-    } catch {
-      setFieldError("Could not save description");
-    }
-  }
+  useEffect(() => {
+    if (!hasChanges || saveStatus === "saving") return;
+    const timeout = window.setTimeout(() => void saveAll(), 600);
+    return () => window.clearTimeout(timeout);
+  }, [draftTitle, draftDescription, card.id, card.title, card.description, saveStatus]);
 
   async function saveAll() {
     const input: { title?: string; description?: string } = {};
@@ -85,22 +62,21 @@ export function V2CardBasicsSection({
     }
   }
 
-  function cancelDraft() {
-    setDraftTitle(card.title ?? "");
-    setDraftDescription(card.description ?? "");
-    setFieldError(null);
-  }
-
   function getSaveStatusLabel() {
     if (fieldError) return fieldError;
     if (saveStatus === "saving") return "Saving...";
     if (saveStatus === "saved") return "Saved";
     if (saveStatus === "error") return "Save failed";
-    return hasChanges ? "Unsaved changes" : "Saved";
+    return hasChanges ? "Saving..." : "Saved";
   }
 
   return (
-    <section className="v2InspectorHero v2InspectorEditor">
+    <section
+      className="v2InspectorHero v2InspectorEditor"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) void saveAll();
+      }}
+    >
       <div className="v2InspectorField">
         <label htmlFor={`v2-title-${card.id}`}>Title</label>
         <input
@@ -109,16 +85,10 @@ export function V2CardBasicsSection({
           value={draftTitle}
           placeholder="Card title"
           onChange={(event) => setDraftTitle(event.target.value)}
-          onBlur={() => void saveTitle()}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              void saveTitle();
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setDraftTitle(card.title ?? "");
-              setFieldError(null);
+              void saveAll();
             }
           }}
         />
@@ -131,16 +101,10 @@ export function V2CardBasicsSection({
           value={draftDescription}
           placeholder="Brief description"
           onChange={(event) => setDraftDescription(event.target.value)}
-          onBlur={() => void saveDescription()}
           onKeyDown={(event) => {
             if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
               event.preventDefault();
-              void saveDescription();
-            }
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setDraftDescription(card.description ?? "");
-              setFieldError(null);
+              void saveAll();
             }
           }}
         />
@@ -149,25 +113,6 @@ export function V2CardBasicsSection({
         <span className={fieldError ? "v2InspectorSaveStatusError" : ""}>
           {getSaveStatusLabel()}
         </span>
-        <div className="v2InspectorEditActions">
-          <button
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={cancelDraft}
-            disabled={!hasChanges || saveStatus === "saving"}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="v2InspectorPrimaryAction"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => void saveAll()}
-            disabled={!hasChanges || saveStatus === "saving"}
-          >
-            Save
-          </button>
-        </div>
       </div>
     </section>
   );

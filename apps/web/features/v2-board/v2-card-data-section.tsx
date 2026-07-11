@@ -67,6 +67,12 @@ export function V2CardDataSection({
     normalizeDataDraftForCompare(dataDraftFields) !== dataBaseline ||
     normalizeSchemaDraftForCompare(schemaDraftFields) !== schemaBaseline;
 
+  useEffect(() => {
+    if (!hasDataChanges || saveStatus === "saving") return;
+    const timeout = window.setTimeout(() => void saveDataDraft(), 600);
+    return () => window.clearTimeout(timeout);
+  }, [dataDraftFields, schemaDraftFields, card.id, card.data, saveStatus]);
+
   function updateSchemaField(
     fieldId: string,
     patch: Partial<Pick<SchemaFieldDraft, "value">>
@@ -145,15 +151,6 @@ export function V2CardDataSection({
     setDataError(null);
   }
 
-  function cancelDataDraft() {
-    const nextSplit = splitSchemaAndExtraData(schemaFields, card.data);
-    setDataDraftFields(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : card.data));
-    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, card.data));
-    setDataFieldErrors({});
-    setSchemaFieldErrors({});
-    setDataError(null);
-  }
-
   async function saveDataDraft() {
     const parsedSchema = hasSchemaFields
       ? validateAndBuildSchemaDataRecord(schemaDraftFields)
@@ -192,7 +189,12 @@ export function V2CardDataSection({
   }
 
   return (
-    <>
+    <div
+      className="v2InspectorDataSections"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) void saveDataDraft();
+      }}
+    >
       {hasSchemaFields ? (
         <section className="v2InspectorSection">
           <h3>Schema fields</h3>
@@ -304,7 +306,7 @@ export function V2CardDataSection({
         )}
         <div className="v2InspectorDataFooter">
           <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-            {dataError ?? (hasDataChanges ? "Unsaved data changes" : "Data saved")}
+            {dataError ?? (hasDataChanges ? "Saving..." : "Data saved")}
           </span>
           <div className="v2InspectorEditActions">
             <button
@@ -314,27 +316,10 @@ export function V2CardDataSection({
             >
               + Add field
             </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={cancelDataDraft}
-              disabled={!hasDataChanges || saveStatus === "saving"}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="v2InspectorPrimaryAction"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void saveDataDraft()}
-              disabled={!hasDataChanges || saveStatus === "saving"}
-            >
-              Save
-            </button>
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 

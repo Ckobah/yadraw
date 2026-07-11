@@ -77,6 +77,15 @@ export function V2ConnectorVisualEditPanel({
     setError(null);
   }, [connection.id, connection.visualStyle]);
 
+  useEffect(() => {
+    if (!isDirty || saveStatus === "saving") return;
+    const timeout = window.setTimeout(() => {
+      setError(null);
+      void onSave(connection.id, draft).catch(() => setError("Could not save connector style."));
+    }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [draftSignature, connection.id, savedSignature, saveStatus, onSave]);
+
   function updateDraft(patch: Partial<VisualStyleDraft>) {
     setDraft((current) => {
       const next = { ...current, ...patch };
@@ -84,15 +93,6 @@ export function V2ConnectorVisualEditPanel({
       return next;
     });
     setError(null);
-  }
-
-  async function save() {
-    setError(null);
-    try {
-      await onSave(connection.id, draft);
-    } catch {
-      setError("Could not save connector style.");
-    }
   }
 
   async function resetRoute() {
@@ -121,11 +121,15 @@ export function V2ConnectorVisualEditPanel({
     );
   }
 
-  function cancel() {
-    const saved = normalizeStyle(connection.visualStyle);
-    setDraft(saved);
-    setError(null);
-    onPreview(connection.id, saved);
+  async function closeEditor() {
+    if (isDirty) {
+      try {
+        await onSave(connection.id, draft);
+      } catch {
+        setError("Could not save connector style.");
+        return;
+      }
+    }
     onCancel();
   }
 
@@ -232,26 +236,8 @@ export function V2ConnectorVisualEditPanel({
           className={error ? "v2ConnectorVisualEditError" : "v2ConnectorVisualEditStatus"}
           title="Status"
         >
-          {error ?? (saveStatus === "saving" ? "Saving..." : isDirty ? "Unsaved" : "Saved")}
+          {error ?? (saveStatus === "saving" || isDirty ? "Saving..." : "Saved")}
         </span>
-        <button
-          type="button"
-          className="v2ConnectorVisualTextButton"
-          title="Cancel"
-          disabled={!isDirty || saveStatus === "saving"}
-          onClick={cancel}
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          className={`v2ConnectorVisualTextButton v2ConnectorVisualSaveButton ${isDirty ? "v2ConnectorVisualSaveButtonDirty" : ""}`}
-          title="Save"
-          disabled={!isDirty || saveStatus === "saving"}
-          onClick={() => void save()}
-        >
-          Save
-        </button>
         <button
           type="button"
           className="v2ConnectorVisualIconButton v2ConnectorVisualDeleteButton"
@@ -266,7 +252,7 @@ export function V2ConnectorVisualEditPanel({
           className="v2ConnectorVisualIconButton"
           title="Close"
           aria-label="Close connector visual editor"
-          onClick={cancel}
+          onClick={() => void closeEditor()}
         >
           <X size={15} strokeWidth={2.2} />
         </button>

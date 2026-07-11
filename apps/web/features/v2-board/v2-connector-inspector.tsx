@@ -146,6 +146,18 @@ export function V2ConnectorInspector({
     (hasSchemaFields && currentSchemaSignature !== initialSchemaSignature);
 
   useEffect(() => {
+    if (!basicDirty || saveStatus === "saving") return;
+    const timeout = window.setTimeout(() => void saveBasics(), 600);
+    return () => window.clearTimeout(timeout);
+  }, [titleDraft, descriptionDraft, connection.id, connection.title, connection.description, saveStatus]);
+
+  useEffect(() => {
+    if (!dataDirty || saveStatus === "saving") return;
+    const timeout = window.setTimeout(() => void saveData(), 600);
+    return () => window.clearTimeout(timeout);
+  }, [dataDraft, schemaDraftFields, connection.id, connection.data, saveStatus]);
+
+  useEffect(() => {
     setTitleDraft(connection.title ?? "");
     setDescriptionDraft(connection.description ?? "");
     setBasicError(null);
@@ -159,22 +171,18 @@ export function V2ConnectorInspector({
     setDataError(null);
   }, [connection.id, connection.title, connection.description, connection.data, hasSchemaFields, schemaFields]);
 
-  async function saveBasics() {
+  async function saveBasics(): Promise<boolean> {
     setBasicError(null);
     try {
       await onUpdateConnection(connection.id, {
         title: titleDraft.trim() || null,
         description: descriptionDraft.trim() || null,
       });
+      return true;
     } catch {
       setBasicError("Could not save connector details.");
+      return false;
     }
-  }
-
-  function cancelBasics() {
-    setTitleDraft(connection.title ?? "");
-    setDescriptionDraft(connection.description ?? "");
-    setBasicError(null);
   }
 
   async function updateConnectionTypeSelection(connectionTypeId: string) {
@@ -263,7 +271,7 @@ export function V2ConnectorInspector({
     setDataError(null);
   }
 
-  async function saveData() {
+  async function saveData(): Promise<boolean> {
     const schemaResult = hasSchemaFields
       ? validateAndBuildSchemaDataRecord(schemaDraftFields)
       : { ok: true as const, data: {} };
@@ -279,11 +287,11 @@ export function V2ConnectorInspector({
     if (!result.ok) {
       setDataFieldErrors(result.errors);
       setDataError("Fix invalid fields before saving.");
-      return;
+      return false;
     }
     if (!schemaResult.ok) {
       setDataError("Fix relationship fields before saving.");
-      return;
+      return false;
     }
 
     setDataFieldErrors({});
@@ -296,19 +304,11 @@ export function V2ConnectorInspector({
         },
       });
       setIsDataEditing(false);
+      return true;
     } catch {
       setDataError("Could not save connector data.");
+      return false;
     }
-  }
-
-  function cancelData() {
-    const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
-    setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
-    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
-    setIsDataEditing(false);
-    setDataFieldErrors({});
-    setSchemaFieldErrors({});
-    setDataError(null);
   }
 
   function startDataEditing() {
@@ -351,6 +351,12 @@ export function V2ConnectorInspector({
         onChange={(event) => updateDataField(field.id, { value: event.target.value })}
       />
     );
+  }
+
+  async function closeInspector() {
+    const basicsSaved = !basicDirty || (await saveBasics());
+    const dataSaved = !dataDirty || (await saveData());
+    if (basicsSaved && dataSaved) onClose();
   }
 
   function renderSchemaValueControl(field: SchemaFieldDraft) {
@@ -438,7 +444,7 @@ export function V2ConnectorInspector({
           type="button"
           className="v2InspectorCloseButton"
           aria-label="Close connector inspector"
-          onClick={onClose}
+          onClick={() => void closeInspector()}
         >
           <X size={16} strokeWidth={2.2} />
         </button>
@@ -456,7 +462,6 @@ export function V2ConnectorInspector({
               onChange={(event) => setTitleDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") void saveBasics();
-                if (event.key === "Escape") cancelBasics();
               }}
             />
           </div>
@@ -471,27 +476,13 @@ export function V2ConnectorInspector({
               onChange={(event) => setDescriptionDraft(event.target.value)}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void saveBasics();
-                if (event.key === "Escape") cancelBasics();
               }}
             />
           </div>
           <div className="v2InspectorEditFooter">
             <span className={basicError ? "v2InspectorSaveStatusError" : ""}>
-              {basicError ?? (basicDirty ? formatSaveStatus(saveStatus) : "No changes")}
+              {basicError ?? (basicDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
             </span>
-            <div className="v2InspectorEditActions">
-              <button type="button" disabled={!basicDirty} onClick={cancelBasics}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="v2InspectorPrimaryAction"
-                disabled={!basicDirty || saveStatus === "saving"}
-                onClick={() => void saveBasics()}
-              >
-                Save
-              </button>
-            </div>
           </div>
         </section>
 
@@ -662,21 +653,8 @@ export function V2ConnectorInspector({
               )}
               <div className="v2InspectorDataFooter">
                 <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                  {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
+                  {dataError ?? (dataDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
                 </span>
-                <div className="v2InspectorEditActions">
-                  <button type="button" disabled={!dataDirty} onClick={cancelData}>
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="v2InspectorPrimaryAction"
-                    disabled={!dataDirty || saveStatus === "saving"}
-                    onClick={() => void saveData()}
-                  >
-                    Save
-                  </button>
-                </div>
               </div>
             </>
           ) : !isDataEditing ? (
@@ -737,21 +715,8 @@ export function V2ConnectorInspector({
           {!hasSchemaFields && isDataEditing ? (
             <div className="v2InspectorDataFooter">
               <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                {dataError ?? (dataDirty ? formatSaveStatus(saveStatus) : "No changes")}
+                {dataError ?? (dataDirty ? "Saving..." : formatSaveStatus(saveStatus, "Saved"))}
               </span>
-              <div className="v2InspectorEditActions">
-                <button type="button" disabled={!dataDirty} onClick={cancelData}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="v2InspectorPrimaryAction"
-                  disabled={!dataDirty || saveStatus === "saving"}
-                  onClick={() => void saveData()}
-                >
-                  Save
-                </button>
-              </div>
             </div>
           ) : null}
           <p className="v2InspectorHint">
