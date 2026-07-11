@@ -429,6 +429,7 @@ export const v2BoardDetailSchema = z.object({
   cardTypes: z.array(v2CardTypeSchema),
   connectionTypes: z.array(v2ConnectionTypeSchema).default([]),
   cards: z.array(v2CardSchema),
+  cardAttachmentCounts: z.record(v2UuidSchema, z.number().int().nonnegative()).default({}),
   connections: z.array(v2ConnectionSchema)
 });
 

@@ -3,6 +3,7 @@
 import { Copy, Database, Trash2, X } from "lucide-react";
 import type {
   V2Card,
+  V2CardAttachment,
   V2CardType,
   V2Connection,
   V2CreateLinkedFieldBindingRequest,
@@ -33,6 +34,8 @@ type V2CardInspectorProps = {
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
   actionError: string | null;
+  attachments: V2CardAttachment[] | undefined;
+  attachmentsLoading: boolean;
   onUpdateCardBasics: (
     cardId: string,
     input: { title?: string; description?: string | null }
@@ -50,6 +53,9 @@ type V2CardInspectorProps = {
   onDeleteLinkedFieldBinding: (bindingId: string) => Promise<void>;
   onDuplicateCard: (cardId: string) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
+  onLoadAttachments: (cardId: string) => Promise<V2CardAttachment[]>;
+  onAttachmentsChange: (cardId: string, attachments: V2CardAttachment[]) => void;
+  onOpenAttachment: (cardId: string, attachmentId: string) => void;
   onClose: () => void;
 };
 
@@ -68,6 +74,8 @@ export function V2CardInspector({
   saveStatus,
   pendingAction,
   actionError,
+  attachments,
+  attachmentsLoading,
   onUpdateCardBasics,
   onUpdateCardData,
   onManageCardType,
@@ -76,6 +84,9 @@ export function V2CardInspector({
   onDeleteLinkedFieldBinding,
   onDuplicateCard,
   onDeleteCard,
+  onLoadAttachments,
+  onAttachmentsChange,
+  onOpenAttachment,
   onClose,
 }: V2CardInspectorProps) {
   const accentColor = getV2CardTypeAccentColor(cardType);
@@ -177,7 +188,14 @@ export function V2CardInspector({
           onUpdateBinding={onUpdateLinkedFieldBinding}
           onDeleteBinding={onDeleteLinkedFieldBinding}
         />
-        <V2CardAttachmentsSection cardId={card.id} />
+        <V2CardAttachmentsSection
+          cardId={card.id}
+          attachments={attachments}
+          isLoading={attachmentsLoading}
+          onLoad={onLoadAttachments}
+          onAttachmentsChange={onAttachmentsChange}
+          onPreview={onOpenAttachment}
+        />
         <V2CardConnectionsSection
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}

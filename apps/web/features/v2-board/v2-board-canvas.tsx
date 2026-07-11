@@ -28,6 +28,7 @@ import { Bot, Play } from "lucide-react";
 import type {
   V2BoardDetail,
   V2Card,
+  V2CardAttachment,
   V2Connection,
   V2ConnectionType,
   V2ConnectionVisualStyle,
@@ -71,12 +72,14 @@ import {
   updateV2CardType,
   updateV2ConnectionType,
   V2ApiError,
+  listV2CardAttachments,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 import { V2CardTypeManager } from "./v2-card-type-manager";
 import { V2ConnectionTypeManager } from "./v2-connection-type-manager";
+import { V2FilePreviewModal } from "./v2-file-preview-modal";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 import {
   buildV2ClipboardPayload,
@@ -357,7 +360,8 @@ function fallbackCardType(card: V2Card, workspaceId: string): V2CardType {
 function buildCardNode(
   card: V2Card,
   cardTypeMap: Map<string, V2CardType>,
-  workspaceId: string
+  workspaceId: string,
+  attachmentCount = 0
 ): V2CardNode {
   const size = clampCardSize(card.size);
 
@@ -371,6 +375,7 @@ function buildCardNode(
         size,
       },
       cardType: cardTypeMap.get(card.cardTypeId) ?? fallbackCardType(card, workspaceId),
+      attachmentCount,
     },
     style: {
       width: size.width,
@@ -388,7 +393,14 @@ function getMiniMapNodeColor(node: V2CardNode): string {
 }
 
 export function V2BoardCanvas({ boardDetail }: Props) {
-  const { board, cards, connections, cardTypes: initialCardTypes, connectionTypes: initialConnectionTypes } = boardDetail;
+  const {
+    board,
+    cards,
+    connections,
+    cardAttachmentCounts: initialCardAttachmentCounts,
+    cardTypes: initialCardTypes,
+    connectionTypes: initialConnectionTypes,
+  } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const [connectionTypes, setConnectionTypes] = useState<V2ConnectionType[]>(initialConnectionTypes);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
@@ -434,21 +446,99 @@ export function V2BoardCanvas({ boardDetail }: Props) {
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
     const nodes: V2CardNode[] = cards.map((card: V2Card) =>
-      buildCardNode(card, cardTypeMap, board.workspaceId)
+      buildCardNode(
+        card,
+        cardTypeMap,
+        board.workspaceId,
+        initialCardAttachmentCounts[card.id] ?? 0
+      )
     );
 
     const edges: Edge[] = connections.map((conn: V2Connection) => buildConnectionEdge(conn));
 
     return { nodes, edges };
-  }, [cards, connections, cardTypeMap, board.workspaceId]);
+  }, [cards, connections, cardTypeMap, board.workspaceId, initialCardAttachmentCounts]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [connectionRecords, setConnectionRecords] = useState<V2Connection[]>(connections);
+  const [attachmentCountsByCardId, setAttachmentCountsByCardId] = useState(
+    () => new Map(Object.entries(initialCardAttachmentCounts))
+  );
+  const [cardAttachmentsByCardId, setCardAttachmentsByCardId] = useState(
+    () => new Map<string, V2CardAttachment[]>()
+  );
+  const [attachmentLoadingCardIds, setAttachmentLoadingCardIds] = useState(
+    () => new Set<string>()
+  );
+  const [previewedAttachment, setPreviewedAttachment] = useState<{
+    cardId: string;
+    attachmentId: string;
+  } | null>(null);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const connectionRecordsRef = useRef(connectionRecords);
   const pendingConnectionKeysRef = useRef(new Set<string>());
+  const cardAttachmentsCacheRef = useRef(cardAttachmentsByCardId);
+  const attachmentRequestsRef = useRef(new Map<string, Promise<V2CardAttachment[]>>());
+
+  const handleAttachmentsChange = useCallback(
+    (cardId: string, attachments: V2CardAttachment[]) => {
+      const nextCache = new Map(cardAttachmentsCacheRef.current);
+      nextCache.set(cardId, attachments);
+      cardAttachmentsCacheRef.current = nextCache;
+      setCardAttachmentsByCardId(nextCache);
+      setAttachmentCountsByCardId((current) => {
+        const next = new Map(current);
+        next.set(cardId, attachments.length);
+        return next;
+      });
+      setPreviewedAttachment((current) =>
+        current?.cardId === cardId &&
+        !attachments.some((attachment) => attachment.id === current.attachmentId)
+          ? null
+          : current
+      );
+    },
+    []
+  );
+
+  const loadCardAttachments = useCallback(
+    (cardId: string): Promise<V2CardAttachment[]> => {
+      const cached = cardAttachmentsCacheRef.current.get(cardId);
+      if (cached) return Promise.resolve(cached);
+      const pending = attachmentRequestsRef.current.get(cardId);
+      if (pending) return pending;
+
+      setAttachmentLoadingCardIds((current) => new Set(current).add(cardId));
+      const request = listV2CardAttachments(cardId)
+        .then((attachments) => {
+          handleAttachmentsChange(cardId, attachments);
+          return attachments;
+        })
+        .finally(() => {
+          attachmentRequestsRef.current.delete(cardId);
+          setAttachmentLoadingCardIds((current) => {
+            const next = new Set(current);
+            next.delete(cardId);
+            return next;
+          });
+        });
+      attachmentRequestsRef.current.set(cardId, request);
+      return request;
+    },
+    [handleAttachmentsChange]
+  );
+
+  const handleOpenAttachment = useCallback(
+    async (cardId: string, attachmentId: string) => {
+      const attachments = await loadCardAttachments(cardId);
+      if (attachments.some((attachment) => attachment.id === attachmentId)) {
+        setPreviewedAttachment({ cardId, attachmentId });
+      }
+    },
+    [loadCardAttachments]
+  );
 
   const clearCardSelection = useCallback(() => {
     pendingCardSelectionRef.current = null;
@@ -636,6 +726,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     [inspectedCardId, nodes]
   );
   const inspectedCard = inspectedNode?.data.card ?? null;
+  const inspectedCardAttachments = inspectedCard
+    ? cardAttachmentsByCardId.get(inspectedCard.id)
+    : undefined;
   const inspectedCardType = inspectedNode?.data.cardType ?? (
     inspectedCard ? cardTypeMap.get(inspectedCard.cardTypeId) ?? null : null
   );
@@ -669,6 +762,14 @@ export function V2BoardCanvas({ boardDetail }: Props) {
       null
     );
   }, [connectionTypes, inspectedConnection]);
+  const previewAttachments = previewedAttachment
+    ? cardAttachmentsByCardId.get(previewedAttachment.cardId) ?? []
+    : [];
+  const previewAttachmentIndex = previewedAttachment
+    ? previewAttachments.findIndex(
+        (attachment) => attachment.id === previewedAttachment.attachmentId
+      )
+    : -1;
   const genericConnectionType = useMemo(
     () => connectionTypes.find((connectionType) => connectionType.key === "generic") ?? null,
     [connectionTypes]
@@ -1547,6 +1648,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           allConnections: connectionRecordsRef.current,
           cardTypes,
           linkedFieldBindings,
+          attachmentCount: attachmentCountsByCardId.get(node.id) ?? 0,
+          attachments: cardAttachmentsByCardId.get(node.id),
+          attachmentsLoading: attachmentLoadingCardIds.has(node.id),
           isCardActionPending: pendingCardAction?.cardId === node.id,
           pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
           cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
@@ -1560,6 +1664,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onCloseVisualEditor: () => setVisualEditingCardId(null),
           onConnectorSlotDragStart: handleConnectorSlotDragStart,
           onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
+          onLoadAttachments: loadCardAttachments,
+          onOpenAttachment: handleOpenAttachment,
         },
       }))
     );
@@ -1568,6 +1674,9 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     boardCardPreviewSignature,
     cardTypes,
     linkedFieldBindings,
+    attachmentCountsByCardId,
+    cardAttachmentsByCardId,
+    attachmentLoadingCardIds,
     connectionRecords,
     visualEditingCardId,
     pendingCardAction,
@@ -1580,6 +1689,8 @@ export function V2BoardCanvas({ boardDetail }: Props) {
     handleUpdateVisualStyle,
     handleConnectorSlotDragStart,
     handleConnectorSlotDragEnd,
+    loadCardAttachments,
+    handleOpenAttachment,
   ]);
 
   const handleUpdateConnection = useCallback(
@@ -2532,6 +2643,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onManageCardType={handleOpenCardTypeManager}
           onDuplicateCard={handleDuplicateCard}
           onDeleteCard={handleDeleteCard}
+          attachments={inspectedCardAttachments}
+          attachmentsLoading={attachmentLoadingCardIds.has(inspectedCard.id)}
+          onLoadAttachments={loadCardAttachments}
+          onAttachmentsChange={handleAttachmentsChange}
+          onOpenAttachment={handleOpenAttachment}
           onClose={() => setInspectedCardId(null)}
         />
       ) : inspectedConnection ? (
@@ -2546,6 +2662,22 @@ export function V2BoardCanvas({ boardDetail }: Props) {
           onDeleteConnection={handleDeleteConnection}
           onManageConnectionType={handleOpenConnectionTypeManager}
           onClose={() => setInspectedConnectionId(null)}
+        />
+      ) : null}
+      {previewedAttachment && previewAttachmentIndex >= 0 ? (
+        <V2FilePreviewModal
+          attachments={previewAttachments}
+          index={previewAttachmentIndex}
+          onIndexChange={(index) => {
+            const attachment = previewAttachments[index];
+            if (attachment) {
+              setPreviewedAttachment({
+                cardId: previewedAttachment.cardId,
+                attachmentId: attachment.id,
+              });
+            }
+          }}
+          onClose={() => setPreviewedAttachment(null)}
         />
       ) : null}
       {isCardTypeManagerOpen ? (

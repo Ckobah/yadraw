@@ -6,7 +6,6 @@ import type { V2CardAttachment } from "@yadraw/shared";
 import {
   deleteV2CardAttachment,
   getV2FileDownloadUrl,
-  listV2CardAttachments,
   uploadV2CardAttachment,
 } from "./api";
 
@@ -14,6 +13,11 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 type V2CardAttachmentsSectionProps = {
   cardId: string;
+  attachments: V2CardAttachment[] | undefined;
+  isLoading: boolean;
+  onLoad: (cardId: string) => Promise<V2CardAttachment[]>;
+  onAttachmentsChange: (cardId: string, attachments: V2CardAttachment[]) => void;
+  onPreview: (cardId: string, attachmentId: string) => void;
 };
 
 function formatFileSize(sizeBytes?: number | null): string {
@@ -32,10 +36,13 @@ function getAttachmentMeta(attachment: V2CardAttachment): string {
 
 export function V2CardAttachmentsSection({
   cardId,
+  attachments,
+  isLoading,
+  onLoad,
+  onAttachmentsChange,
+  onPreview,
 }: V2CardAttachmentsSectionProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [attachments, setAttachments] = useState<V2CardAttachment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [detachingId, setDetachingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -43,28 +50,18 @@ export function V2CardAttachmentsSection({
 
   useEffect(() => {
     let isActive = true;
-    setIsLoading(true);
     setError(null);
 
-    listV2CardAttachments(cardId)
-      .then((items) => {
-        if (!isActive) return;
-        setAttachments(items);
-      })
+    onLoad(cardId)
       .catch(() => {
         if (!isActive) return;
-        setAttachments([]);
         setError("Could not load files");
-      })
-      .finally(() => {
-        if (!isActive) return;
-        setIsLoading(false);
       });
 
     return () => {
       isActive = false;
     };
-  }, [cardId]);
+  }, [cardId, onLoad]);
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -83,7 +80,7 @@ export function V2CardAttachmentsSection({
         file,
         role: "attachment",
       });
-      setAttachments((current) => [attachment, ...current]);
+      onAttachmentsChange(cardId, [attachment, ...(attachments ?? [])]);
     } catch {
       setError("Could not attach file");
     } finally {
@@ -99,8 +96,9 @@ export function V2CardAttachmentsSection({
     setError(null);
     try {
       await deleteV2CardAttachment(cardId, attachment.id);
-      setAttachments((current) =>
-        current.filter((item) => item.id !== attachment.id)
+      onAttachmentsChange(
+        cardId,
+        (attachments ?? []).filter((item) => item.id !== attachment.id)
       );
     } catch {
       setError("Could not remove file");
@@ -158,7 +156,7 @@ export function V2CardAttachmentsSection({
 
       {isLoading ? (
         <p className="v2InspectorEmpty">Loading files...</p>
-      ) : attachments.length === 0 ? (
+      ) : !attachments || attachments.length === 0 ? (
         <p className="v2InspectorEmpty">No files yet</p>
       ) : (
         <div className="v2InspectorAttachmentList">
@@ -168,7 +166,14 @@ export function V2CardAttachmentsSection({
                 <FileText size={16} strokeWidth={2.1} />
               </span>
               <div className="v2InspectorAttachmentText">
-                <strong title={attachment.filename}>{attachment.filename}</strong>
+                <button
+                  type="button"
+                  className="v2InspectorAttachmentPreviewButton"
+                  title={attachment.filename}
+                  onClick={() => onPreview(cardId, attachment.id)}
+                >
+                  {attachment.filename}
+                </button>
                 <span>{getAttachmentMeta(attachment)}</span>
                 <em>{attachment.processingStatus}</em>
               </div>

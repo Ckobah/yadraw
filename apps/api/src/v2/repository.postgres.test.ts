@@ -126,6 +126,35 @@ describePostgres("v2 Postgres repository", () => {
     }
   });
 
+  it("returns active attachment counts with the board detail", async () => {
+    if (!repository?.createCardAttachment || !repository.detachCardAttachment) {
+      throw new Error("Attachment repository was not initialized");
+    }
+    const before = await repository.getBoardDetail(seedIds.board);
+    const card = before?.cards[0];
+    if (!card) throw new Error("Seed card was not found");
+
+    const attachment = await repository.createCardAttachment({
+      fileId: randomUUID(),
+      cardId: card.id,
+      workspaceId: card.workspaceId,
+      storageBucket: "test",
+      storagePath: `tests/${randomUUID()}.txt`,
+      filename: "counted.txt",
+      mimeType: "text/plain",
+      sizeBytes: 7,
+      createdBy: ownerContext.userId
+    });
+
+    await expect(repository.getBoardDetail(seedIds.board)).resolves.toMatchObject({
+      cardAttachmentCounts: { [card.id]: 1 }
+    });
+    await repository.detachCardAttachment(card.id, attachment.id);
+    await expect(repository.getBoardDetail(seedIds.board)).resolves.toMatchObject({
+      cardAttachmentCounts: { [card.id]: 0 }
+    });
+  });
+
   it("bootstraps one isolated personal workspace and demo copy", async () => {
     if (!repository) throw new Error("Repository was not initialized");
     const service = createV2BoardService(repository);

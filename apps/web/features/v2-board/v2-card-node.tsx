@@ -17,9 +17,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { MoreHorizontal, X } from "lucide-react";
+import { MoreHorizontal, Paperclip, X } from "lucide-react";
 import type {
   V2Card,
+  V2CardAttachment,
   V2Connection,
   V2LinkedFieldBinding,
   V2CardType,
@@ -52,6 +53,9 @@ export type V2CardNodeData = {
   allConnections?: V2Connection[];
   cardTypes?: V2CardType[];
   linkedFieldBindings?: V2LinkedFieldBinding[];
+  attachmentCount?: number;
+  attachments?: V2CardAttachment[];
+  attachmentsLoading?: boolean;
   connectedPortKeys?: string[];
   isCardActionPending?: boolean;
   pendingCardAction?: "duplicate" | "delete" | null;
@@ -65,6 +69,8 @@ export type V2CardNodeData = {
   onCloseVisualEditor?: () => void;
   onConnectorSlotDragStart?: () => void;
   onConnectorSlotDragEnd?: (moved: boolean) => void;
+  onLoadAttachments?: (cardId: string) => Promise<V2CardAttachment[]>;
+  onOpenAttachment?: (cardId: string, attachmentId: string) => Promise<void> | void;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
@@ -617,6 +623,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const [slotEditorError, setSlotEditorError] = useState<string | null>(null);
   const [typeChooserSlotId, setTypeChooserSlotId] = useState<string | null>(null);
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
+  const [isAttachmentListOpen, setIsAttachmentListOpen] = useState(false);
   const slotDraftRef = useRef(slotDraft);
   const slotPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dragStartRef = useRef<{
@@ -1149,6 +1156,60 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           <CardTypeIcon size={17} strokeWidth={2.1} />
         </span>
         <span className="v2CardTypeLabel">{cardType.name}</span>
+        {(data.attachmentCount ?? 0) > 0 ? (
+          <div
+            className="v2CardAttachmentIndicator nodrag nopan"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onMouseEnter={() => {
+              setIsAttachmentListOpen(true);
+              void data.onLoadAttachments?.(card.id).catch(() => {});
+            }}
+            onMouseLeave={() => setIsAttachmentListOpen(false)}
+            onFocus={() => {
+              setIsAttachmentListOpen(true);
+              void data.onLoadAttachments?.(card.id).catch(() => {});
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsAttachmentListOpen(false);
+              }
+            }}
+          >
+            <button
+              type="button"
+              className="v2CardAttachmentButton"
+              aria-label={`${data.attachmentCount} attached ${data.attachmentCount === 1 ? "file" : "files"}`}
+              aria-expanded={isAttachmentListOpen}
+            >
+              <Paperclip size={15} strokeWidth={2.2} />
+              <span>{data.attachmentCount}</span>
+            </button>
+            {isAttachmentListOpen ? (
+              <div className="v2CardAttachmentPopover" role="menu">
+                {data.attachmentsLoading ? <p>Loading files...</p> : null}
+                {!data.attachmentsLoading && !data.attachments ? (
+                  <p>Files could not be loaded.</p>
+                ) : null}
+                {data.attachments?.map((attachment) => (
+                  <button
+                    key={attachment.id}
+                    type="button"
+                    role="menuitem"
+                    title={attachment.filename}
+                    onClick={() => {
+                      void Promise.resolve(
+                        data.onOpenAttachment?.(card.id, attachment.id)
+                      ).catch(() => {});
+                    }}
+                  >
+                    {attachment.filename}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div
           ref={menuRef}
           className="v2CardActionMenuWrap nodrag"

@@ -5240,6 +5240,90 @@ button:disabled {
   white-space: nowrap;
 }
 
+.v2CardAttachmentIndicator {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.v2CardAttachmentIndicator + .v2CardActionMenuWrap {
+  margin-left: 0;
+}
+
+.v2CardAttachmentButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--v2-card-accent-text);
+  cursor: pointer;
+}
+
+.v2CardAttachmentButton span {
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.v2CardAttachmentButton:hover,
+.v2CardAttachmentButton:focus-visible,
+.v2CardAttachmentIndicator:focus-within .v2CardAttachmentButton {
+  background: var(--v2-card-accent-soft);
+  outline: 0;
+}
+
+.v2CardAttachmentPopover {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 45;
+  display: grid;
+  width: max-content;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid #d9e2ef;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 14px 35px rgba(31, 45, 73, 0.18);
+}
+
+.v2CardAttachmentPopover button,
+.v2CardAttachmentPopover p {
+  min-width: 0;
+  margin: 0;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #344054;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.v2CardAttachmentPopover button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.v2CardAttachmentPopover button:hover,
+.v2CardAttachmentPopover button:focus-visible {
+  background: #f2f6fb;
+  color: #175cd3;
+  outline: 0;
+}
+
 .v2CardTypeManagerRowText strong {
   color: #1d2939;
   font-size: 12px;
@@ -6258,6 +6342,7 @@ button:disabled {
 }
 
 .v2InspectorAttachmentText strong,
+.v2InspectorAttachmentPreviewButton,
 .v2InspectorAttachmentText span,
 .v2InspectorAttachmentText em {
   overflow: hidden;
@@ -6265,11 +6350,31 @@ button:disabled {
   white-space: nowrap;
 }
 
-.v2InspectorAttachmentText strong {
+.v2InspectorAttachmentText strong,
+.v2InspectorAttachmentPreviewButton {
   color: #1d2939;
   font-size: 13px;
   font-weight: 730;
   line-height: 1.2;
+}
+
+.v2InspectorAttachmentPreviewButton {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.v2InspectorAttachmentPreviewButton:hover,
+.v2InspectorAttachmentPreviewButton:focus-visible {
+  color: var(--v2-inspector-accent);
+  outline: 0;
+  text-decoration: underline;
 }
 
 .v2InspectorAttachmentText span {
@@ -6327,6 +6432,196 @@ button:disabled {
   font-size: 11px;
   font-weight: 660;
   line-height: 1.25;
+}
+
+.v2FilePreviewBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.68);
+}
+
+.v2FilePreviewModal {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1040px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid #d0d8e5;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.34);
+}
+
+.v2FilePreviewHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px 36px;
+  gap: 6px;
+  align-items: center;
+  min-height: 54px;
+  padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid #e4e7ec;
+}
+
+.v2FilePreviewHeader > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.v2FilePreviewHeader strong {
+  overflow: hidden;
+  color: #101828;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2FilePreviewHeader span {
+  color: #667085;
+  font-size: 11px;
+}
+
+.v2FilePreviewHeader button,
+.v2FilePreviewNav {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475467;
+  cursor: pointer;
+}
+
+.v2FilePreviewHeader button {
+  width: 36px;
+  height: 36px;
+}
+
+.v2FilePreviewHeader button:hover,
+.v2FilePreviewHeader button:focus-visible,
+.v2FilePreviewNav:hover:not(:disabled),
+.v2FilePreviewNav:focus-visible:not(:disabled) {
+  background: #eef4ff;
+  color: #175cd3;
+  outline: 0;
+}
+
+.v2FilePreviewContent {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  overflow: auto;
+  background: #f5f7fa;
+}
+
+.v2FilePreviewContent > img,
+.v2FilePreviewContent > video {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.v2FilePreviewContent > iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.v2FilePreviewContent > pre {
+  align-self: stretch;
+  justify-self: stretch;
+  min-width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 24px 68px;
+  overflow: auto;
+  background: #fff;
+  color: #1d2939;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.v2FilePreviewFallback {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  color: #667085;
+  text-align: center;
+}
+
+.v2FilePreviewFallback p,
+.v2FilePreviewContent > p {
+  margin: 0;
+}
+
+.v2FilePreviewFallback button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid #b2ccff;
+  border-radius: 6px;
+  background: #fff;
+  color: #175cd3;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.v2FilePreviewError {
+  color: #b42318;
+}
+
+.v2FilePreviewNav {
+  position: absolute;
+  top: 50%;
+  width: 42px;
+  height: 52px;
+  border: 1px solid #d0d8e5;
+  background: rgba(255, 255, 255, 0.94);
+  transform: translateY(-50%);
+}
+
+.v2FilePreviewNavPrevious {
+  left: 12px;
+}
+
+.v2FilePreviewNavNext {
+  right: 12px;
+}
+
+.v2FilePreviewNav:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+@media (max-width: 640px) {
+  .v2FilePreviewBackdrop {
+    padding: 8px;
+  }
+
+  .v2FilePreviewModal {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px);
+  }
+
+  .v2FilePreviewContent > pre {
+    padding: 18px 52px;
+  }
+
+  .v2FilePreviewNav {
+    width: 36px;
+    height: 46px;
+  }
 }
 
 .v2InspectorConnectionGroup {

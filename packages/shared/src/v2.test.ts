@@ -118,7 +118,8 @@ describe("v2 API contracts", () => {
     ).toMatchObject({
       workspace: { id: workspaceId },
       board: { id: boardId },
-      cardTypes: [{ key: "source" }]
+      cardTypes: [{ key: "source" }],
+      cardAttachmentCounts: {}
     });
   });
 

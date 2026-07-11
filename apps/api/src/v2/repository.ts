@@ -886,6 +886,17 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
           (connectionType) => !deletedConnectionTypeIds.has(connectionType.id)
         ),
         cards: activeCards(),
+        cardAttachmentCounts: Object.fromEntries(
+          activeCards().map((card) => [
+            card.id,
+            state.cardFiles.filter(
+              (cardFile) =>
+                cardFile.cardId === card.id &&
+                !deletedCardFileIds.has(cardFile.id) &&
+                !deletedFileIds.has(cardFile.fileId)
+            ).length
+          ])
+        ),
         connections: activeConnections()
       });
     },
@@ -2048,11 +2059,19 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
 
       const cardsResult = await pool.query(
         `
-          select *
-          from cards
-          where board_id = $1
-            and deleted_at is null
-          order by created_at asc, id asc
+          select
+            c.*,
+            (
+              select count(*)::int
+              from card_files cf
+              join files f on f.id = cf.file_id and f.deleted_at is null
+              where cf.card_id = c.id
+                and cf.deleted_at is null
+            ) as attachment_count
+          from cards c
+          where c.board_id = $1
+            and c.deleted_at is null
+          order by c.created_at asc, c.id asc
         `,
         [boardId]
       );
@@ -2108,6 +2127,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         cardTypes,
         connectionTypes,
         cards,
+        cardAttachmentCounts: Object.fromEntries(
+          cardsResult.rows.map((row) => [String(row.id), Number(row.attachment_count ?? 0)])
+        ),
         connections: connectionsResult.rows.map(connectionFromRow)
       });
     },

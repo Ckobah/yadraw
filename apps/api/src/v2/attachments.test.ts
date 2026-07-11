@@ -164,6 +164,9 @@ describe("v2 attachment API", () => {
     });
     expect(list.statusCode).toBe(200);
     expect(list.json()).toEqual([attachment]);
+    await expect(repository.getBoardDetail(card.boardId)).resolves.toMatchObject({
+      cardAttachmentCounts: { [card.id]: 1 }
+    });
 
     const download = await server.inject({
       method: "GET",
@@ -185,6 +188,9 @@ describe("v2 attachment API", () => {
       url: `/v2/cards/${card.id}/attachments`
     });
     expect(listAfterDetach.json()).toEqual([]);
+    await expect(repository.getBoardDetail(card.boardId)).resolves.toMatchObject({
+      cardAttachmentCounts: { [card.id]: 0 }
+    });
 
     const dataAfter = await repository.getCard(card.id);
     expect(dataAfter?.data).toEqual(dataBefore?.data);
