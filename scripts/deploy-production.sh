@@ -48,6 +48,74 @@ if command -v docker >/dev/null 2>&1; then
   fi
 fi
 
+replace_env_value() {
+  name="$1"
+  value="$2"
+  target="$3"
+  temporary="${target}.tmp.$$"
+  awk -v name="$name" -v value="$value" '
+    BEGIN { replaced = 0 }
+    index($0, name "=") == 1 {
+      if (!replaced) print name "=" value
+      replaced = 1
+      next
+    }
+    { print }
+    END { if (!replaced) print name "=" value }
+  ' "$target" > "$temporary"
+  chmod 600 "$temporary"
+  mv "$temporary" "$target"
+}
+
+rotate_weak_minio_secret() {
+  current="${S3_SECRET_ACCESS_KEY:-}"
+  normalized="${current,,}"
+  if (( ${#current} >= 16 )) &&
+    [[ ! "$normalized" =~ (replace|example|your-|placeholder|change[-_]?me|yadraw-secret) ]]; then
+    return
+  fi
+  if ! command -v docker >/dev/null 2>&1 ||
+    ! docker inspect yadraw-minio >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Rotating weak MinIO credentials"
+  backup="$(mktemp .env.before-minio-rotation.XXXXXX)"
+  chmod 600 "$backup"
+  cp .env "$backup"
+  replacement="$(openssl rand -hex 32)"
+  replace_env_value S3_SECRET_ACCESS_KEY "$replacement" .env
+  export S3_SECRET_ACCESS_KEY="$replacement"
+
+  if ! docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --no-deps minio; then
+    cp "$backup" .env
+    chmod 600 .env
+    export S3_SECRET_ACCESS_KEY="$current"
+    docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --no-deps minio || true
+    rm -f "$backup"
+    return 1
+  fi
+
+  for attempt in {1..20}; do
+    if curl --fail --silent "${S3_ENDPOINT%/}/minio/health/live" >/dev/null; then
+      rm -f "$backup"
+      echo "MinIO credentials rotated successfully"
+      return
+    fi
+    sleep 1
+  done
+
+  echo "MinIO did not become healthy after credential rotation; restoring previous credentials" >&2
+  cp "$backup" .env
+  chmod 600 .env
+  export S3_SECRET_ACCESS_KEY="$current"
+  docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --no-deps minio || true
+  rm -f "$backup"
+  return 1
+}
+
+rotate_weak_minio_secret
+
 check_secret() {
   name="$1"
   minimum_length="$2"
