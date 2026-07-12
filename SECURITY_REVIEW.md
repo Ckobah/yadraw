@@ -1,75 +1,66 @@
 # Security Review
 
-Date: 2026-06-25
+Date: 2026-07-12
 
 ## Scope
 
-- Static scan of `apps` and `packages` for common DOM XSS sinks and unsafe browser APIs.
-- Dependency audit with `npm audit`.
-- Configuration review for CORS, security headers, environment variables, and current API access control.
+- Secret scan of the current tree and all Git history.
+- Secret scan of the production browser bundle and recent public Actions logs.
+- Review of ignored files, tracked credential-like filenames, Git remote configuration, and GitHub secret-scanning alerts.
+- Review of browser/server authentication boundaries and production secret handling.
+- Dependency audit and runtime security-header verification.
 
-## Resolved in this pass
+## Secret audit result
 
-### API CORS is now allowlisted
+No committed credentials, private keys, access tokens, passwords, or service-role keys were found.
 
-The API no longer reflects every browser origin. `apps/api/src/index.ts` now reads `CORS_ORIGIN` and defaults to the local web origins:
+Verified:
 
-- `http://127.0.0.1:3000`
-- `http://localhost:3000`
+- Gitleaks scanned 141 commits and reported zero findings.
+- Gitleaks scanned `apps/web/.next/static` and reported zero findings.
+- Gitleaks scanned the latest public GitHub Actions logs and reported zero findings.
+- GitHub secret scanning reports zero alerts.
+- `.env` and `.env.*` are ignored; only explicit `.env.example` templates are tracked.
+- No real `.env`, PEM, P12/PFX, SSH private key, service-account file, or credential file exists in Git history.
+- The Git remote URL contains no embedded credentials.
+- Browser code contains no trusted user-id header or server-only secret.
 
-This reduces cross-origin exposure before authentication and cookie/session handling are added.
+Values such as `yadraw`, `yadraw-secret`, and `replace-with...` occur only in local examples, local Docker infrastructure, tests, or documentation. Local Docker ports are bound to `127.0.0.1` so these development defaults are not exposed to the LAN.
 
-### Web security headers are enabled
+## Continuous protections
 
-`apps/web/next.config.mjs` now sends:
+- CI scans full Git history with a digest-pinned Gitleaks image.
+- CI rejects server secret names found in the browser production bundle.
+- Common private-key and credential filenames are ignored by Git.
+- The production deploy sets `.env` permissions to `600`.
+- Deployment rejects short secrets, placeholders, known development defaults, and development database credentials without logging secret values.
+- `GITHUB_TOKEN` workflow permissions are restricted to `contents: read`.
 
-- `X-Content-Type-Options: nosniff`
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `X-Frame-Options: DENY`
-- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+## Application security baseline
 
-## Confirmed checks
+- Supabase sessions are verified server-side.
+- Browser mutations use same-origin Next proxy routes and origin checks.
+- Fastify requires a timing-safe internal secret and validates workspace membership.
+- CORS is allowlisted and API requests are rate-limited.
+- SQL queries are parameterized.
+- Upload and multipart sizes are limited server-side.
+- Files remain in private object storage outside semantic card data.
+- Production responses include CSP, clickjacking, MIME-sniffing, referrer, and permissions protections.
 
-- No direct matches were found for high-risk DOM XSS sinks such as `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `eval`, `new Function`, or `document.write` in application code.
-- The client-side `NEXT_PUBLIC_API_URL` value is treated as public configuration only, not as a secret.
-- `.env` remains ignored; `.env.example` contains only local development values.
-- SQL access in the current Postgres repository uses parameterized queries.
+## Remaining non-secret risks
 
-## Remaining risks
+### Moderate: PostCSS advisory through Next.js
 
-### High: API endpoints are unauthenticated
+`npm audit` reports PostCSS below `8.5.10` through the current Next.js dependency tree. The published exploit requires parsing attacker-controlled CSS and embedding the result in an HTML style element. Yadraw does not accept or process user CSS, so the known exploit path is not present, but the dependency should still be upgraded when Next.js resolves it without an unsafe downgrade.
 
-Current board, card, and search endpoints do not validate user identity or workspace membership. Anyone who can reach the API can read boards and create or update cards.
+### Defense in depth: CSP inline scripts
 
-Recommended next step:
+The production CSP is enforced but currently permits inline scripts required by the existing Next.js setup. A nonce-based CSP would provide stronger XSS containment and remains a future hardening task.
 
-- Add authentication middleware.
-- Validate workspace membership and role per request.
-- Keep service-level database credentials away from browser-accessible code.
-- Wire the documented RLS policy model into runtime access decisions.
+### Operational check
 
-### Medium: CSP is not configured yet
+`SUPABASE_SERVICE_ROLE_KEY` is optional at runtime but required for self-service account deletion. Deployment validates it when configured and emits a value-free warning when absent.
 
-Basic headers are enabled, but `Content-Security-Policy` is not. Next.js needs a nonce- or hash-based setup to avoid breaking runtime scripts, so this should be added intentionally rather than as a broad `unsafe-inline` policy.
+## Incident rule
 
-Recommended next step:
-
-- Add CSP middleware with per-request nonces.
-- Start in report-only mode.
-- Tighten `connect-src` to the API and local dev endpoints.
-
-### Medium: `npm audit` reports PostCSS through Next.js
-
-`npm audit` reports 2 moderate vulnerabilities:
-
-- `postcss < 8.5.10`
-- `next` via `postcss`
-
-The available automatic fix proposes a breaking and unsafe downgrade of Next.js, so it was not applied. Track the upstream Next.js/PostCSS resolution and update Next.js when a compatible patched release is available.
-
-## Verification
-
-- `npm run test` passed.
-- `npm run typecheck` passed.
-- `npm run build` passed.
-- `npm audit --json` completed and reported the two moderate dependency findings above.
+If a real secret is ever committed, removing it from the current branch is not sufficient. Revoke or rotate it first, remove it from Git history when necessary, and review access logs for misuse.

@@ -30,9 +30,42 @@ if ! grep -q '^INTERNAL_API_SECRET=' .env; then
   printf '\nINTERNAL_API_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 fi
 
+chmod 600 .env
+
 set -a
 source .env
 set +a
+
+check_secret() {
+  name="$1"
+  minimum_length="$2"
+  value="${!name:-}"
+  normalized_value="${value,,}"
+  if [[ -z "$value" ]]; then
+    echo "Required production secret is missing: ${name}" >&2
+    return 1
+  fi
+  if (( ${#value} < minimum_length )); then
+    echo "Production secret is too short: ${name}" >&2
+    return 1
+  fi
+  if [[ "$normalized_value" =~ (replace|example|your-|placeholder|change[-_]?me|yadraw-secret) ]]; then
+    echo "Production secret uses a placeholder or development default: ${name}" >&2
+    return 1
+  fi
+}
+
+check_secret INTERNAL_API_SECRET 32
+check_secret S3_SECRET_ACCESS_KEY 16
+if [[ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
+  check_secret SUPABASE_SERVICE_ROLE_KEY 32
+else
+  echo "Warning: SUPABASE_SERVICE_ROLE_KEY is not configured; account deletion is unavailable." >&2
+fi
+if [[ "${V2_DATABASE_URL:-}" == *"yadraw:yadraw@"* ]]; then
+  echo "V2_DATABASE_URL uses development database credentials." >&2
+  false
+fi
 
 npm ci --include=dev
 bash scripts/backup-production.sh
