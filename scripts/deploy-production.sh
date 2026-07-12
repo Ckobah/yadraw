@@ -30,11 +30,23 @@ if ! grep -q '^INTERNAL_API_SECRET=' .env; then
   printf '\nINTERNAL_API_SECRET=%s\n' "$(openssl rand -hex 32)" >> .env
 fi
 
+if ! grep -q '^APP_ORIGIN=' .env; then
+  printf '\nAPP_ORIGIN=https://yadraw.com\n' >> .env
+fi
+
 chmod 600 .env
 
 set -a
 source .env
 set +a
+
+if command -v docker >/dev/null 2>&1; then
+  storage_containers="$(docker ps --format '{{.Names}} {{.Image}}' | grep -Ei 'minio|object.?storage' || true)"
+  if [[ -n "$storage_containers" ]]; then
+    echo "Detected object storage container:"
+    echo "$storage_containers"
+  fi
+fi
 
 check_secret() {
   name="$1"
