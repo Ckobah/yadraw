@@ -1,213 +1,217 @@
 # Yadraw
 
-Structured visual workspace for typed cards, JSON data, and board connections.
+**A visual workspace where every card is structured data.**
 
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-1f8f4d?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
-[![Fastify](https://img.shields.io/badge/Fastify-5-202020?style=for-the-badge&logo=fastify)](https://fastify.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+Build diagrams, data maps, workflows, system designs, and connected knowledge on an infinite canvas. Yadraw combines the simplicity of a whiteboard with typed cards, explicit ports, files, JSON data, and persistent connections.
 
-## Languages
+<p align="center">
+  <a href="https://yadraw.com"><strong>Open Yadraw</strong></a>
+  ·
+  <a href="#english">English</a>
+  ·
+  <a href="#русский">Русский</a>
+</p>
 
-- [English](#english)
-- [Русский](#русский)
+<p align="center">
+  <a href="https://github.com/Ckobah/yadraw/actions/workflows/deploy.yml"><img alt="Deploy" src="https://github.com/Ckobah/yadraw/actions/workflows/deploy.yml/badge.svg"></a>
+  <img alt="Node.js 22+" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-V2-4169E1?logo=postgresql&logoColor=white">
+  <img alt="Status" src="https://img.shields.io/badge/status-beta-175CD3">
+</p>
+
+![Yadraw board overview](docs/screenshots/yadraw-board-overview.png)
+
+> The screenshot shows the product direction and the core interaction model. The active V2 interface is intentionally more compact and continues to evolve.
 
 ---
 
+<a id="english"></a>
+
 ## English
 
-### What Yadraw Is
+### One canvas, many uses
 
-Yadraw is an early-stage product for building visual systems where every canvas object is also structured data.
+Yadraw is not tied to one methodology. A card can represent a task, service, database, document, person, decision, API endpoint, or any JSON-shaped entity you define.
 
-The product direction is a professional board editor for:
+| Use case | Simple example |
+| --- | --- |
+| System architecture | Connect services, queues, databases, and external APIs through typed ports. |
+| Data mapping | Show how fields move from a source to a target and keep mapping details on each connection. |
+| Product planning | Arrange initiatives, requirements, decisions, and dependencies on one board. |
+| Research | Build a connected map of sources, findings, files, and open questions. |
+| Operations | Model an incident, ownership, affected systems, and recovery steps. |
+| Content pipeline | Connect ideas, drafts, reviews, assets, and publication targets. |
 
-- typed cards
-- JSON-backed card data
-- explicit card ports
-- typed connections
-- persistent board state
-- future workflow, file, search, and AI capabilities
+### Designed to stay out of the way
 
-The current repository contains two layers:
+- **Direct manipulation** — select, connect, move, and edit objects on the canvas.
+- **Automatic saving** — changes are persisted without Save or Cancel buttons.
+- **Typed cards** — reusable schemas keep information consistent.
+- **Explicit ports** — connections attach to stable semantic inputs and outputs.
+- **Automatic or manual routes** — keep connectors tidy or shape them yourself.
+- **Multi-selection** — select with Ctrl/Cmd, drag groups, or use a selection rectangle.
+- **Keyboard workflow** — copy, paste, cut, delete, undo, and redo.
+- **Files where they belong** — attach files without mixing storage metadata into card data.
+- **Private workspaces** — Supabase authentication and server-side access checks protect boards.
 
-- the existing prototype UI and API, still useful as a visual reference
-- the new v2 foundation, which is being built in smaller, cleaner steps
+### Structured, not restrictive
 
-### Current Status
+Every card has two independent layers:
 
-Yadraw is not yet a finished product. The current work is focused on replacing the original broad prototype with a reliable v2 core.
+```text
+Content                         Presentation
+────────────────────────────    ────────────────────────────
+title                           position and size
+description                     typography and alignment
+user-defined JSON data          connector slot placement
+typed schema fields             visual connector style
+```
 
-Implemented in the v2 foundation:
+This separation keeps business data portable while the canvas remains free to evolve.
 
-- v2 product scope and non-goals
-- clean v2 database design
-- v2 PostgreSQL migration
-- deterministic local seed
-- v2 Zod API contracts
-- v2 repository interface
-- v2 memory repository for unit tests
-- v2 PostgreSQL repository
-- v2 service layer with validation
-- unit tests for contracts and service behavior
-- optional PostgreSQL integration test
-- Supabase email/password authentication and server-side session validation
-- personal workspaces, dashboard, and account-scoped board access
+![Structured card details](docs/screenshots/yadraw-card-detail.png)
 
-Still intentionally out of scope for the v2 foundation:
+### A small example
 
-- workspace invitations and role management UI
-- file uploads
-- AI assistant
-- embeddings and semantic search
-- workflow execution
-- real-time collaboration
-- notifications
-- polished v2 frontend
+Create three card types:
 
-See:
+```text
+API endpoint     output: order
+Transformer      input: order       output: normalized_order
+Database         input: normalized_order
+```
 
-- [V2_FOUNDATION.md](V2_FOUNDATION.md)
-- [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
-- [docs/CORE_FOUNDATION_INSTRUCTIONS.md](docs/CORE_FOUNDATION_INSTRUCTIONS.md)
-- [docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md](docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md)
+Place one card of each type, connect matching ports, and attach the API specification to the first card. The board is now both a readable diagram and a structured model that can be exported as JSON.
+
+### What is available today
+
+- personal accounts and private workspaces;
+- dashboard with create, rename, duplicate, archive, export, and delete actions;
+- typed cards and card type schemas;
+- typed connections with automatic and manual geometry;
+- card and connection attachments with preview;
+- linked fields between connected cards;
+- minimap, zoom controls, multi-selection, clipboard, undo, and redo;
+- automatic persistence to PostgreSQL;
+- responsive inspectors with keyboard-accessible dialogs;
+- production backup, health checks, rate limiting, and structured API logs.
+
+Yadraw is currently in **beta**. Real-time collaboration, invitations, semantic search, AI assistance, and workflow execution are not part of the current release.
 
 ### Architecture
 
 ```mermaid
 flowchart LR
-  Web["Next.js Web App"] --> API["Fastify API"]
-  API --> Contracts["Shared Zod Contracts"]
-  API --> Service["v2 Service Layer"]
-  Service --> Repository["v2 Repository"]
-  Repository --> Postgres["PostgreSQL"]
+  Browser["Next.js / React Flow"] -->|same-origin /v2/actions| Web["Next.js server"]
+  Web -->|verified user context| API["Fastify API"]
+  API --> Service["V2 service layer"]
+  Service --> DB[(PostgreSQL)]
+  Service --> Files[(MinIO / S3)]
+  Browser --> Auth["Supabase Auth"]
 ```
 
-The v2 direction is deliberately simple: the database is the source of truth, domain entities are explicit, and UI-shaped data is mapped at the API boundary.
+The browser never receives database credentials, S3 credentials, the internal API secret, or a trusted user-id header.
 
-### Repository Layout
+### Repository
 
 ```text
 apps/
-  web/          Next.js prototype board UI
-  api/          Fastify API and v2 backend foundation
+  web/              Next.js application and V2 board editor
+  api/              Fastify API, authorization, and V2 services
 
 packages/
-  shared/       Shared schemas, types, and v2 API contracts
-  db/           SQL migrations and local seed files
+  shared/           Zod schemas, types, and API contracts
+  db/               V2 PostgreSQL migrations and local seed
 
-infra/
-  docker/       Local PostgreSQL, Redis, and MinIO stack
-
-docs/
-  screenshots/  Prototype screenshots
+infra/docker/       PostgreSQL, Redis, and MinIO for development
+scripts/            backup, deployment, and production smoke checks
+docs/               architecture notes and screenshots
 ```
 
-### Prototype Screenshots
+### Local development
 
-The screenshots below represent the existing prototype UI, not the final v2 interface.
-
-![Yadraw workspace overview](docs/screenshots/yadraw-workspace-inspector.png)
-
-![Yadraw card detail](docs/screenshots/yadraw-card-detail.png)
-
-### Requirements
+#### Requirements
 
 - Node.js 22+
 - npm
-- Docker Desktop with WSL2 enabled
+- Docker
+- a hosted or self-hosted Supabase project with email/password authentication
 
-### Install
-
-```bash
-npm install
-```
-
-### Run The Prototype
-
-Start infrastructure:
+#### 1. Install and start infrastructure
 
 ```bash
+git clone https://github.com/Ckobah/yadraw.git
+cd yadraw
+npm ci
 npm run infra:up
+docker exec yadraw-postgres createdb -U yadraw yadraw_v2
 ```
 
-Create a local environment file:
+Create the `workspace-files` bucket in MinIO at <http://127.0.0.1:9001> before testing attachments.
+
+#### 2. Configure the environment
 
 ```bash
-copy .env.example .env
+cp .env.example .env
 ```
 
-The prototype API now uses explicit storage and user context:
+On Windows PowerShell:
 
-```text
-YADRAW_STORAGE=postgres
-DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
-DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
-DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
+```powershell
+Copy-Item .env.example .env
+```
+
+At minimum, configure:
+
+```dotenv
+YADRAW_V2_STORAGE=v2-postgres
+V2_DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw_v2
+INTERNAL_API_SECRET=replace-with-at-least-32-random-characters
+
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SERVICE_ROLE_KEY=your-server-only-service-role-key
+
+S3_ENDPOINT=http://127.0.0.1:9000
+S3_ACCESS_KEY_ID=yadraw
+S3_SECRET_ACCESS_KEY=yadraw-secret
+S3_BUCKET=workspace-files
 ```
 
-Enable email/password authentication in Supabase and allow
-`http://127.0.0.1:3000/auth/callback` as a redirect URL. Apply all v2 migrations,
-including `012_users_and_workspace_ownership.sql`, before starting the app.
+Allow this Supabase redirect URL:
 
-If `YADRAW_STORAGE=postgres` is selected and PostgreSQL is unavailable, the API fails at startup instead of silently switching to memory storage.
+```text
+http://127.0.0.1:3000/auth/callback
+```
 
-Start the API:
+#### 3. Apply the schema and optional demo data
 
 ```bash
+npm run v2:migrations:apply --workspace @yadraw/api
+docker exec -i yadraw-postgres psql -U yadraw -d yadraw_v2 < packages/db/seeds/v2_local_seed.sql
+```
+
+PowerShell seed command:
+
+```powershell
+Get-Content packages/db/seeds/v2_local_seed.sql | docker exec -i yadraw-postgres psql -U yadraw -d yadraw_v2
+```
+
+#### 4. Run the application
+
+```bash
+# terminal 1
 npm run dev:api
-```
 
-Start the web app:
-
-```bash
+# terminal 2
 npm run dev:web
 ```
 
-Open:
+Open <http://127.0.0.1:3000>.
 
-```text
-http://127.0.0.1:3000/boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
-```
-
-The board route loads the board through the API as the source of truth.
-
-### v2 Database
-
-The v2 schema is kept separate from the original migrations:
-
-```text
-packages/db/migrations/v2/001_core_foundation.sql
-packages/db/seeds/v2_local_seed.sql
-```
-
-The v2 migration defines only the core model:
-
-- `workspaces`
-- `projects`
-- `boards`
-- `card_types`
-- `card_type_ports`
-- `cards`
-- `connections`
-
-The seed creates one local workspace, one project, one board, two card types, and three ports.
-
-### v2 Integration Test
-
-The PostgreSQL integration test is opt-in. It is skipped unless `V2_DATABASE_URL` is set.
-
-Example:
-
-```bash
-set V2_DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:55433/yadraw_v2_verify
-npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
-```
-
-### Quality Checks
+### Quality checks
 
 ```bash
 npm run typecheck
@@ -216,252 +220,118 @@ npm run test:postgres
 npm run build
 ```
 
-Current tests cover:
+Production deployment also runs migrations twice to verify idempotency, rejects server secrets in the browser bundle, creates a backup, and performs a smoke test.
 
-- legacy shared schemas
-- legacy in-memory repository behavior
-- v2 API contracts
-- v2 service validation
-- v2 memory repository workflow
-- optional v2 PostgreSQL persistence workflow
-- prototype/core request context, workspace role checks, unified API errors, metadata protection, and board-scoped search
-- prototype/core PostgreSQL smoke tests through a temporary schema
+### Security model
 
-### Security
+- Supabase sessions are verified on the server.
+- Browser mutations use same-origin proxy routes with origin checks.
+- Workspace membership is enforced by the API for boards, cards, connections, and files.
+- SQL queries are parameterized.
+- Upload size and multipart limits are enforced server-side.
+- Files are stored outside `card.data` in private object storage.
+- CSP, clickjacking, MIME-sniffing, referrer, and permissions headers are enabled.
+- Production API access requires a timing-safe internal secret check.
 
-The current security notes are documented in [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
+Security issues should not be posted publicly. Use the contact listed on the [support page](https://yadraw.com/support).
 
-Implemented baseline protections include:
+### Project status and license
 
-- CORS allowlist via `CORS_ORIGIN`
-- browser security headers in Next.js
-- parameterized SQL queries
-- `.env` excluded from Git
-
-The v2 web app validates Supabase sessions server-side and forwards the verified user
-identity to the API. Workspace membership is enforced for board and file access.
-Invitations and a production role-management UI are still planned work.
-
-### Roadmap
-
-Near-term v2 work:
-
-1. Wire v2 Fastify routes.
-2. Build a minimal v2 board UI.
-3. Load a seeded board from PostgreSQL.
-4. Create and edit cards through v2 contracts.
-5. Create and delete typed connections.
-6. Preserve board state after reload.
-
-Later work:
-
-- invitations and role management
-- undo/redo
-- files and attachments
-- search
-- AI assistant
-- workflow execution
-- collaboration
-
-### License
-
-Private project foundation. License to be defined.
+Yadraw is under active development and may change before a stable release. This repository does not currently publish an open-source license; all rights are reserved unless stated otherwise.
 
 ---
 
+<a id="русский"></a>
+
 ## Русский
 
-### Что Такое Yadraw
+### Один холст — множество задач
 
-Yadraw - ранняя стадия продукта для визуальных систем, где каждый объект на canvas является не только блоком интерфейса, но и структурированными данными.
+Yadraw — это визуальное рабочее пространство, где каждая карточка одновременно является структурированными данными. Карточка может представлять задачу, сервис, базу данных, документ, человека, решение, API endpoint или любую JSON-сущность, которую вы определите сами.
 
-Продуктовое направление:
+| Сценарий | Простой пример |
+| --- | --- |
+| Архитектура системы | Соедините сервисы, очереди, базы данных и внешние API через типизированные порты. |
+| Маппинг данных | Покажите движение полей от источника к получателю и храните детали на связи. |
+| Планирование продукта | Разместите инициативы, требования, решения и зависимости на одной доске. |
+| Исследование | Соберите связанную карту источников, выводов, файлов и открытых вопросов. |
+| Эксплуатация | Опишите инцидент, ответственных, затронутые системы и шаги восстановления. |
+| Контент-процесс | Соедините идеи, черновики, проверки, материалы и каналы публикации. |
 
-- типизированные карточки
-- JSON-данные внутри карточек
-- явные порты карточек
-- типизированные связи
-- сохранение состояния доски
-- будущие workflow, файлы, поиск и AI-функции
+### Интерфейс не мешает работе
 
-Сейчас в репозитории есть два слоя:
+- **Прямое управление** — выбирайте, соединяйте, перемещайте и редактируйте объекты на холсте.
+- **Автосохранение** — изменения сохраняются без кнопок «Сохранить» и «Отмена».
+- **Типизированные карточки** — переиспользуемые схемы поддерживают порядок в данных.
+- **Явные порты** — связи закреплены за стабильными входами и выходами.
+- **Автоматические и ручные маршруты** — коннектор можно доверить редактору или настроить самостоятельно.
+- **Групповое выделение** — Ctrl/Cmd, рамка выделения и перемещение нескольких карточек.
+- **Горячие клавиши** — копирование, вставка, удаление, undo и redo.
+- **Файлы рядом с объектом** — вложения не смешиваются с пользовательскими JSON-данными.
+- **Личные пространства** — Supabase Auth и серверная проверка доступа защищают доски.
 
-- существующий прототип UI и API, который остается визуальным ориентиром
-- новый v2 foundation, который строится маленькими и более чистыми шагами
+### Структурированность без ограничений
 
-### Текущий Статус
-
-Yadraw пока не готовый продукт. Сейчас основная работа - заменить широкий прототип надежным v2-ядром.
-
-Уже сделано для v2 foundation:
-
-- зафиксированы scope и non-goals
-- спроектирована чистая v2-схема БД
-- добавлена v2 PostgreSQL migration
-- добавлен детерминированный local seed
-- добавлены v2 Zod API-контракты
-- добавлен v2 repository interface
-- добавлен v2 memory repository для unit-тестов
-- добавлен v2 PostgreSQL repository
-- добавлен v2 service layer с валидацией
-- добавлены тесты контрактов и service behavior
-- добавлен опциональный PostgreSQL integration test
-
-Сознательно не входит в v2 foundation:
-
-- авторизация
-- workspace membership и роли
-- загрузка файлов
-- AI assistant
-- embeddings и semantic search
-- workflow execution
-- real-time collaboration
-- notifications
-- финальный v2 frontend
-
-См.:
-
-- [V2_FOUNDATION.md](V2_FOUNDATION.md)
-- [V2_DATABASE_SCHEMA.md](V2_DATABASE_SCHEMA.md)
-- [docs/CORE_FOUNDATION_INSTRUCTIONS.md](docs/CORE_FOUNDATION_INSTRUCTIONS.md)
-- [docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md](docs/SERVER_DEPLOYMENT_AND_PHYSICAL_TESTS.md)
-
-### Архитектура
-
-```mermaid
-flowchart LR
-  Web["Next.js Web App"] --> API["Fastify API"]
-  API --> Contracts["Shared Zod Contracts"]
-  API --> Service["v2 Service Layer"]
-  Service --> Repository["v2 Repository"]
-  Repository --> Postgres["PostgreSQL"]
-```
-
-Направление v2 простое: база данных является источником истины, доменные сущности описаны явно, а удобные для UI объекты собираются на границе API.
-
-### Структура Репозитория
+У карточки есть два независимых слоя:
 
 ```text
-apps/
-  web/          прототип UI доски на Next.js
-  api/          Fastify API и v2 backend foundation
-
-packages/
-  shared/       общие схемы, типы и v2 API-контракты
-  db/           SQL-миграции и local seed-файлы
-
-infra/
-  docker/       локальный PostgreSQL, Redis и MinIO
-
-docs/
-  screenshots/  скриншоты прототипа
+Содержание                      Представление
+────────────────────────────    ────────────────────────────
+название                        позиция и размер
+описание                        типографика и выравнивание
+пользовательские JSON-данные    расположение портов
+поля типизированной схемы       внешний вид коннекторов
 ```
 
-### Скриншоты Прототипа
+Бизнес-данные остаются переносимыми, а визуальное представление можно менять независимо.
 
-Скриншоты ниже показывают существующий прототип UI, а не финальный v2-интерфейс.
+### Простой пример
 
-![Yadraw workspace overview](docs/screenshots/yadraw-workspace-inspector.png)
-
-![Yadraw card detail](docs/screenshots/yadraw-card-detail.png)
-
-### Требования
-
-- Node.js 22+
-- npm
-- Docker Desktop с включенным WSL2
-
-### Установка
-
-```bash
-npm install
-```
-
-### Запуск Прототипа
-
-Запустить инфраструктуру:
-
-```bash
-npm run infra:up
-```
-
-Создать локальный env-файл:
-
-```bash
-copy .env.example .env
-```
-
-Prototype API теперь использует явный storage и user context:
+Создайте три типа карточек:
 
 ```text
-YADRAW_STORAGE=postgres
-DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
-DATABASE_URL_TEST=postgres://yadraw:yadraw@127.0.0.1:5433/yadraw
-DEV_USER_ID=02f38bb1-0cde-4473-95ef-1d50db3467e4
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+API endpoint     выход: order
+Transformer      вход: order       выход: normalized_order
+Database         вход: normalized_order
 ```
 
-В Supabase нужно включить вход по email/password и добавить
-`http://127.0.0.1:3000/auth/callback` в список разрешённых redirect URL. Перед
-запуском примените все v2-миграции, включая
-`012_users_and_workspace_ownership.sql`.
+Разместите по одной карточке каждого типа, соедините подходящие порты и прикрепите API-спецификацию к первой карточке. Доска одновременно станет понятной диаграммой и структурированной моделью, которую можно экспортировать в JSON.
 
-Если выбран `YADRAW_STORAGE=postgres`, а PostgreSQL недоступен, API завершает старт с ошибкой и не переключается в память молча.
+### Что уже работает
 
-Запустить API:
+- личные аккаунты и приватные рабочие пространства;
+- dashboard с созданием, переименованием, дублированием, архивом, экспортом и удалением досок;
+- типизированные карточки и схемы типов;
+- типизированные связи с автоматической и ручной геометрией;
+- файлы карточек и связей с предпросмотром;
+- связанные поля между соединёнными карточками;
+- minimap, масштаб, групповое выделение, clipboard, undo и redo;
+- автоматическое сохранение в PostgreSQL;
+- адаптивные инспекторы и управление модальными окнами с клавиатуры;
+- production backup, health checks, rate limiting и структурированные API-логи.
 
-```bash
-npm run dev:api
-```
+Сейчас Yadraw находится в статусе **beta**. Совместное редактирование в реальном времени, приглашения, семантический поиск, AI-функции и выполнение workflow пока не входят в текущий релиз.
 
-Запустить web app:
+### Архитектура и безопасность
 
-```bash
-npm run dev:web
-```
+Основная схема показана в [английском разделе](#architecture). Браузер работает только с same-origin маршрутами Next.js и никогда не получает доступ к БД, S3 credentials, внутреннему API secret или доверенному заголовку пользователя.
 
-Открыть:
+Основные меры защиты:
 
-```text
-http://127.0.0.1:3000/boards/b4f94635-6fd5-4a6b-8608-61a69c81fbe2
-```
+- серверная проверка Supabase-сессии;
+- проверка origin для изменяющих запросов;
+- проверка membership для досок, карточек, связей и файлов;
+- параметризованные SQL-запросы;
+- серверные ограничения размера файлов;
+- приватное объектное хранилище вне `card.data`;
+- CSP и защита от clickjacking и MIME sniffing;
+- timing-safe проверка внутреннего API secret.
 
-Board route загружает доску через API как источник истины.
+### Локальный запуск
 
-### v2 База Данных
+Команды установки, настройки Supabase, PostgreSQL и MinIO приведены в разделе [Local development](#local-development). После настройки откройте <http://127.0.0.1:3000>.
 
-v2-схема отделена от старых миграций:
-
-```text
-packages/db/migrations/v2/001_core_foundation.sql
-packages/db/seeds/v2_local_seed.sql
-```
-
-v2 migration описывает только core-модель:
-
-- `workspaces`
-- `projects`
-- `boards`
-- `card_types`
-- `card_type_ports`
-- `cards`
-- `connections`
-
-Seed создает один local workspace, один project, одну board, два card types и три ports.
-
-### v2 Integration Test
-
-PostgreSQL integration test запускается только при наличии `V2_DATABASE_URL`. Без этой переменной он пропускается.
-
-Пример:
-
-```bash
-set V2_DATABASE_URL=postgres://yadraw:yadraw@127.0.0.1:55433/yadraw_v2_verify
-npm run test --workspace @yadraw/api -- src/v2/repository.postgres.test.ts
-```
-
-### Проверки Качества
+Проверки проекта:
 
 ```bash
 npm run typecheck
@@ -470,53 +340,6 @@ npm run test:postgres
 npm run build
 ```
 
-Сейчас тестами покрыты:
+### Статус и лицензия
 
-- старые shared schemas
-- старое in-memory repository behavior
-- v2 API contracts
-- v2 service validation
-- v2 memory repository workflow
-- опциональный v2 PostgreSQL persistence workflow
-- prototype/core request context, workspace role checks, единый формат API errors, защита metadata и board-scoped search
-- prototype/core PostgreSQL smoke tests через временную schema
-
-### Безопасность
-
-Текущие security notes описаны в [SECURITY_REVIEW.md](SECURITY_REVIEW.md).
-
-Уже есть базовые меры:
-
-- CORS allowlist через `CORS_ORIGIN`
-- security headers в Next.js
-- параметризованные SQL-запросы
-- `.env` исключен из Git
-
-Авторизация и workspace permissions еще не реализованы.
-
-В prototype/core API уже есть development user context и минимальные проверки workspace roles. Настоящий auth provider, secure sessions, invites и production permission policy остаются будущей работой.
-
-### Roadmap
-
-Ближайшие v2-шаги:
-
-1. Подключить v2 Fastify routes.
-2. Собрать минимальный v2 board UI.
-3. Загружать seeded board из PostgreSQL.
-4. Создавать и редактировать cards через v2 contracts.
-5. Создавать и удалять typed connections.
-6. Сохранять board state после reload.
-
-Позже:
-
-- авторизация и роли
-- undo/redo
-- файлы и attachments
-- поиск
-- AI assistant
-- workflow execution
-- collaboration
-
-### Лицензия
-
-Private project foundation. License to be defined.
+Yadraw активно развивается и может меняться до стабильного релиза. В репозитории пока не опубликована open-source лицензия; если не указано иное, все права защищены.
