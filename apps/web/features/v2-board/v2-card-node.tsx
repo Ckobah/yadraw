@@ -378,9 +378,7 @@ export function getV2CardTypeAccentColor(cardType: V2CardType | null | undefined
 }
 
 function getCardSummary(card: V2Card): string {
-  if (card.description.trim()) return card.description.trim();
-  const kind = card.data.kind;
-  return typeof kind === "string" && kind.trim() ? kind.trim() : "No description";
+  return card.description.trim();
 }
 
 type V2CardDataPreviewRow = {
@@ -602,6 +600,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     dataPreviewRows.length
   );
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
+  const cardSummary = getCardSummary(card);
   const visualStyle = card.visualStyle ?? {};
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
@@ -1284,13 +1283,15 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         >
           {card.title}
         </span>
-        <span
-          ref={subtitleRef}
-          className="v2CardSubtitle"
-          style={textStyle}
-        >
-          {getCardSummary(card)}
-        </span>
+        {cardSummary ? (
+          <span
+            ref={subtitleRef}
+            className="v2CardSubtitle"
+            style={textStyle}
+          >
+            {cardSummary}
+          </span>
+        ) : null}
         {visibleDataPreviewRows.length > 0 ? (
           <dl className="v2CardDataPreview" aria-label="Card data preview">
             {visibleDataPreviewRows.map((row) => (
