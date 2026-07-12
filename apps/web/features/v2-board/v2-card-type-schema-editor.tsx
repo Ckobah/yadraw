@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import type {
   V2CardTypeFieldSchema,
   V2CardTypeFieldType,
@@ -27,6 +27,32 @@ type V2CardTypeSchemaEditorProps = {
 };
 
 const FIELD_TYPES: V2CardTypeFieldType[] = ["text", "number", "boolean", "select", "json", "date"];
+const FIELD_TYPE_LABELS: Record<V2CardTypeFieldType, string> = {
+  text: "Text",
+  number: "Number",
+  boolean: "Yes / No",
+  select: "Choice",
+  json: "JSON",
+  date: "Date",
+};
+
+function fieldKeyFromName(name: string): string {
+  const transliterated = name.toLowerCase().replace(/[а-яё]/g, (letter) => ({
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
+    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  }[letter] ?? ""));
+  const normalized = transliterated
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) return "field";
+  const withPrefix = /^[a-z]/.test(normalized) ? normalized : `field_${normalized}`;
+  return withPrefix.replace(/_+/g, "_");
+}
 
 function optionsToText(field: V2CardTypeFieldSchema): string {
   return (field.options ?? [])
@@ -82,13 +108,13 @@ export function buildV2CardTypeSchemaFromDrafts(
   const schemaFields: V2CardTypeSchema["fields"] = [];
 
   for (const field of fields) {
-    const key = field.key.trim();
-    const label = field.label.trim() || key;
-    if (!key) {
-      return { ok: false, error: "Field key is required." };
+    const label = field.label.trim();
+    if (!label) {
+      return { ok: false, error: "Field name is required." };
     }
+    const key = field.key.trim() || fieldKeyFromName(label);
     if (seenKeys.has(key)) {
-      return { ok: false, error: `Duplicate field key: ${key}` };
+      return { ok: false, error: `Field names must be unique: ${label}` };
     }
     seenKeys.add(key);
 
@@ -110,11 +136,26 @@ export function V2CardTypeSchemaEditor({
   fields,
   onChange,
   disabled = false,
-  title = "Schema fields",
-  description = "Fields rendered in the card inspector for this type.",
+  title = "Fields",
 }: V2CardTypeSchemaEditorProps) {
   function updateField(fieldId: string, patch: Partial<Omit<V2CardTypeSchemaFieldDraft, "id">>) {
     onChange(fields.map((field) => (field.id === fieldId ? { ...field, ...patch } : field)));
+  }
+
+  function updateFieldName(field: V2CardTypeSchemaFieldDraft, label: string) {
+    if (field.id.startsWith("schema-")) {
+      updateField(field.id, { label });
+      return;
+    }
+    const base = fieldKeyFromName(label);
+    const usedKeys = new Set(fields.filter((item) => item.id !== field.id).map((item) => item.key));
+    let key = base;
+    let suffix = 2;
+    while (usedKeys.has(key)) {
+      key = `${base}_${suffix}`;
+      suffix += 1;
+    }
+    updateField(field.id, { label, key });
   }
 
   function addField() {
@@ -140,69 +181,90 @@ export function V2CardTypeSchemaEditor({
   return (
     <section className="v2CardTypeSchemaEditor">
       <div className="v2CardTypeManagerSectionHeader">
-        <div>
-          <h3>{title}</h3>
-          <span>{description}</span>
-        </div>
-        <button type="button" className="v2SchemaEditButton" onClick={addField} disabled={disabled}>
+        <h3>{title}</h3>
+        <button
+          type="button"
+          className="v2SchemaEditButton"
+          aria-label="Add field"
+          title="Add field"
+          onClick={addField}
+          disabled={disabled}
+        >
           <Plus size={13} strokeWidth={2.2} />
-          <span>Add field</span>
         </button>
       </div>
 
-      {fields.length === 0 ? (
-        <p className="v2InspectorEmpty">No schema fields</p>
-      ) : (
+      {fields.length > 0 ? (
         <div className="v2SchemaFieldDraftList">
           {fields.map((field) => (
             <div key={field.id} className="v2SchemaFieldDraftRow">
               <div className="v2SchemaFieldDraftGrid">
-                <label>
-                  <span>Key</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={field.key}
-                    placeholder="fieldKey"
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { key: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Label</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={field.label}
-                    placeholder={field.key || "Field label"}
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { label: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Type</span>
-                  <select
-                    className="v2InspectorDataValue"
-                    value={field.type}
-                    disabled={disabled}
-                    onChange={(event) =>
-                      updateField(field.id, { type: event.target.value as V2CardTypeFieldType })
-                    }
-                  >
-                    {FIELD_TYPES.map((fieldType) => (
-                      <option key={fieldType} value={fieldType}>
-                        {fieldType}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="v2SchemaRequiredControl">
-                  <input
-                    type="checkbox"
-                    checked={field.required}
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { required: event.target.checked })}
-                  />
-                  <span>Required</span>
-                </label>
+                <input
+                  className="v2InspectorDataValue"
+                  value={field.label}
+                  placeholder="Field name"
+                  aria-label="Field name"
+                  disabled={disabled}
+                  onChange={(event) => updateFieldName(field, event.target.value)}
+                />
+                <select
+                  className="v2InspectorDataValue"
+                  value={field.type}
+                  aria-label="Value type"
+                  title="Value type"
+                  disabled={disabled}
+                  onChange={(event) =>
+                    updateField(field.id, { type: event.target.value as V2CardTypeFieldType })
+                  }
+                >
+                  {FIELD_TYPES.map((fieldType) => (
+                    <option key={fieldType} value={fieldType}>
+                      {FIELD_TYPE_LABELS[fieldType]}
+                    </option>
+                  ))}
+                </select>
+                <details className="v2SchemaFieldAdvanced">
+                  <summary aria-label="More field options" title="More field options">
+                    <ChevronDown size={14} strokeWidth={2.2} aria-hidden="true" />
+                  </summary>
+                  <div>
+                    <label className="v2SchemaRequiredControl">
+                      <input
+                        type="checkbox"
+                        checked={field.required}
+                        disabled={disabled}
+                        onChange={(event) => updateField(field.id, { required: event.target.checked })}
+                      />
+                      <span>Required</span>
+                    </label>
+                    <input
+                      className="v2InspectorDataValue"
+                      value={field.placeholder}
+                      placeholder="Placeholder"
+                      aria-label="Placeholder"
+                      disabled={disabled}
+                      onChange={(event) => updateField(field.id, { placeholder: event.target.value })}
+                    />
+                    <input
+                      className="v2InspectorDataValue"
+                      value={field.description}
+                      placeholder="Developer note"
+                      aria-label="Developer note"
+                      disabled={disabled}
+                      onChange={(event) => updateField(field.id, { description: event.target.value })}
+                    />
+                    {field.type === "select" ? (
+                      <textarea
+                        className="v2InspectorDataValue v2InspectorDataJsonValue"
+                        value={field.optionsText}
+                        placeholder={"new:New\ndone:Done"}
+                        aria-label="Choice options"
+                        disabled={disabled}
+                        onChange={(event) => updateField(field.id, { optionsText: event.target.value })}
+                      />
+                    ) : null}
+                  </div>
+                </details>
                 <button
                   type="button"
                   className="v2InspectorDataDeleteButton"
@@ -213,44 +275,10 @@ export function V2CardTypeSchemaEditor({
                   <Trash2 size={13} strokeWidth={2.2} />
                 </button>
               </div>
-              <div className="v2SchemaFieldDetailsGrid">
-                <label>
-                  <span>Placeholder</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={field.placeholder}
-                    placeholder="Optional placeholder"
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { placeholder: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Description</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={field.description}
-                    placeholder="Optional help text"
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { description: event.target.value })}
-                  />
-                </label>
-              </div>
-              {field.type === "select" ? (
-                <label className="v2SchemaOptionsControl">
-                  <span>Select options</span>
-                  <textarea
-                    className="v2InspectorDataValue v2InspectorDataJsonValue"
-                    value={field.optionsText}
-                    placeholder={"new:New\ndone:Done"}
-                    disabled={disabled}
-                    onChange={(event) => updateField(field.id, { optionsText: event.target.value })}
-                  />
-                </label>
-              ) : null}
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

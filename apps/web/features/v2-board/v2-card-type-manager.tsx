@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import type {
   V2CardType,
   V2CreateCardTypeRequest,
@@ -56,6 +56,33 @@ const ACCENT_OPTIONS = [
   { key: "purple", label: "Purple" },
   { key: "gray", label: "Gray" },
 ] as const;
+
+function cardTypeKeyFromName(name: string): string {
+  const transliterated = name.toLowerCase().replace(/[а-яё]/g, (letter) => ({
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
+    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  }[letter] ?? ""));
+  const normalized = transliterated
+    .trim()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) return "card_type";
+  const withPrefix = /^[a-z]/.test(normalized) ? normalized : `type_${normalized}`;
+  return withPrefix.replace(/_+/g, "_");
+}
+
+function uniqueCardTypeKey(name: string, cardTypes: V2CardType[]): string {
+  const base = cardTypeKeyFromName(name);
+  const used = new Set(cardTypes.map((cardType) => cardType.key));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}_${suffix}`)) suffix += 1;
+  return `${base}_${suffix}`;
+}
 
 function normalizeDraftAccentKey(accentKey: string): string {
   return ACCENT_OPTIONS.some((option) => option.key === accentKey) ? accentKey : "blue";
@@ -219,11 +246,10 @@ export function V2CardTypeManager({
   }
 
   function validateDraft() {
-    const key = draft.key.trim();
+    const key = mode === "new" ? uniqueCardTypeKey(draft.name, cardTypes) : draft.key.trim();
     const name = draft.name.trim();
-    if (!key) return "Key is required.";
     if (!CARD_TYPE_KEY_PATTERN.test(key)) {
-      return "Key must start with a lowercase letter and use lowercase letters, numbers, or underscores.";
+      return "Could not generate a valid type key.";
     }
     if (!name) return "Name is required.";
     const width = Number(draft.defaultWidth);
@@ -266,9 +292,10 @@ export function V2CardTypeManager({
       };
       const defaultVisualStyle = buildDefaultVisualStyle(draft);
       const ports = buildDefaultPorts(draft);
+      const key = mode === "new" ? uniqueCardTypeKey(draft.name, cardTypes) : draft.key.trim();
       if (mode === "new") {
         const created = await onCreateCardType({
-          key: draft.key.trim(),
+          key,
           name: draft.name.trim(),
           description: draft.description,
           schema: schemaResult.schema,
@@ -288,7 +315,7 @@ export function V2CardTypeManager({
         return false;
       }
       const updated = await onUpdateCardType(draft.id, {
-        key: draft.key.trim(),
+        key,
         name: draft.name.trim(),
         description: draft.description,
         schema: schemaResult.schema,
@@ -361,7 +388,6 @@ export function V2CardTypeManager({
         <header className="v2CardTypeManagerHeader">
           <div>
             <h2>Card Type Manager</h2>
-            <p>Edit type definitions used by all cards on this board.</p>
           </div>
           <button type="button" className="v2InspectorCloseButton" aria-label="Close manager" onClick={() => void closeManager()}>
             <X size={16} strokeWidth={2.2} />
@@ -404,7 +430,6 @@ export function V2CardTypeManager({
                     </span>
                     <span className="v2CardTypeManagerRowText">
                       <strong>{cardType.name}</strong>
-                      <span>{cardType.key}</span>
                     </span>
                   </button>
                 );
@@ -414,56 +439,26 @@ export function V2CardTypeManager({
 
           <div className="v2CardTypeManagerEditor">
             <V2CardTypePreview
-              typeKey={draft.key}
               name={draft.name}
-              description={draft.description}
               accentKey={draft.accentKey}
               iconKey={draft.iconKey}
               fields={draft.fields}
               hasInputPort={draft.hasInputPort}
               hasOutputPort={draft.hasOutputPort}
+              onToggleInputPort={() => updateDraft({ hasInputPort: !draft.hasInputPort })}
+              onToggleOutputPort={() => updateDraft({ hasOutputPort: !draft.hasOutputPort })}
+              disabled={isSaving || isDeleting}
             />
 
             <section className="v2CardTypeManagerSection">
-              <div className="v2CardTypeManagerSectionHeader">
-                <div>
-                  <h3>{mode === "new" ? "New card type" : "Type details"}</h3>
-                  <span>Type metadata is stored on the card type, not on cards.</span>
-                </div>
-              </div>
-              <div className="v2CardTypeManagerDetailsGrid">
-                <label>
-                  <span>Key</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={draft.key}
-                    placeholder="supplier"
-                    disabled={isSaving || isDeleting}
-                    onChange={(event) => updateDraft({ key: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Name</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={draft.name}
-                    placeholder="Supplier"
-                    disabled={isSaving || isDeleting}
-                    onChange={(event) => updateDraft({ name: event.target.value })}
-                  />
-                </label>
-              </div>
-              <label className="v2CardTypeManagerDescriptionField">
-                <span>Description</span>
-                <textarea
-                  className="v2InspectorDataValue"
-                  value={draft.description}
-                  placeholder="What this card type represents"
-                  disabled={isSaving || isDeleting}
-                  rows={3}
-                  onChange={(event) => updateDraft({ description: event.target.value })}
-                />
-              </label>
+              <input
+                className="v2InspectorDataValue"
+                value={draft.name}
+                placeholder="Type name"
+                aria-label="Type name"
+                disabled={isSaving || isDeleting}
+                onChange={(event) => updateDraft({ name: event.target.value })}
+              />
             </section>
 
             <V2CardTypeSchemaEditor
@@ -472,12 +467,9 @@ export function V2CardTypeManager({
               onChange={(fields) => updateDraft({ fields })}
             />
 
-            <section className="v2CardTypeManagerSection">
-              <h3>Visual defaults</h3>
-              <p>Type appearance is rendered from card type metadata.</p>
+            <section className="v2CardTypeManagerSection v2CardTypeVisualOnly" aria-label="Card appearance">
               <div className="v2CardTypeVisualGrid">
                 <div className="v2CardTypeChoiceGroup">
-                  <span>Accent</span>
                   <div className="v2CardTypeAccentPicker">
                     {ACCENT_OPTIONS.map((option) => {
                       const isSelected = draft.accentKey === option.key;
@@ -494,18 +486,17 @@ export function V2CardTypeManager({
                             ["--v2-accent-option-soft" as string]: `var(--yd-accent-${option.key}-soft)`,
                           }}
                           aria-pressed={isSelected}
+                          aria-label={option.label}
+                          title={option.label}
                           onClick={() => updateDraft({ accentKey: option.key })}
                         >
                           <span className="v2CardTypeAccentSwatch" aria-hidden="true" />
-                          <span>{option.label}</span>
-                          {isSelected ? <Check size={13} strokeWidth={2.4} aria-hidden="true" /> : null}
                         </button>
                       );
                     })}
                   </div>
                 </div>
                 <div className="v2CardTypeChoiceGroup">
-                  <span>Icon</span>
                   <div className="v2CardTypeIconPicker">
                     {V2_CARD_TYPE_ICON_OPTIONS.map((option) => {
                       const Icon = option.icon;
@@ -523,7 +514,6 @@ export function V2CardTypeManager({
                           onClick={() => updateDraft({ iconKey: option.key })}
                         >
                           <Icon size={16} strokeWidth={2.1} aria-hidden="true" />
-                          <span>{option.label}</span>
                         </button>
                       );
                     })}
@@ -532,34 +522,7 @@ export function V2CardTypeManager({
               </div>
             </section>
 
-            <section className="v2CardTypeManagerSection">
-              <h3>Default ports</h3>
-              <p>Ports are type-level connection handles. New custom types start with input and output.</p>
-              <div className="v2CardTypePortToggles">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={draft.hasInputPort}
-                    disabled={isSaving || isDeleting}
-                    onChange={(event) => updateDraft({ hasInputPort: event.target.checked })}
-                  />
-                  <span>Input port</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={draft.hasOutputPort}
-                    disabled={isSaving || isDeleting}
-                    onChange={(event) => updateDraft({ hasOutputPort: event.target.checked })}
-                  />
-                  <span>Output port</span>
-                </label>
-              </div>
-            </section>
-
             {error ? <p className="v2InspectorDataError">{error}</p> : null}
-            {message ? <p className="v2CardTypeManagerSuccess">{message}</p> : null}
-
             <div className="v2InspectorEditActions v2CardTypeManagerActions">
               {mode === "existing" ? (
                 <button

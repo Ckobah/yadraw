@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import type { V2CardType, V2CardTypePort, V2Position } from "@yadraw/shared";
 import { getV2CardTypeAccentColor } from "./v2-card-node";
+import { getV2CardTypeIcon } from "./v2-card-type-icons";
 
 type V2CardCreateToolbarProps = {
   cardTypes: V2CardType[];
@@ -28,6 +30,8 @@ export function V2CardCreateToolbar({
   const [activeCardTypeId, setActiveCardTypeId] = useState<string | null>(
     cardTypes[0]?.id ?? null
   );
+  const [pendingCardType, setPendingCardType] = useState<V2CardType | null>(null);
+  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const filteredCardTypes = cardTypes.filter((cardType) =>
     matchesCardTypeSearch(cardType, query)
@@ -63,33 +67,54 @@ export function V2CardCreateToolbar({
     );
   }, [filteredCardTypes, isOpen]);
 
-  function getCreatePosition(): V2Position {
-    const canvas = toolbarRef.current?.closest(".react-flow");
-    const rect = canvas?.getBoundingClientRect();
-    const screenPosition = rect
-      ? {
-          x: rect.left + rect.width / 2,
-          y: rect.top + rect.height / 2,
-        }
-      : {
-          x: window.innerWidth / 2,
-          y: window.innerHeight / 2,
-        };
+  useEffect(() => {
+    if (!pendingCardType) return;
+    document.body.classList.add("v2CardPlacementActive");
 
-    return screenToFlowPosition(screenPosition);
-  }
+    const handlePointerMove = (event: PointerEvent) => {
+      setCursorPosition({ x: event.clientX, y: event.clientY });
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0 || isCreating) return;
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest(".react-flow__pane")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const center = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const position: V2Position = {
+        x: center.x - pendingCardType.defaultSize.width / 2,
+        y: center.y - pendingCardType.defaultSize.height / 2,
+      };
+      setIsCreating(true);
+      setError(null);
+      void onCreateCard(pendingCardType, position)
+        .then(() => setPendingCardType(null))
+        .catch(() => setError("Could not create card"))
+        .finally(() => setIsCreating(false));
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPendingCardType(null);
+        setError(null);
+      }
+    };
 
-  async function handleCreate(cardType: V2CardType) {
-    setIsCreating(true);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.classList.remove("v2CardPlacementActive");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCreating, onCreateCard, pendingCardType, screenToFlowPosition]);
+
+  function beginPlacement(cardType: V2CardType, event: ReactMouseEvent<HTMLButtonElement>) {
+    setCursorPosition({ x: event.clientX, y: event.clientY });
+    setPendingCardType(cardType);
+    setIsOpen(false);
     setError(null);
-    try {
-      await onCreateCard(cardType, getCreatePosition());
-      setIsOpen(false);
-    } catch {
-      setError("Could not create card");
-    } finally {
-      setIsCreating(false);
-    }
   }
 
   function handleManageCardTypes() {
@@ -154,7 +179,7 @@ export function V2CardCreateToolbar({
                       className={`v2CardTypeRow${isActive ? " v2CardTypeRowActive" : ""}`}
                       onMouseEnter={() => setActiveCardTypeId(cardType.id)}
                       onFocus={() => setActiveCardTypeId(cardType.id)}
-                      onClick={() => void handleCreate(cardType)}
+                      onClick={(event) => beginPlacement(cardType, event)}
                       disabled={isCreating}
                       style={{ ["--v2-create-accent" as string]: accentColor }}
                     >
@@ -188,6 +213,47 @@ export function V2CardCreateToolbar({
       ) : null}
 
       {error ? <p className="v2CreateToolbarError">{error}</p> : null}
+      {pendingCardType && typeof document !== "undefined"
+        ? createPortal(
+            <CardPlacementPreview
+              cardType={pendingCardType}
+              x={cursorPosition.x}
+              y={cursorPosition.y}
+              saving={isCreating}
+            />,
+            document.body
+          )
+        : null}
+    </div>
+  );
+}
+
+function CardPlacementPreview({
+  cardType,
+  x,
+  y,
+  saving,
+}: {
+  cardType: V2CardType;
+  x: number;
+  y: number;
+  saving: boolean;
+}) {
+  const Icon = getV2CardTypeIcon(cardType);
+  return (
+    <div
+      className={`v2CardPlacementPreview${saving ? " v2CardPlacementPreviewSaving" : ""}`}
+      style={{
+        left: x,
+        top: y,
+        width: cardType.defaultSize.width,
+        height: cardType.defaultSize.height,
+        ["--v2-create-accent" as string]: getV2CardTypeAccentColor(cardType),
+      }}
+      aria-hidden="true"
+    >
+      <div><Icon size={16} /><strong>{cardType.name}</strong></div>
+      <span>New card</span>
     </div>
   );
 }

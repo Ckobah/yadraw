@@ -2227,6 +2227,49 @@ button:disabled {
   --xy-selection-border: 1px solid var(--yd-graph-connector-selected, #2f8cff);
 }
 
+.v2CardPlacementActive .react-flow__pane {
+  cursor: crosshair;
+}
+
+.v2CardPlacementPreview {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 140px;
+  min-height: 96px;
+  overflow: hidden;
+  border: 1.5px solid var(--v2-create-accent, #2f80ed);
+  border-radius: var(--yd-card-radius, 9px);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 36px rgba(23, 43, 77, 0.2);
+  color: #182230;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  opacity: 0.82;
+}
+
+.v2CardPlacementPreview > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--v2-create-accent) 10%, #fff);
+  color: var(--v2-create-accent);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.v2CardPlacementPreview > span {
+  padding: 0 18px;
+  font-size: 13.5px;
+  font-weight: 760;
+}
+
+.v2CardPlacementPreviewSaving { opacity: 0.5; }
+
 /* V2 authentication and personal dashboard */
 .v2AuthPage {
   min-height: 100vh;
@@ -5432,142 +5475,52 @@ button:disabled {
 .v2CardTypePreviewPanel {
   display: grid;
   justify-items: center;
-  padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--v2-preview-accent) 24%, #e4e7f0);
-  border-radius: 12px;
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--v2-preview-accent) 7%, #fff), #fff 62%);
+  padding: 22px;
+  border: 1px solid #e4e7f0;
+  border-radius: 8px;
+  background: #f7f9fc;
 }
 
 .v2CardTypePreviewCard {
-  position: relative;
-  display: flex;
-  flex-direction: column;
   width: 172px;
   height: 122px;
-  border: 1px solid var(--v2-preview-accent);
-  border-radius: var(--yd-card-radius, 9px);
-  background: var(--yd-surface-card, #fff);
-  box-shadow: 0 12px 28px rgba(23, 100, 220, 0.14);
-}
-
-.v2CardTypePreviewCardHeader {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 20px;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  border-bottom: 1px solid color-mix(in srgb, var(--v2-preview-accent) 18%, #e4e7f0);
-  border-radius: var(--yd-card-radius, 9px) var(--yd-card-radius, 9px) 0 0;
-  background: color-mix(in srgb, var(--v2-preview-accent) 8%, var(--yd-surface-card-header, #f8fbff));
-  padding: 6px 8px;
-  color: var(--yd-text-muted, #667085);
-}
-
-.v2CardTypePreviewIcon {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--v2-preview-accent) 14%, #fff);
-  color: var(--v2-preview-accent);
-}
-
-.v2CardTypePreviewTypeLabel {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--v2-preview-accent);
-  font-size: 10px;
-  font-weight: 780;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.v2CardTypePreviewCardBody {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  min-height: 0;
-  padding: 9px 10px;
-}
-
-.v2CardTypePreviewCardBody strong,
-.v2CardTypePreviewCardBody span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.v2CardTypePreviewCardBody strong {
-  color: var(--yd-text-primary, #101828);
-  font-size: 13px;
-  font-weight: 780;
-}
-
-.v2CardTypePreviewCardBody span {
-  color: var(--yd-text-muted, #667085);
-  font-size: 10.5px;
-  font-weight: 620;
-}
-
-.v2CardTypePreviewDataRows {
-  display: grid;
-  gap: 4px;
-  margin: 3px 0 0;
-}
-
-.v2CardTypePreviewDataRows div {
-  display: grid;
-  grid-template-columns: minmax(48px, 0.55fr) minmax(0, 1fr);
-  gap: 5px;
-  min-height: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--v2-preview-accent) 16%, #eef2f7);
-  padding-top: 3px;
-}
-
-.v2CardTypePreviewDataRows dt,
-.v2CardTypePreviewDataRows dd {
-  min-width: 0;
-  overflow: hidden;
-  margin: 0;
-  font-size: 9.5px;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.v2CardTypePreviewDataRows dt {
-  color: var(--yd-text-muted, #667085);
-  font-weight: 720;
-}
-
-.v2CardTypePreviewDataRows dd {
-  color: var(--yd-text-secondary, #475467);
-  font-weight: 650;
+  box-shadow: var(--v2-card-shadow);
 }
 
 .v2CardTypePreviewPort {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   top: 50%;
-  width: 12px;
-  height: 12px;
-  border: 2px solid #fff;
+  display: grid;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  place-items: center;
+  border: 1px dashed #98a2b3;
   border-radius: 50%;
+  background: #fff;
+  color: #667085;
   transform: translateY(-50%);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--v2-preview-accent) 45%, #c9d2e3);
+  cursor: pointer;
 }
 
-.v2CardTypePreviewPortInput {
-  left: -6px;
+.v2CardTypePreviewPort-input {
+  left: -8px;
+}
+
+.v2CardTypePreviewPort-output {
+  right: -8px;
+}
+
+.v2CardTypePreviewPort-active {
+  border: 2px solid #fff;
   background: var(--yd-graph-port-input, #98a2b3);
+  box-shadow: 0 0 0 1px #98a2b3;
 }
 
-.v2CardTypePreviewPortOutput {
-  right: -6px;
+.v2CardTypePreviewPort-output.v2CardTypePreviewPort-active {
   background: var(--yd-graph-port-output, #2f80ed);
+  box-shadow: 0 0 0 1px var(--yd-graph-port-output, #2f80ed);
 }
 
 .v2CardTypeManagerSection,
@@ -5630,6 +5583,10 @@ button:disabled {
   min-width: 0;
 }
 
+.v2CardTypeVisualOnly {
+  padding: 10px;
+}
+
 .v2CardTypeChoiceGroup,
 .v2CardTypeColorControl {
   display: grid;
@@ -5670,16 +5627,14 @@ button:disabled {
 }
 
 .v2CardTypeAccentOption {
-  grid-template-columns: 16px minmax(0, 1fr) 13px;
-  gap: 6px;
-  padding: 0 8px;
-  text-align: left;
+  width: 34px;
+  padding: 0;
+  place-items: center;
 }
 
 .v2CardTypeIconOption {
   justify-items: center;
-  gap: 3px;
-  padding: 7px 6px;
+  padding: 0;
   text-align: center;
 }
 
@@ -5899,9 +5854,9 @@ button:disabled {
 
 .v2SchemaFieldDraftGrid {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) 82px auto 28px;
+  grid-template-columns: minmax(0, 1fr) 105px 30px 28px;
   gap: 7px;
-  align-items: end;
+  align-items: center;
   min-width: 0;
 }
 
@@ -6430,6 +6385,41 @@ button:disabled {
   font-size: 13px;
   font-weight: 730;
   line-height: 1.2;
+}
+
+.v2SchemaFieldAdvanced {
+  position: relative;
+}
+
+.v2SchemaFieldAdvanced > summary {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #d9e0ec;
+  border-radius: 8px;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+  list-style: none;
+}
+
+.v2SchemaFieldAdvanced > summary::-webkit-details-marker { display: none; }
+.v2SchemaFieldAdvanced[open] > summary svg { transform: rotate(180deg); }
+
+.v2SchemaFieldAdvanced > div {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: min(260px, calc(100vw - 48px));
+  padding: 10px;
+  border: 1px solid #d9e0ec;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(31, 45, 73, 0.18);
 }
 
 .v2InspectorAttachmentPreviewButton {

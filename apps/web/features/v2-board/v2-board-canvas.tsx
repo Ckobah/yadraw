@@ -1271,7 +1271,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       try {
         const created = await createV2Card(board.id, {
           cardTypeId: cardType.id,
-          title: cardType.name,
+          title: "New card",
           description: "",
           data: {},
           position,

@@ -3,6 +3,7 @@ import {
   Database,
   Factory,
   FileText,
+  ListTodo,
   Package,
   Settings,
   Truck,
@@ -19,7 +20,7 @@ export type V2CardTypeIconOption = {
 
 export const V2_CARD_TYPE_ICON_OPTIONS: V2CardTypeIconOption[] = [
   { key: "database", label: "Database", icon: Database },
-  { key: "task", label: "Task", icon: Box },
+  { key: "task", label: "Task", icon: ListTodo },
   { key: "box", label: "Box", icon: Box },
   { key: "user", label: "User", icon: User },
   { key: "file", label: "File", icon: FileText },
