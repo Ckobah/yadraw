@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, LoaderCircle, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
 import type {
   V2Connection,
@@ -62,6 +62,7 @@ export function V2ConnectorVisualEditPanel({
     normalizeStyle(connection.visualStyle)
   );
   const [error, setError] = useState<string | null>(null);
+  const connectionIdRef = useRef(connection.id);
 
   const savedSignature = useMemo(
     () => styleSignature(connection.visualStyle),
@@ -71,9 +72,12 @@ export function V2ConnectorVisualEditPanel({
   const isDirty = draftSignature !== savedSignature;
 
   useEffect(() => {
+    const connectionChanged = connectionIdRef.current !== connection.id;
+    if (!connectionChanged && (isDirty || saveStatus === "saving")) return;
+    connectionIdRef.current = connection.id;
     setDraft(normalizeStyle(connection.visualStyle));
     setError(null);
-  }, [connection.id, connection.visualStyle]);
+  }, [connection.id, connection.visualStyle, isDirty, saveStatus]);
 
   useEffect(() => {
     if (!isDirty || saveStatus === "saving") return;

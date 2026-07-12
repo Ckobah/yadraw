@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { V2Card } from "@yadraw/shared";
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 
@@ -21,16 +21,20 @@ export function V2CardBasicsSection({
   const [draftTitle, setDraftTitle] = useState(card.title ?? "");
   const [draftDescription, setDraftDescription] = useState(card.description ?? "");
   const [fieldError, setFieldError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraftTitle(card.title ?? "");
-    setDraftDescription(card.description ?? "");
-    setFieldError(null);
-  }, [card.id, card.title, card.description]);
+  const cardIdRef = useRef(card.id);
 
   const hasTitleChanges = draftTitle !== (card.title ?? "");
   const hasDescriptionChanges = draftDescription !== (card.description ?? "");
   const hasChanges = hasTitleChanges || hasDescriptionChanges;
+
+  useEffect(() => {
+    const cardChanged = cardIdRef.current !== card.id;
+    if (!cardChanged && (hasChanges || saveStatus === "saving")) return;
+    cardIdRef.current = card.id;
+    setDraftTitle(card.title ?? "");
+    setDraftDescription(card.description ?? "");
+    setFieldError(null);
+  }, [card.id, card.title, card.description, hasChanges, saveStatus]);
 
   useEffect(() => {
     if (!hasChanges || saveStatus === "saving") return;

@@ -208,10 +208,11 @@ export function V2CardTypeManager({
 
   useEffect(() => {
     if (mode !== "existing" || !selectedCardTypeId) return;
+    if (hasDraftChanges || isSaving) return;
     const selected = cardTypes.find((cardType) => cardType.id === selectedCardTypeId);
     if (!selected) return;
     setDraft(draftFromCardType(selected));
-  }, [cardTypes, mode, selectedCardTypeId]);
+  }, [cardTypes, hasDraftChanges, isSaving, mode, selectedCardTypeId]);
 
   useEffect(() => {
     if (!hasDraftChanges || isSaving || isDeleting) return;
@@ -314,7 +315,7 @@ export function V2CardTypeManager({
         setError("Select a card type to update.");
         return false;
       }
-      const updated = await onUpdateCardType(draft.id, {
+      await onUpdateCardType(draft.id, {
         key,
         name: draft.name.trim(),
         description: draft.description,
@@ -323,7 +324,6 @@ export function V2CardTypeManager({
         defaultVisualStyle,
         ports,
       });
-      setDraft(draftFromCardType(updated));
       setMessage("Card type saved.");
       return true;
     } catch {
@@ -447,7 +447,7 @@ export function V2CardTypeManager({
               hasOutputPort={draft.hasOutputPort}
               onToggleInputPort={() => updateDraft({ hasInputPort: !draft.hasInputPort })}
               onToggleOutputPort={() => updateDraft({ hasOutputPort: !draft.hasOutputPort })}
-              disabled={isSaving || isDeleting}
+              disabled={isDeleting}
             />
 
             <section className="v2CardTypeManagerSection">
@@ -456,14 +456,14 @@ export function V2CardTypeManager({
                 value={draft.name}
                 placeholder="Type name"
                 aria-label="Type name"
-                disabled={isSaving || isDeleting}
+                disabled={isDeleting}
                 onChange={(event) => updateDraft({ name: event.target.value })}
               />
             </section>
 
             <V2CardTypeSchemaEditor
               fields={draft.fields}
-              disabled={isSaving || isDeleting}
+              disabled={isDeleting}
               onChange={(fields) => updateDraft({ fields })}
             />
 
@@ -480,7 +480,7 @@ export function V2CardTypeManager({
                           className={`v2CardTypeAccentOption${
                             isSelected ? " v2CardTypeAccentOptionActive" : ""
                           }`}
-                          disabled={isSaving || isDeleting}
+                          disabled={isDeleting}
                           style={{
                             ["--v2-accent-option-solid" as string]: `var(--yd-accent-${option.key}-solid)`,
                             ["--v2-accent-option-soft" as string]: `var(--yd-accent-${option.key}-soft)`,
@@ -508,7 +508,7 @@ export function V2CardTypeManager({
                           className={`v2CardTypeIconOption${
                             isSelected ? " v2CardTypeIconOptionActive" : ""
                           }`}
-                          disabled={isSaving || isDeleting}
+                          disabled={isDeleting}
                           aria-pressed={isSelected}
                           title={option.label}
                           onClick={() => updateDraft({ iconKey: option.key })}

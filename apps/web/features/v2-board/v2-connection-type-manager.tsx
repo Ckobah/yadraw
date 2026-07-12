@@ -112,10 +112,11 @@ export function V2ConnectionTypeManager({
 
   useEffect(() => {
     if (mode !== "existing" || !selectedConnectionTypeId) return;
+    if (hasDraftChanges || isSaving) return;
     const selected = connectionTypes.find((connectionType) => connectionType.id === selectedConnectionTypeId);
     if (!selected) return;
     setDraft(draftFromConnectionType(selected));
-  }, [connectionTypes, mode, selectedConnectionTypeId]);
+  }, [connectionTypes, hasDraftChanges, isSaving, mode, selectedConnectionTypeId]);
 
   useEffect(() => {
     if (!hasDraftChanges || isSaving) return;
@@ -199,14 +200,13 @@ export function V2ConnectionTypeManager({
         setError("Select a connection type to update.");
         return false;
       }
-      const updated = await onUpdateConnectionType(draft.id, {
+      await onUpdateConnectionType(draft.id, {
         key: draft.key.trim(),
         name: draft.name.trim(),
         description: draft.description.trim() || null,
         schema: schemaResult.schema,
         defaultVisualStyle: draft.defaultVisualStyle,
       });
-      setDraft(draftFromConnectionType(updated));
       setMessage("Connection type saved.");
       return true;
     } catch {
@@ -294,7 +294,6 @@ export function V2ConnectionTypeManager({
                     className="v2InspectorDataValue"
                     value={draft.key}
                     placeholder="contains"
-                    disabled={isSaving}
                     onChange={(event) => updateDraft({ key: event.target.value })}
                   />
                 </label>
@@ -304,7 +303,6 @@ export function V2ConnectionTypeManager({
                     className="v2InspectorDataValue"
                     value={draft.name}
                     placeholder="Contains"
-                    disabled={isSaving}
                     onChange={(event) => updateDraft({ name: event.target.value })}
                   />
                 </label>
@@ -315,7 +313,6 @@ export function V2ConnectionTypeManager({
                   className="v2InspectorDataValue v2InspectorDataJsonValue"
                   value={draft.description}
                   placeholder="Optional description"
-                  disabled={isSaving}
                   onChange={(event) => updateDraft({ description: event.target.value })}
                 />
               </label>
@@ -325,7 +322,6 @@ export function V2ConnectionTypeManager({
               title="Relationship fields"
               description="Fields rendered in the connector inspector for this relationship type."
               fields={draft.fields}
-              disabled={isSaving}
               onChange={(fields) => updateDraft({ fields })}
             />
 

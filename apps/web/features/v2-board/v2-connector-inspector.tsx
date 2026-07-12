@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GitBranch, Plus, Trash2, X } from "lucide-react";
 import type { V2Card, V2Connection, V2ConnectionType } from "@yadraw/shared";
 import {
@@ -111,6 +111,8 @@ export function V2ConnectorInspector({
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
   const [schemaFieldErrors, setSchemaFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
+  const editorIdentity = `${connection.id}:${JSON.stringify(schemaFields)}`;
+  const editorIdentityRef = useRef(editorIdentity);
 
   const initialDataSignature = useMemo(
     () => normalizeDataDraftForCompare(createDataDraftFromRecord(dataRecordForDraft)),
@@ -152,18 +154,46 @@ export function V2ConnectorInspector({
   }, [dataDraft, schemaDraftFields, connection.id, connection.data, saveStatus]);
 
   useEffect(() => {
-    setTitleDraft(connection.title ?? "");
-    setDescriptionDraft(connection.description ?? "");
-    setBasicError(null);
-    setTypeError(null);
-    const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
-    setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
-    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
-    setIsDataEditing(false);
-    setDataFieldErrors({});
-    setSchemaFieldErrors({});
-    setDataError(null);
-  }, [connection.id, connection.title, connection.description, connection.data, hasSchemaFields, schemaFields]);
+    const editorChanged = editorIdentityRef.current !== editorIdentity;
+    if (editorChanged) {
+      editorIdentityRef.current = editorIdentity;
+      setTitleDraft(connection.title ?? "");
+      setDescriptionDraft(connection.description ?? "");
+      const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
+      setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
+      setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
+      setIsDataEditing(false);
+      setBasicError(null);
+      setTypeError(null);
+      setDataFieldErrors({});
+      setSchemaFieldErrors({});
+      setDataError(null);
+      return;
+    }
+    if (!basicDirty && saveStatus !== "saving") {
+      setTitleDraft(connection.title ?? "");
+      setDescriptionDraft(connection.description ?? "");
+      setBasicError(null);
+    }
+    if (!dataDirty && saveStatus !== "saving") {
+      const nextSplit = splitSchemaAndExtraData(schemaFields, connection.data);
+      setDataDraft(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : connection.data));
+      setSchemaDraftFields(createSchemaDraftFromData(schemaFields, connection.data));
+      setDataFieldErrors({});
+      setSchemaFieldErrors({});
+      setDataError(null);
+    }
+  }, [
+    basicDirty,
+    connection.data,
+    connection.description,
+    connection.title,
+    dataDirty,
+    editorIdentity,
+    hasSchemaFields,
+    saveStatus,
+    schemaFields,
+  ]);
 
   async function saveBasics(): Promise<boolean> {
     setBasicError(null);

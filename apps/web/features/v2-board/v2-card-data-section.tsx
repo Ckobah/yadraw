@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { V2Card, V2CardType } from "@yadraw/shared";
 import {
@@ -34,7 +34,7 @@ export function V2CardDataSection({
   saveStatus,
   onUpdateCardData,
 }: V2CardDataSectionProps) {
-  const schemaFields = cardType?.schema?.fields ?? [];
+  const schemaFields = useMemo(() => cardType?.schema?.fields ?? [], [cardType?.schema?.fields]);
   const hasSchemaFields = schemaFields.length > 0;
   const { schemaKeys, extraData } = splitSchemaAndExtraData(schemaFields, card.data);
   const dataRecordForDraft = hasSchemaFields ? extraData : card.data;
@@ -47,15 +47,8 @@ export function V2CardDataSection({
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
   const [schemaFieldErrors, setSchemaFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const nextSplit = splitSchemaAndExtraData(schemaFields, card.data);
-    setDataDraftFields(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : card.data));
-    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, card.data));
-    setDataFieldErrors({});
-    setSchemaFieldErrors({});
-    setDataError(null);
-  }, [card.id, card.data, hasSchemaFields, schemaFields]);
+  const editorIdentity = `${card.id}:${JSON.stringify(schemaFields)}`;
+  const editorIdentityRef = useRef(editorIdentity);
 
   const dataBaseline = normalizeDataDraftForCompare(
     createDataDraftFromRecord(dataRecordForDraft)
@@ -66,6 +59,18 @@ export function V2CardDataSection({
   const hasDataChanges =
     normalizeDataDraftForCompare(dataDraftFields) !== dataBaseline ||
     normalizeSchemaDraftForCompare(schemaDraftFields) !== schemaBaseline;
+
+  useEffect(() => {
+    const editorChanged = editorIdentityRef.current !== editorIdentity;
+    if (!editorChanged && (hasDataChanges || saveStatus === "saving")) return;
+    editorIdentityRef.current = editorIdentity;
+    const nextSplit = splitSchemaAndExtraData(schemaFields, card.data);
+    setDataDraftFields(createDataDraftFromRecord(hasSchemaFields ? nextSplit.extraData : card.data));
+    setSchemaDraftFields(createSchemaDraftFromData(schemaFields, card.data));
+    setDataFieldErrors({});
+    setSchemaFieldErrors({});
+    setDataError(null);
+  }, [card.data, editorIdentity, hasDataChanges, hasSchemaFields, saveStatus, schemaFields]);
 
   useEffect(() => {
     if (!hasDataChanges || saveStatus === "saving") return;
