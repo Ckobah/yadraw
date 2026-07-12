@@ -1218,7 +1218,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         title: null,
         description: null,
         data: {},
-        visualStyle: {},
+        visualStyle: input.visualStyle ?? {},
         status: input.status,
         createdAt: timestamp,
         updatedAt: timestamp
@@ -2940,9 +2940,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             target_port_key,
             type,
             label,
+            visual_style,
             status
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           returning *
         `,
         [
@@ -2955,6 +2956,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           input.targetPortKey,
           input.type,
           input.label,
+          input.visualStyle ?? {},
           input.status
         ]
       );

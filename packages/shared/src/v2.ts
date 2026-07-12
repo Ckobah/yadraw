@@ -92,6 +92,7 @@ export const v2ConnectionVisualStyleSchema = z.object({
   cornerRadius: z.number().min(0).max(48).optional(),
   markerStart: v2ConnectionMarkerSchema.optional(),
   markerEnd: v2ConnectionMarkerSchema.optional(),
+  showLabel: z.boolean().optional(),
   routeMode: v2ConnectionRouteModeSchema.optional(),
   waypoints: z.array(v2ConnectionWaypointSchema).max(20).optional(),
   labelPosition: v2ConnectionWaypointSchema.nullable().optional(),
@@ -670,7 +671,8 @@ export const v2CreateConnectionBodySchema = z.object({
   sourcePortKey: z.string().trim().min(1),
   targetPortKey: z.string().trim().min(1),
   type: z.string().trim().min(1).default("data"),
-  label: z.string().default("")
+  label: z.string().default(""),
+  visualStyle: v2ConnectionVisualStyleSchema.optional()
 });
 
 export const v2DeleteConnectionParamsSchema = z.object({

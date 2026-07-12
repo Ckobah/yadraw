@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, Eye, EyeOff, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
 import type {
   V2Connection,
   V2ConnectionMarker,
@@ -38,6 +38,7 @@ function normalizeStyle(style: V2ConnectionVisualStyle | undefined): VisualStyle
     cornerRadius: style?.cornerRadius ?? 12,
     markerStart: style?.markerStart ?? "none",
     markerEnd: style?.markerEnd ?? "arrow",
+    showLabel: style?.showLabel ?? true,
     routeMode: style?.routeMode ?? "auto",
     waypoints: Array.isArray(style?.waypoints) ? style.waypoints : [],
     ...(style?.routeMode === "manual" && style?.labelPosition ? { labelPosition: style.labelPosition } : {}),
@@ -212,6 +213,16 @@ export function V2ConnectorVisualEditPanel({
             ))}
           </select>
         </label>
+        <button
+          type="button"
+          className={`v2ConnectorVisualIconButton ${draft.showLabel ? "v2ConnectorVisualIconButtonActive" : ""}`}
+          title={draft.showLabel ? "Hide connector name" : "Show connector name"}
+          aria-label={draft.showLabel ? "Hide connector name" : "Show connector name"}
+          aria-pressed={draft.showLabel}
+          onClick={() => updateDraft({ showLabel: !draft.showLabel })}
+        >
+          {draft.showLabel ? <Eye aria-hidden="true" size={14} /> : <EyeOff aria-hidden="true" size={14} />}
+        </button>
         <button
           type="button"
           className={`v2ConnectorVisualIconButton ${draft.routeMode === "manual" ? "v2ConnectorVisualIconButtonActive" : ""}`}

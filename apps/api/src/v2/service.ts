@@ -1178,18 +1178,24 @@ export function createV2BoardService(
         conflict("Connection already exists");
       }
 
+      const connectionTypeId = await resolveConnectionTypeId(board.workspaceId, input.connectionTypeId, {
+        useGenericFallback: true
+      });
+      const connectionType = connectionTypeId
+        ? await requireConnectionTypeRepository().getConnectionType(connectionTypeId)
+        : null;
+
       return repository.createConnection({
         workspaceId: board.workspaceId,
         boardId: board.id,
-        connectionTypeId: await resolveConnectionTypeId(board.workspaceId, input.connectionTypeId, {
-          useGenericFallback: true
-        }),
+        connectionTypeId,
         sourceCardId: input.sourceCardId,
         targetCardId: input.targetCardId,
         sourcePortKey: input.sourcePortKey,
         targetPortKey: input.targetPortKey,
         type: input.type,
         label: input.label,
+        visualStyle: input.visualStyle ?? connectionType?.defaultVisualStyle ?? {},
         status: "active"
       });
     },

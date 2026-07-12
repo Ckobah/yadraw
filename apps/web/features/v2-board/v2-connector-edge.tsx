@@ -14,7 +14,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { V2Connection, V2ConnectionVisualStyle, V2ConnectionWaypoint } from "@yadraw/shared";
+import type { V2Connection, V2ConnectionMarker, V2ConnectionVisualStyle, V2ConnectionWaypoint } from "@yadraw/shared";
 
 export type V2ConnectorEdgeData = {
   connection: V2Connection;
@@ -33,6 +33,24 @@ const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
+const PORT_RADIUS = 8;
+
+function markerClearance(marker: V2ConnectionMarker | undefined): number {
+  if (marker === "circle" || marker === "square") return 4;
+  if (marker && marker !== "none") return 2;
+  return 0;
+}
+
+function offsetFromPort(point: Point, position: unknown, marker: V2ConnectionMarker | undefined): Point {
+  const distance = PORT_RADIUS + markerClearance(marker);
+  switch (String(position).toLowerCase()) {
+    case "left": return { x: point.x - distance, y: point.y };
+    case "right": return { x: point.x + distance, y: point.y };
+    case "top": return { x: point.x, y: point.y - distance };
+    case "bottom": return { x: point.x, y: point.y + distance };
+    default: return point;
+  }
+}
 
 function isFinitePoint(point: V2ConnectionWaypoint): boolean {
   return Number.isFinite(point.x) && Number.isFinite(point.y);
@@ -327,10 +345,18 @@ export function V2ConnectorEdge({
   const storedWaypoints = getWaypoints(visualStyle);
   const isVisualEditing = Boolean(data?.isVisualEditing);
   const canEditGeometry = isVisualEditing;
-  const sourcePoint = { x: sourceX, y: sourceY };
-  const targetPoint = { x: targetX, y: targetY };
-  const visibleSourcePoint = sourcePoint;
-  const visibleTargetPoint = targetPoint;
+  const visibleSourcePoint = offsetFromPort(
+    { x: sourceX, y: sourceY },
+    sourcePosition,
+    visualStyle.markerStart ?? "none"
+  );
+  const visibleTargetPoint = offsetFromPort(
+    { x: targetX, y: targetY },
+    targetPosition,
+    visualStyle.markerEnd ?? "arrow"
+  );
+  const sourcePoint = visibleSourcePoint;
+  const targetPoint = visibleTargetPoint;
 
   const automaticPathResult = getSmoothStepPath({
     sourceX: visibleSourcePoint.x,
@@ -344,10 +370,10 @@ export function V2ConnectorEdge({
   const automaticPath = automaticPathResult[0];
   const automaticLabel = { x: automaticPathResult[1], y: automaticPathResult[2] };
   const materializedAutoWaypoints = getAutoRouteWaypoints({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
+    sourceX: visibleSourcePoint.x,
+    sourceY: visibleSourcePoint.y,
+    targetX: visibleTargetPoint.x,
+    targetY: visibleTargetPoint.y,
     sourcePosition,
     targetPosition,
   });
@@ -656,7 +682,7 @@ export function V2ConnectorEdge({
             Snap
           </div>
         ) : null}
-        {label ? (
+        {label && visualStyle.showLabel !== false ? (
           <div
             className="v2ConnectorEdgeLabel v2ConnectorEdgeLabelDraggable nodrag nopan"
             style={{

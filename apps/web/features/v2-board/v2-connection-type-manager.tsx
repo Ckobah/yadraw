@@ -1,10 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X } from "lucide-react";
+import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
+  Eye,
+  EyeOff,
+  Minus,
+  Plus,
+  Spline,
+  X,
+} from "lucide-react";
 import type {
+  V2ConnectionMarker,
   V2ConnectionType,
   V2ConnectionTypeSchema,
+  V2ConnectionVisualStyle,
   V2CreateConnectionTypeRequest,
   V2UpdateConnectionTypeRequest,
 } from "@yadraw/shared";
@@ -14,6 +25,7 @@ import {
   V2CardTypeSchemaEditor,
   type V2CardTypeSchemaFieldDraft,
 } from "./v2-card-type-schema-editor";
+import { V2ConnectorStylePreview } from "./v2-connector-style-preview";
 import { useDialogFocus } from "./use-dialog-focus";
 
 type ConnectionTypeManagerMode = "existing" | "new";
@@ -22,12 +34,11 @@ type ConnectionTypeDraft = {
   id: string | null;
   key: string;
   name: string;
-  description: string;
   fields: V2CardTypeSchemaFieldDraft[];
-  defaultVisualStyle: Record<string, unknown>;
+  defaultVisualStyle: V2ConnectionVisualStyle;
 };
 
-type V2ConnectionTypeManagerProps = {
+type Props = {
   connectionTypes: V2ConnectionType[];
   initialConnectionTypeId?: string | null;
   onCreateConnectionType: (input: V2CreateConnectionTypeRequest) => Promise<V2ConnectionType>;
@@ -38,42 +49,75 @@ type V2ConnectionTypeManagerProps = {
   onClose: () => void;
 };
 
-const CONNECTION_TYPE_KEY_PATTERN = /^[a-z][a-z0-9_]*$/;
+const MARKER_OPTIONS: Array<{ value: V2ConnectionMarker; label: string }> = [
+  { value: "none", label: "None" },
+  { value: "arrow", label: "Arrow" },
+  { value: "reverseArrow", label: "Reverse arrow" },
+  { value: "triangle", label: "Triangle" },
+  { value: "circle", label: "Circle" },
+  { value: "square", label: "Square" },
+];
 
-function schemaDraftsFromConnectionSchema(
-  schema: V2ConnectionTypeSchema | null | undefined
-): V2CardTypeSchemaFieldDraft[] {
+const DEFAULT_STYLE: V2ConnectionVisualStyle = {
+  strokeColor: "#475467",
+  strokeWidth: 2,
+  cornerRadius: 12,
+  markerStart: "none",
+  markerEnd: "arrow",
+  showLabel: true,
+};
+
+function normalizeStyle(style: V2ConnectionVisualStyle | undefined): V2ConnectionVisualStyle {
+  return { ...DEFAULT_STYLE, ...style };
+}
+
+function keyFromName(name: string): string {
+  const transliterated = name.toLowerCase().replace(/[а-яё]/g, (letter) => ({
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+    и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+    с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch",
+    ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  }[letter] ?? ""));
+  const normalized = transliterated
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!normalized) return "connector_type";
+  return (/^[a-z]/.test(normalized) ? normalized : `connector_${normalized}`).replace(/_+/g, "_");
+}
+
+function uniqueKey(name: string, connectionTypes: V2ConnectionType[]): string {
+  const base = keyFromName(name);
+  const used = new Set(connectionTypes.map((type) => type.key));
+  if (!used.has(base)) return base;
+  let suffix = 2;
+  while (used.has(`${base}_${suffix}`)) suffix += 1;
+  return `${base}_${suffix}`;
+}
+
+function schemaDrafts(schema: V2ConnectionTypeSchema | null | undefined): V2CardTypeSchemaFieldDraft[] {
   return createV2CardTypeSchemaFieldDrafts(schema as Parameters<typeof createV2CardTypeSchemaFieldDrafts>[0]);
 }
 
-function buildConnectionSchemaFromDrafts(
-  fields: V2CardTypeSchemaFieldDraft[]
-): { ok: true; schema: V2ConnectionTypeSchema } | { ok: false; error: string } {
+function buildSchema(fields: V2CardTypeSchemaFieldDraft[]) {
   const result = buildV2CardTypeSchemaFromDrafts(fields);
   if (!result.ok) return result;
-  return { ok: true, schema: result.schema as V2ConnectionTypeSchema };
+  return { ok: true as const, schema: result.schema as V2ConnectionTypeSchema };
 }
 
-function draftFromConnectionType(connectionType: V2ConnectionType): ConnectionTypeDraft {
+function fromType(connectionType: V2ConnectionType): ConnectionTypeDraft {
   return {
     id: connectionType.id,
     key: connectionType.key,
     name: connectionType.name,
-    description: connectionType.description ?? "",
-    fields: schemaDraftsFromConnectionSchema(connectionType.schema),
-    defaultVisualStyle: connectionType.defaultVisualStyle ?? {},
+    fields: schemaDrafts(connectionType.schema),
+    defaultVisualStyle: normalizeStyle(connectionType.defaultVisualStyle),
   };
 }
 
 function emptyDraft(): ConnectionTypeDraft {
-  return {
-    id: null,
-    key: "",
-    name: "",
-    description: "",
-    fields: [],
-    defaultVisualStyle: {},
-  };
+  return { id: null, key: "", name: "", fields: [], defaultVisualStyle: { ...DEFAULT_STYLE } };
 }
 
 export function V2ConnectionTypeManager({
@@ -82,147 +126,109 @@ export function V2ConnectionTypeManager({
   onCreateConnectionType,
   onUpdateConnectionType,
   onClose,
-}: V2ConnectionTypeManagerProps) {
+}: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useDialogFocus(dialogRef, () => { void closeManager(); });
-  const sortedConnectionTypes = useMemo(
+  const sortedTypes = useMemo(
     () => [...connectionTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [connectionTypes]
   );
-  const initialType =
-    sortedConnectionTypes.find((connectionType) => connectionType.id === initialConnectionTypeId) ??
-    sortedConnectionTypes[0] ??
-    null;
+  const initialType = sortedTypes.find((type) => type.id === initialConnectionTypeId) ?? sortedTypes[0] ?? null;
   const [mode, setMode] = useState<ConnectionTypeManagerMode>(initialType ? "existing" : "new");
-  const [selectedConnectionTypeId, setSelectedConnectionTypeId] = useState<string | null>(
-    initialType?.id ?? null
-  );
-  const [draft, setDraft] = useState<ConnectionTypeDraft>(() =>
-    initialType ? draftFromConnectionType(initialType) : emptyDraft()
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(initialType?.id ?? null);
+  const [draft, setDraft] = useState<ConnectionTypeDraft>(() => initialType ? fromType(initialType) : emptyDraft());
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const selectedConnectionType =
-    connectionTypes.find((connectionType) => connectionType.id === selectedConnectionTypeId) ?? null;
-  const hasDraftChanges =
-    mode === "existing" && selectedConnectionType
-      ? JSON.stringify(draft) !== JSON.stringify(draftFromConnectionType(selectedConnectionType))
-      : false;
+  const selectedType = connectionTypes.find((type) => type.id === selectedId) ?? null;
+  const hasChanges = mode === "existing" && selectedType
+    ? JSON.stringify(draft) !== JSON.stringify(fromType(selectedType))
+    : false;
 
   useEffect(() => {
-    if (mode !== "existing" || !selectedConnectionTypeId) return;
-    if (hasDraftChanges || isSaving) return;
-    const selected = connectionTypes.find((connectionType) => connectionType.id === selectedConnectionTypeId);
-    if (!selected) return;
-    setDraft(draftFromConnectionType(selected));
-  }, [connectionTypes, hasDraftChanges, isSaving, mode, selectedConnectionTypeId]);
+    if (mode !== "existing" || !selectedId || hasChanges || isSaving) return;
+    const selected = connectionTypes.find((type) => type.id === selectedId);
+    if (selected) setDraft(fromType(selected));
+  }, [connectionTypes, hasChanges, isSaving, mode, selectedId]);
 
   useEffect(() => {
-    if (!hasDraftChanges || isSaving) return;
+    if (!hasChanges || isSaving) return;
     const timeout = window.setTimeout(() => void saveDraft(), 700);
     return () => window.clearTimeout(timeout);
-  }, [draft, mode, selectedConnectionTypeId, isSaving]);
-
-  async function selectExisting(connectionType: V2ConnectionType) {
-    if (isSaving) return;
-    if (hasDraftChanges && !(await saveDraft())) return;
-    setMode("existing");
-    setSelectedConnectionTypeId(connectionType.id);
-    setDraft(draftFromConnectionType(connectionType));
-    setError(null);
-    setMessage(null);
-  }
-
-  async function selectNewType() {
-    if (isSaving) return;
-    if (hasDraftChanges && !(await saveDraft())) return;
-    setMode("new");
-    setSelectedConnectionTypeId(null);
-    setDraft(emptyDraft());
-    setError(null);
-    setMessage(null);
-  }
+  }, [draft, hasChanges, isSaving]);
 
   function updateDraft(patch: Partial<Omit<ConnectionTypeDraft, "id">>) {
     setDraft((current) => ({ ...current, ...patch }));
     setError(null);
-    setMessage(null);
   }
 
-  function validateDraft() {
-    const key = draft.key.trim();
-    const name = draft.name.trim();
-    if (!key) return "Key is required.";
-    if (!CONNECTION_TYPE_KEY_PATTERN.test(key)) {
-      return "Key must start with a lowercase letter and use lowercase letters, numbers, or underscores.";
-    }
-    if (!name) return "Name is required.";
-    const duplicate = connectionTypes.some(
-      (connectionType) => connectionType.key === key && connectionType.id !== draft.id
-    );
-    if (duplicate) return "Connection type key must be unique.";
-    return null;
+  function updateStyle(patch: V2ConnectionVisualStyle) {
+    updateDraft({ defaultVisualStyle: { ...draft.defaultVisualStyle, ...patch } });
   }
 
   async function saveDraft(): Promise<boolean> {
-    const validationError = validateDraft();
-    if (validationError) {
-      setError(validationError);
+    const name = draft.name.trim();
+    if (!name) {
+      setError("Name is required.");
       return false;
     }
-    const schemaResult = buildConnectionSchemaFromDrafts(draft.fields);
+    const schemaResult = buildSchema(draft.fields);
     if (!schemaResult.ok) {
       setError(schemaResult.error);
       return false;
     }
-
+    const key = mode === "new" ? uniqueKey(name, connectionTypes) : draft.key;
     setIsSaving(true);
     setError(null);
-    setMessage(null);
     try {
       if (mode === "new") {
         const created = await onCreateConnectionType({
-          key: draft.key.trim(),
-          name: draft.name.trim(),
-          description: draft.description.trim() || null,
+          key,
+          name,
+          description: null,
           schema: schemaResult.schema,
           defaultVisualStyle: draft.defaultVisualStyle,
         });
         setMode("existing");
-        setSelectedConnectionTypeId(created.id);
-        setDraft(draftFromConnectionType(created));
-        setMessage("Connection type created.");
-        return true;
+        setSelectedId(created.id);
+        setDraft(fromType(created));
+      } else if (draft.id) {
+        await onUpdateConnectionType(draft.id, {
+          name,
+          schema: schemaResult.schema,
+          defaultVisualStyle: draft.defaultVisualStyle,
+        });
       }
-
-      if (!draft.id) {
-        setError("Select a connection type to update.");
-        return false;
-      }
-      await onUpdateConnectionType(draft.id, {
-        key: draft.key.trim(),
-        name: draft.name.trim(),
-        description: draft.description.trim() || null,
-        schema: schemaResult.schema,
-        defaultVisualStyle: draft.defaultVisualStyle,
-      });
-      setMessage("Connection type saved.");
       return true;
     } catch {
-      setError("Could not save connection type.");
+      setError("Could not save connector type.");
       return false;
     } finally {
       setIsSaving(false);
     }
   }
 
+  async function selectType(connectionType: V2ConnectionType) {
+    if (isSaving || (hasChanges && !(await saveDraft()))) return;
+    setMode("existing");
+    setSelectedId(connectionType.id);
+    setDraft(fromType(connectionType));
+    setError(null);
+  }
+
+  async function selectNew() {
+    if (isSaving || (hasChanges && !(await saveDraft()))) return;
+    setMode("new");
+    setSelectedId(null);
+    setDraft(emptyDraft());
+    setError(null);
+  }
+
   async function closeManager() {
-    if (hasDraftChanges) {
-      if (!(await saveDraft())) return;
-    }
+    if (hasChanges && !(await saveDraft())) return;
     onClose();
   }
+
+  const showLabel = draft.defaultVisualStyle.showLabel !== false;
 
   return (
     <div
@@ -230,119 +236,135 @@ export function V2ConnectionTypeManager({
       className="v2ModalOverlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Connection Type Manager"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) {
-          void closeManager();
-        }
-      }}
+      aria-label="Connector Type Manager"
+      onPointerDown={(event) => { if (event.target === event.currentTarget) void closeManager(); }}
     >
       <section className="v2CardTypeManager" onPointerDown={(event) => event.stopPropagation()}>
         <header className="v2CardTypeManagerHeader">
-          <div>
-            <h2>Connection Type Manager</h2>
-            <p>Edit relationship type schemas. Values remain on each connector.</p>
-          </div>
+          <h2>Connector Type Manager</h2>
           <button type="button" className="v2InspectorCloseButton" aria-label="Close manager" onClick={() => void closeManager()}>
             <X size={16} strokeWidth={2.2} />
           </button>
         </header>
 
         <div className="v2CardTypeManagerBody">
-          <aside className="v2CardTypeManagerList" aria-label="Connection types">
+          <aside className="v2CardTypeManagerList" aria-label="Connector types">
             <button
               type="button"
               className={`v2CardTypeManagerNewButton${mode === "new" ? " v2CardTypeManagerRowActive" : ""}`}
-              onClick={() => void selectNewType()}
+              onClick={() => void selectNew()}
             >
               <Plus size={14} strokeWidth={2.2} />
               <span>New type</span>
             </button>
-            {sortedConnectionTypes.length === 0 ? (
-              <p className="v2InspectorEmpty">No connection types yet.</p>
-            ) : (
-              sortedConnectionTypes.map((connectionType) => (
-                <button
-                  key={connectionType.id}
-                  type="button"
-                  className={`v2CardTypeManagerRow${
-                    selectedConnectionTypeId === connectionType.id && mode === "existing"
-                      ? " v2CardTypeManagerRowActive"
-                      : ""
-                  }`}
-                  onClick={() => void selectExisting(connectionType)}
-                >
-                  <strong>{connectionType.name}</strong>
-                  <span>{connectionType.key}</span>
-                </button>
-              ))
-            )}
+            {sortedTypes.map((connectionType) => (
+              <button
+                key={connectionType.id}
+                type="button"
+                className={`v2CardTypeManagerRow v2ConnectionTypeManagerRow${selectedId === connectionType.id && mode === "existing" ? " v2CardTypeManagerRowActive" : ""}`}
+                onClick={() => void selectType(connectionType)}
+              >
+                <V2ConnectorStylePreview style={connectionType.defaultVisualStyle} label={connectionType.name} />
+                <span className="v2CardTypeManagerRowText"><strong>{connectionType.name}</strong></span>
+              </button>
+            ))}
           </aside>
 
           <div className="v2CardTypeManagerEditor">
-            <section className="v2CardTypeManagerSection">
-              <div className="v2CardTypeManagerSectionHeader">
-                <div>
-                  <h3>{mode === "new" ? "New connection type" : "Type details"}</h3>
-                  <span>Definitions are stored in connection_types.schema, not connection.data.</span>
-                </div>
-              </div>
-              <div className="v2CardTypeManagerDetailsGrid">
-                <label>
-                  <span>Key</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={draft.key}
-                    placeholder="contains"
-                    onChange={(event) => updateDraft({ key: event.target.value })}
-                  />
-                </label>
-                <label>
-                  <span>Name</span>
-                  <input
-                    className="v2InspectorDataValue"
-                    value={draft.name}
-                    placeholder="Contains"
-                    onChange={(event) => updateDraft({ name: event.target.value })}
-                  />
-                </label>
-              </div>
-              <label className="v2CardTypeManagerDescriptionField">
-                <span>Description</span>
-                <textarea
-                  className="v2InspectorDataValue v2InspectorDataJsonValue"
-                  value={draft.description}
-                  placeholder="Optional description"
-                  onChange={(event) => updateDraft({ description: event.target.value })}
-                />
-              </label>
+            <section className="v2ConnectionTypePreviewPanel">
+              <V2ConnectorStylePreview style={draft.defaultVisualStyle} label={draft.name || "Connector"} />
+              {showLabel ? <span>{draft.name || "Connector"}</span> : null}
             </section>
 
-            <V2CardTypeSchemaEditor
-              title="Relationship fields"
-              description="Fields rendered in the connector inspector for this relationship type."
-              fields={draft.fields}
-              onChange={(fields) => updateDraft({ fields })}
-            />
+            <section className="v2CardTypeManagerSection">
+              <input
+                className="v2InspectorDataValue"
+                value={draft.name}
+                placeholder="Type name"
+                aria-label="Type name"
+                onChange={(event) => updateDraft({ name: event.target.value })}
+              />
+            </section>
+
+            <V2CardTypeSchemaEditor fields={draft.fields} onChange={(fields) => updateDraft({ fields })} />
+
+            <section className="v2CardTypeManagerSection v2ConnectionTypeVisualControls" aria-label="Connector appearance">
+              <label className="v2ConnectionTypeColor" title="Color">
+                <input
+                  type="color"
+                  value={draft.defaultVisualStyle.strokeColor ?? DEFAULT_STYLE.strokeColor}
+                  aria-label="Color"
+                  onChange={(event) => updateStyle({ strokeColor: event.target.value })}
+                />
+              </label>
+              <label title="Width">
+                <Minus size={15} aria-hidden="true" />
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  step={0.5}
+                  value={draft.defaultVisualStyle.strokeWidth ?? DEFAULT_STYLE.strokeWidth}
+                  aria-label="Width"
+                  onChange={(event) => updateStyle({ strokeWidth: Number(event.target.value) })}
+                />
+                <output>{draft.defaultVisualStyle.strokeWidth}</output>
+              </label>
+              <label title="Corner radius">
+                <Spline size={15} aria-hidden="true" />
+                <input
+                  type="range"
+                  min={0}
+                  max={48}
+                  step={2}
+                  value={draft.defaultVisualStyle.cornerRadius ?? DEFAULT_STYLE.cornerRadius}
+                  aria-label="Corner radius"
+                  onChange={(event) => updateStyle({ cornerRadius: Number(event.target.value) })}
+                />
+                <output>{draft.defaultVisualStyle.cornerRadius}</output>
+              </label>
+              <label title="Start marker">
+                <ArrowLeftToLine size={15} aria-hidden="true" />
+                <select
+                  value={draft.defaultVisualStyle.markerStart ?? "none"}
+                  aria-label="Start marker"
+                  onChange={(event) => updateStyle({ markerStart: event.target.value as V2ConnectionMarker })}
+                >
+                  {MARKER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <label title="End marker">
+                <ArrowRightToLine size={15} aria-hidden="true" />
+                <select
+                  value={draft.defaultVisualStyle.markerEnd ?? "arrow"}
+                  aria-label="End marker"
+                  onChange={(event) => updateStyle({ markerEnd: event.target.value as V2ConnectionMarker })}
+                >
+                  {MARKER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={showLabel ? "v2ConnectionTypeLabelToggle v2ConnectionTypeLabelToggleActive" : "v2ConnectionTypeLabelToggle"}
+                title={showLabel ? "Hide connector names" : "Show connector names"}
+                aria-label={showLabel ? "Hide connector names" : "Show connector names"}
+                aria-pressed={showLabel}
+                onClick={() => updateStyle({ showLabel: !showLabel })}
+              >
+                {showLabel ? <Eye size={15} aria-hidden="true" /> : <EyeOff size={15} aria-hidden="true" />}
+              </button>
+            </section>
 
             {error ? <p className="v2InspectorDataError">{error}</p> : null}
-            {message ? <p className="v2CardTypeManagerSuccess">{message}</p> : null}
-
-            <div className="v2InspectorEditActions v2CardTypeManagerActions">
-              {mode === "existing" ? (
-                error ? <span>Auto-save failed</span> : <span />
-              ) : (
-                <button
-                  type="button"
-                  className="v2InspectorPrimaryAction"
-                  onClick={() => void saveDraft()}
-                  disabled={isSaving}
-                >
+            {mode === "new" ? (
+              <div className="v2InspectorEditActions v2CardTypeManagerActions">
+                <span />
+                <button type="button" className="v2InspectorPrimaryAction" disabled={isSaving} onClick={() => void saveDraft()}>
                   <Plus size={13} strokeWidth={2.2} />
-                  <span>{isSaving ? "Creating..." : "Create connection type"}</span>
+                  <span>{isSaving ? "Creating..." : "Create connector type"}</span>
                 </button>
-              )}
-            </div>
+              </div>
+            ) : error ? <p className="v2ConnectionTypeAutosaveError">Auto-save failed</p> : null}
           </div>
         </div>
       </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Plus, Search } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
@@ -15,12 +15,14 @@ type V2CardCreateToolbarProps = {
     position: V2Position
   ) => Promise<void>;
   onManageCardTypes: (cardTypeId?: string | null) => void;
+  connectorControl?: ReactNode;
 };
 
 export function V2CardCreateToolbar({
   cardTypes,
   onCreateCard,
   onManageCardTypes,
+  connectorControl,
 }: V2CardCreateToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
   const [isOpen, setIsOpen] = useState(false);
@@ -129,22 +131,25 @@ export function V2CardCreateToolbar({
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
-      <button
-        type="button"
-        className="v2CreateToolbarButton"
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        onClick={() => {
-          setError(null);
-          setQuery("");
-          setIsOpen((current) => !current);
-        }}
-        disabled={isCreating}
-      >
-        <Plus size={15} strokeWidth={2.4} />
-        <span>Card</span>
-        <ChevronDown size={14} strokeWidth={2.2} />
-      </button>
+      <div className="v2CreateToolbarPrimaryRow">
+        <button
+          type="button"
+          className="v2CreateToolbarButton"
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          onClick={() => {
+            setError(null);
+            setQuery("");
+            setIsOpen((current) => !current);
+          }}
+          disabled={isCreating}
+        >
+          <Plus size={15} strokeWidth={2.4} />
+          <span>Card</span>
+          <ChevronDown size={14} strokeWidth={2.2} />
+        </button>
+        {connectorControl}
+      </div>
 
       {isOpen ? (
         <div className="v2CreateToolbarPopover v2CardTypePicker" role="menu">

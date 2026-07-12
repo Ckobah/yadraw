@@ -48,6 +48,7 @@ import { V2ConnectorVisualEditPanel } from "./v2-connector-visual-edit-panel";
 import { V2CardVisualEditPanel } from "./v2-card-visual-edit-panel";
 import { V2ConnectorEdge, type V2ConnectorEdgeData } from "./v2-connector-edge";
 import { V2CardCreateToolbar } from "./v2-card-create-toolbar";
+import { V2ConnectionTypeToolbar } from "./v2-connection-type-toolbar";
 import { buildV2ConnectorSlots } from "./v2-connector-slots";
 import {
   createV2CardType,
@@ -404,6 +405,10 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const [connectionTypes, setConnectionTypes] = useState<V2ConnectionType[]>(initialConnectionTypes);
+  const [activeConnectionTypeId, setActiveConnectionTypeId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem(`yadraw:v2:board:${board.id}:connection-type`);
+  });
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -782,9 +787,26 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         (attachment) => attachment.id === previewedAttachment.attachmentId
       )
     : -1;
-  const genericConnectionType = useMemo(
-    () => connectionTypes.find((connectionType) => connectionType.key === "generic") ?? null,
-    [connectionTypes]
+  const activeConnectionType = useMemo(
+    () =>
+      connectionTypes.find((connectionType) => connectionType.id === activeConnectionTypeId) ??
+      connectionTypes.find((connectionType) => connectionType.key === "generic") ??
+      connectionTypes[0] ??
+      null,
+    [activeConnectionTypeId, connectionTypes]
+  );
+
+  useEffect(() => {
+    if (!activeConnectionType || activeConnectionType.id === activeConnectionTypeId) return;
+    setActiveConnectionTypeId(activeConnectionType.id);
+  }, [activeConnectionType, activeConnectionTypeId]);
+
+  const handleSelectConnectionType = useCallback(
+    (connectionTypeId: string) => {
+      setActiveConnectionTypeId(connectionTypeId);
+      window.localStorage.setItem(`yadraw:v2:board:${board.id}:connection-type`, connectionTypeId);
+    },
+    [board.id]
   );
   const assistantCards = useMemo(
     () => nodes.map((node) => node.data.card),
@@ -2147,9 +2169,10 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           };
       const createInput = {
         ...connectionInput,
-        connectionTypeId: genericConnectionType?.id ?? null,
+        connectionTypeId: activeConnectionType?.id ?? null,
         type: "data",
         label: connectionInput.sourcePortKey,
+        visualStyle: activeConnectionType?.defaultVisualStyle ?? {},
       };
       const duplicate = connectionRecordsRef.current.find((record) =>
         isSameConnectionEndpoint(record, createInput)
@@ -2194,7 +2217,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         pendingConnectionKeysRef.current.delete(endpointKey);
       }
     },
-    [board.id, cardTypeMap, clearCardSelection, genericConnectionType?.id, setEdges]
+    [activeConnectionType, board.id, cardTypeMap, clearCardSelection, setEdges]
   );
 
   const handleReconnect = useCallback<OnReconnect>(
@@ -2612,6 +2635,14 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           cardTypes={cardTypes}
           onCreateCard={handleCreateCard}
           onManageCardTypes={handleOpenCardTypeManager}
+          connectorControl={
+            <V2ConnectionTypeToolbar
+              connectionTypes={connectionTypes}
+              activeConnectionType={activeConnectionType}
+              onSelect={handleSelectConnectionType}
+              onManage={() => handleOpenConnectionTypeManager(activeConnectionType?.id)}
+            />
+          }
         />
         {SHOW_EXPERIMENTAL_RUN_AI ? (
           <div className="v2RunToolbar nodrag nopan">
