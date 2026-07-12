@@ -64,6 +64,7 @@ export function V2ConnectorVisualEditPanel({
   );
   const [error, setError] = useState<string | null>(null);
   const connectionIdRef = useRef(connection.id);
+  const savedStyleSignatureRef = useRef(styleSignature(connection.visualStyle));
 
   const savedSignature = useMemo(
     () => styleSignature(connection.visualStyle),
@@ -74,11 +75,13 @@ export function V2ConnectorVisualEditPanel({
 
   useEffect(() => {
     const connectionChanged = connectionIdRef.current !== connection.id;
-    if (!connectionChanged && (isDirty || saveStatus === "saving")) return;
+    const savedStyleChanged = savedStyleSignatureRef.current !== savedSignature;
+    if (!connectionChanged && !savedStyleChanged && (isDirty || saveStatus === "saving")) return;
     connectionIdRef.current = connection.id;
+    savedStyleSignatureRef.current = savedSignature;
     setDraft(normalizeStyle(connection.visualStyle));
     setError(null);
-  }, [connection.id, connection.visualStyle, isDirty, saveStatus]);
+  }, [connection.id, connection.visualStyle, isDirty, saveStatus, savedSignature]);
 
   useEffect(() => {
     if (!isDirty || saveStatus === "saving") return;
