@@ -260,7 +260,7 @@ export const v2ConnectionTypeSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable().optional(),
   schema: v2ConnectionTypeDefinitionSchema.default({ fields: [] }),
-  defaultVisualStyle: z.record(z.string(), z.unknown()).default({}),
+  defaultVisualStyle: v2ConnectionVisualStyleSchema.default({}),
   createdAt: v2TimestampSchema,
   updatedAt: v2TimestampSchema
 });

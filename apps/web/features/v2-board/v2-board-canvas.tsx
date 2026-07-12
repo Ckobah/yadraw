@@ -255,6 +255,29 @@ function getConnectionCornerRadius(visualStyle: V2ConnectionVisualStyle | undefi
   return visualStyle?.cornerRadius ?? 12;
 }
 
+function applyConnectionTypeStyle(
+  currentStyle: V2ConnectionVisualStyle,
+  connectionType: V2ConnectionType
+): V2ConnectionVisualStyle {
+  const defaults = connectionType.defaultVisualStyle;
+  return {
+    strokeColor: defaults.strokeColor ?? "#475467",
+    strokeWidth: defaults.strokeWidth ?? 2,
+    cornerRadius: defaults.cornerRadius ?? 12,
+    markerStart: defaults.markerStart ?? "none",
+    markerEnd: defaults.markerEnd ?? "arrow",
+    showLabel: defaults.showLabel ?? true,
+    ...(currentStyle.routeMode !== undefined ? { routeMode: currentStyle.routeMode } : {}),
+    ...(currentStyle.waypoints !== undefined ? { waypoints: currentStyle.waypoints } : {}),
+    ...(currentStyle.labelPosition !== undefined
+      ? { labelPosition: currentStyle.labelPosition }
+      : {}),
+    ...(currentStyle.labelSegmentIndex !== undefined
+      ? { labelSegmentIndex: currentStyle.labelSegmentIndex }
+      : {}),
+  };
+}
+
 function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
   const visualStyle = connection.visualStyle ?? {};
   return {
@@ -1746,18 +1769,29 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         (connection) => connection.id === connectionId
       );
       if (!previous) return;
+      const selectedConnectionType =
+        patch.connectionTypeId !== undefined && patch.connectionTypeId !== null
+          ? connectionTypes.find((connectionType) => connectionType.id === patch.connectionTypeId) ?? null
+          : null;
+      const effectivePatch =
+        selectedConnectionType && patch.visualStyle === undefined
+          ? {
+              ...patch,
+              visualStyle: applyConnectionTypeStyle(previous.visualStyle, selectedConnectionType),
+            }
+          : patch;
       const optimistic: V2Connection = {
         ...previous,
-        ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
-        ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
-        ...(patch.connectionTypeId !== undefined ? { connectionTypeId: patch.connectionTypeId } : {}),
-        ...(patch.sourceCardId !== undefined ? { sourceCardId: patch.sourceCardId } : {}),
-        ...(patch.targetCardId !== undefined ? { targetCardId: patch.targetCardId } : {}),
-        ...(patch.sourcePortKey !== undefined ? { sourcePortKey: patch.sourcePortKey } : {}),
-        ...(patch.targetPortKey !== undefined ? { targetPortKey: patch.targetPortKey } : {}),
-        ...(patch.data !== undefined ? { data: patch.data } : {}),
-        ...(patch.visualStyle !== undefined
-          ? { visualStyle: { ...previous.visualStyle, ...patch.visualStyle } }
+        ...(effectivePatch.title !== undefined ? { title: effectivePatch.title?.trim() || null } : {}),
+        ...(effectivePatch.description !== undefined ? { description: effectivePatch.description ?? null } : {}),
+        ...(effectivePatch.connectionTypeId !== undefined ? { connectionTypeId: effectivePatch.connectionTypeId } : {}),
+        ...(effectivePatch.sourceCardId !== undefined ? { sourceCardId: effectivePatch.sourceCardId } : {}),
+        ...(effectivePatch.targetCardId !== undefined ? { targetCardId: effectivePatch.targetCardId } : {}),
+        ...(effectivePatch.sourcePortKey !== undefined ? { sourcePortKey: effectivePatch.sourcePortKey } : {}),
+        ...(effectivePatch.targetPortKey !== undefined ? { targetPortKey: effectivePatch.targetPortKey } : {}),
+        ...(effectivePatch.data !== undefined ? { data: effectivePatch.data } : {}),
+        ...(effectivePatch.visualStyle !== undefined
+          ? { visualStyle: { ...previous.visualStyle, ...effectivePatch.visualStyle } }
           : {}),
       };
 
@@ -1774,7 +1808,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
 
       setSaveStatus("saving");
       try {
-        const updated = await updateV2Connection(connectionId, patch);
+        const updated = await updateV2Connection(connectionId, effectivePatch);
         setConnectionRecords((current) =>
           current.map((connection) => (connection.id === connectionId ? updated : connection))
         );
@@ -1802,7 +1836,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         throw err;
       }
     },
-    [setEdges]
+    [connectionTypes, setEdges]
   );
 
   const applyMovement = useCallback(
