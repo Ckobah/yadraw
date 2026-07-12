@@ -52,6 +52,8 @@ if command -v docker >/dev/null 2>&1; then
   fi
 fi
 
+npm ci --include=dev
+
 replace_env_value() {
   name="$1"
   value="$2"
@@ -120,6 +122,16 @@ rotate_weak_minio_secret() {
 
 rotate_weak_minio_secret
 
+if [[ "${V2_DATABASE_URL:-}" == *"yadraw:yadraw@"* ]]; then
+  echo "Rotating development PostgreSQL credentials"
+  export NEW_DATABASE_PASSWORD="$(openssl rand -hex 32)"
+  node scripts/rotate-postgres-password.mjs .env
+  unset NEW_DATABASE_PASSWORD
+  set -a
+  source .env
+  set +a
+fi
+
 check_secret() {
   name="$1"
   minimum_length="$2"
@@ -151,7 +163,6 @@ if [[ "${V2_DATABASE_URL:-}" == *"yadraw:yadraw@"* ]]; then
   false
 fi
 
-npm ci --include=dev
 bash scripts/backup-production.sh
 npm run v2:migrations:apply --workspace @yadraw/api
 npm run build
