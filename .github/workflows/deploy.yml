@@ -58,6 +58,7 @@ jobs:
           fi
 
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
