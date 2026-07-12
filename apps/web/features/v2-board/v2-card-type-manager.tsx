@@ -574,7 +574,7 @@ export function V2CardTypeManager({
               ) : <span />}
               <div className="v2CardTypeManagerSaveActions">
                 {mode === "existing" ? (
-                  <span>{error ? "Auto-save failed" : isSaving || hasDraftChanges ? "Saving..." : "Saved"}</span>
+                  error ? <span>Auto-save failed</span> : <span />
                 ) : (
                   <button
                     type="button"

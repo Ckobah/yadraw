@@ -451,11 +451,7 @@ export function V2LinkedFieldsPreview({
       >
         <div className="v2LinkedFieldDraftHeader">
           <span>
-            {editingBindingId
-              ? isSaving || editingDirty
-                ? "Saving changes..."
-                : "Changes saved"
-              : "New linked field"}
+            {editingBindingId ? "Linked field" : "New linked field"}
           </span>
         </div>
         <label className="v2LinkedFieldControl">

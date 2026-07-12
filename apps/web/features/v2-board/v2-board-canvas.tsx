@@ -88,12 +88,13 @@ import {
   type V2ClipboardPayload,
   type V2EditorCommand,
 } from "./v2-editor-commands";
+import type { SaveStatus } from "./v2-card-inspector-helpers";
 
 type Props = {
   boardDetail: V2BoardDetail;
+  onSaveStatusChange?: (status: SaveStatus) => void;
 };
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
 type CardAction = "duplicate" | "delete";
 type PendingCardAction = {
   cardId: string;
@@ -392,7 +393,7 @@ function getMiniMapNodeColor(node: V2CardNode): string {
   return getV2CardTypeAccentToken(node.data.cardType);
 }
 
-export function V2BoardCanvas({ boardDetail }: Props) {
+export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   const {
     board,
     cards,
@@ -406,6 +407,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
   const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+
+  useEffect(() => {
+    onSaveStatusChange?.(saveStatus);
+  }, [onSaveStatusChange, saveStatus]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [inspectedCardId, setInspectedCardId] = useState<string | null>(null);

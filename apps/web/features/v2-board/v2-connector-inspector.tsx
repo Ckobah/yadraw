@@ -469,9 +469,9 @@ export function V2ConnectorInspector({
               }}
             />
           </div>
-          {(basicError || basicDirty || saveStatus === "saving" || saveStatus === "error") ? <div className="v2InspectorEditFooter">
-            <span className={basicError ? "v2InspectorSaveStatusError" : ""}>
-              {basicError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
+          {(basicError || saveStatus === "error") ? <div className="v2InspectorEditFooter">
+            <span className="v2InspectorSaveStatusError">
+              {basicError ?? "Save failed"}
             </span>
           </div> : null}
         </section>
@@ -509,7 +509,7 @@ export function V2ConnectorInspector({
               ))}
             </select>
           </label>
-          {(typeError || isTypeSaving) ? <p className={typeError ? "v2InspectorDataError" : "v2ConnectorTypeHint"}>{typeError ?? "Saving..."}</p> : null}
+          {typeError ? <p className="v2InspectorDataError">{typeError}</p> : null}
         </section>
 
         <section className="v2InspectorSection">
@@ -603,9 +603,9 @@ export function V2ConnectorInspector({
                   ))}
                 </div>
               )}
-              {(dataError || dataDirty || saveStatus === "saving" || saveStatus === "error") ? <div className="v2InspectorDataFooter">
-                <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                  {dataError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
+              {(dataError || saveStatus === "error") ? <div className="v2InspectorDataFooter">
+                <span className="v2InspectorSaveStatusError">
+                  {dataError ?? "Save failed"}
                 </span>
               </div> : null}
             </>
@@ -664,10 +664,10 @@ export function V2ConnectorInspector({
               ))}
             </div>
           )}
-          {!hasSchemaFields && isDataEditing && (dataError || dataDirty || saveStatus === "saving" || saveStatus === "error") ? (
+          {!hasSchemaFields && isDataEditing && (dataError || saveStatus === "error") ? (
             <div className="v2InspectorDataFooter">
-              <span className={dataError ? "v2InspectorSaveStatusError" : ""}>
-                {dataError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
+              <span className="v2InspectorSaveStatusError">
+                {dataError ?? "Save failed"}
               </span>
             </div>
           ) : null}

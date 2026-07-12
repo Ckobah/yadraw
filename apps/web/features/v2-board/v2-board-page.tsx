@@ -1,9 +1,10 @@
 "use client";
 
 import { ReactFlowProvider } from "@xyflow/react";
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { V2BoardCanvas } from "./v2-board-canvas";
 import type { V2BoardDetail } from "@yadraw/shared";
+import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { createYadrawThemeVariables, lightYadrawTheme } from "./v2-theme-tokens";
 import { V2BoardEmptyState } from "./v2-board-empty-state";
 
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export function V2BoardPage({ boardDetail }: Props) {
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const { board, cards, connections } = boardDetail;
   const cardCount = cards.length;
   const connCount = connections.length;
@@ -33,6 +35,27 @@ export function V2BoardPage({ boardDetail }: Props) {
             {connCount > 0 && ` · ${connCount} connection${connCount !== 1 ? "s" : ""}`}
           </span>
         </div>
+        <div
+          className={`v2BoardSaveIndicator v2BoardSaveIndicator-${saveStatus}`}
+          role="status"
+          aria-live="polite"
+          title={
+            saveStatus === "saving"
+              ? "Saving changes"
+              : saveStatus === "error"
+                ? "Changes could not be saved"
+                : "All changes saved"
+          }
+        >
+          <span aria-hidden="true" />
+          <span className="visuallyHidden">
+            {saveStatus === "saving"
+              ? "Saving changes"
+              : saveStatus === "error"
+                ? "Changes could not be saved"
+                : "All changes saved"}
+          </span>
+        </div>
         <a href="/v2/dashboard" className="v2BoardHomeLink">
           Dashboard
         </a>
@@ -42,7 +65,7 @@ export function V2BoardPage({ boardDetail }: Props) {
       <div className="v2BoardCanvasArea">
         {cardCount === 0 ? <V2BoardEmptyState /> : null}
         <ReactFlowProvider>
-          <V2BoardCanvas boardDetail={boardDetail} />
+          <V2BoardCanvas boardDetail={boardDetail} onSaveStatusChange={setSaveStatus} />
         </ReactFlowProvider>
       </div>
     </div>

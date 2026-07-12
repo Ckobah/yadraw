@@ -334,7 +334,7 @@ export function V2ConnectionTypeManager({
 
             <div className="v2InspectorEditActions v2CardTypeManagerActions">
               {mode === "existing" ? (
-                <span>{error ? "Auto-save failed" : isSaving || hasDraftChanges ? "Saving..." : "Saved"}</span>
+                error ? <span>Auto-save failed</span> : <span />
               ) : (
                 <button
                   type="button"

@@ -2177,6 +2177,42 @@ button:disabled {
   color: var(--yd-accent-purple-text, var(--purple));
 }
 
+.v2BoardSaveIndicator {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  place-items: center;
+  flex: 0 0 14px;
+}
+
+.v2BoardSaveIndicator > span[aria-hidden="true"] {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #16a34a;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #16a34a 18%, transparent);
+}
+
+.v2BoardSaveIndicator-saving > span[aria-hidden="true"] {
+  background: #eab308;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #eab308 20%, transparent);
+  animation: v2SaveIndicatorPulse 1.1s ease-in-out infinite;
+}
+
+.v2BoardSaveIndicator-error > span[aria-hidden="true"] {
+  background: #dc2626;
+  box-shadow: 0 0 0 2px color-mix(in srgb, #dc2626 18%, transparent);
+}
+
+@keyframes v2SaveIndicatorPulse {
+  50% { opacity: 0.48; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v2BoardSaveIndicator-saving > span[aria-hidden="true"] { animation: none; }
+}
+
 .v2BoardCanvasArea {
   position: relative;
   min-width: 0;

@@ -301,7 +301,7 @@ export function V2CardDataSection({
           </div>
         )}
         <div className="v2InspectorDataFooter">
-          {(dataError || hasDataChanges || saveStatus === "saving") ? <span className={dataError ? "v2InspectorSaveStatusError" : ""}>{dataError ?? "Saving..."}</span> : <span />}
+          {dataError ? <span className="v2InspectorSaveStatusError">{dataError}</span> : <span />}
           <div className="v2InspectorEditActions">
             <button className="v2InspectorIconAction"
               type="button"

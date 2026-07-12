@@ -101,9 +101,9 @@ export function V2CardBasicsSection({
           }}
         />
       </div>
-      {(fieldError || saveStatus === "saving" || saveStatus === "error" || hasChanges) ? <div className="v2InspectorEditFooter">
-        <span className={fieldError ? "v2InspectorSaveStatusError" : ""}>
-          {fieldError ?? (saveStatus === "error" ? "Save failed" : "Saving...")}
+      {(fieldError || saveStatus === "error") ? <div className="v2InspectorEditFooter">
+        <span className="v2InspectorSaveStatusError">
+          {fieldError ?? "Save failed"}
         </span>
       </div> : null}
     </section>
