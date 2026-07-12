@@ -34,6 +34,10 @@ if ! grep -q '^APP_ORIGIN=' .env; then
   printf '\nAPP_ORIGIN=https://yadraw.com\n' >> .env
 fi
 
+if ! grep -q '^MINIO_CONSOLE_PORT=' .env; then
+  printf '\nMINIO_CONSOLE_PORT=19001\n' >> .env
+fi
+
 chmod 600 .env
 
 set -a
