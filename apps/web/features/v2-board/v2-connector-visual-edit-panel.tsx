@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, LoaderCircle, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, CircleAlert, Minus, RotateCcw, Spline, Waypoints, X } from "lucide-react";
 import type {
   V2Connection,
   V2ConnectionMarker,
@@ -232,7 +232,6 @@ export function V2ConnectorVisualEditPanel({
           <RotateCcw aria-hidden="true" size={14} />
           <span className="visuallyHidden">Reset route</span>
         </button>
-        {(saveStatus === "saving" || isDirty) ? <LoaderCircle className="v2InspectorSpinner" size={15} aria-label="Saving" /> : null}
         {error ? <CircleAlert className="v2ConnectorVisualEditError" size={15} aria-label={error} /> : null}
         <button
           type="button"

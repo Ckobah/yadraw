@@ -7,7 +7,6 @@ import {
   Bold,
   ChevronsUpDown,
   Italic,
-  LoaderCircle,
   CircleAlert,
   Underline,
   X,
@@ -143,7 +142,6 @@ export function V2CardVisualEditPanel({
           />
         </label>
 
-        {saveStatus === "saving" ? <LoaderCircle className="v2InspectorSpinner" size={15} aria-label="Saving" /> : null}
         {saveStatus === "error" ? <CircleAlert className="v2ConnectorVisualEditError" size={15} aria-label="Save failed" /> : null}
 
         <button
