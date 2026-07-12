@@ -541,7 +541,7 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   );
 
   const clearCardSelection = useCallback(() => {
-    pendingCardSelectionRef.current = null;
+    pendingCardSelectionRef.current = selectedCardIdsRef.current.length > 0 ? [] : null;
     selectedCardIdsRef.current = [];
     setSelectedCardIds([]);
     setSelectedCardId(null);
@@ -549,7 +549,10 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   }, []);
 
   const selectOnlyCard = useCallback((cardId: string) => {
-    pendingCardSelectionRef.current = null;
+    pendingCardSelectionRef.current =
+      selectedCardIdsRef.current.length === 1 && selectedCardIdsRef.current[0] === cardId
+        ? null
+        : [cardId];
     selectedCardIdsRef.current = [cardId];
     setSelectedCardIds([cardId]);
     setSelectedCardId(cardId);
@@ -557,7 +560,11 @@ export function V2BoardCanvas({ boardDetail }: Props) {
   }, []);
 
   const selectCards = useCallback((cardIds: string[]) => {
-    pendingCardSelectionRef.current = null;
+    pendingCardSelectionRef.current =
+      selectedCardIdsRef.current.length === cardIds.length &&
+      selectedCardIdsRef.current.every((id, index) => id === cardIds[index])
+        ? null
+        : cardIds;
     selectedCardIdsRef.current = cardIds;
     setSelectedCardIds(cardIds);
     setSelectedCardId(cardIds.at(-1) ?? null);
