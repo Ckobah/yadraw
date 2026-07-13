@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GitBranch, Plus, Trash2, X } from "lucide-react";
-import type { V2Card, V2Connection, V2ConnectionType } from "@yadraw/shared";
+import { BookmarkPlus, GitBranch, Plus, Trash2, X } from "lucide-react";
+import type {
+  V2Card,
+  V2Connection,
+  V2ConnectionType,
+  V2ConnectionVisualStyle,
+} from "@yadraw/shared";
 import {
   createDataDraftFromRecord,
   createLocalFieldId,
@@ -37,6 +42,10 @@ type V2ConnectorInspectorProps = {
     }
   ) => Promise<void>;
   onDeleteConnection: (connectionId: string) => Promise<void>;
+  onSaveStyleAsType: (
+    connectionTypeId: string,
+    visualStyle: V2ConnectionVisualStyle
+  ) => Promise<void>;
   onManageConnectionType: (connectionTypeId?: string | null) => void;
   onClose: () => void;
 };
@@ -61,6 +70,17 @@ function formatDataValue(value: unknown): string {
   }
 }
 
+function typeAppearance(style: V2ConnectionVisualStyle | undefined): V2ConnectionVisualStyle {
+  return {
+    strokeColor: style?.strokeColor ?? "#475467",
+    strokeWidth: style?.strokeWidth ?? 2,
+    cornerRadius: style?.cornerRadius ?? 12,
+    markerStart: style?.markerStart === "arrow" ? "arrow" : "none",
+    markerEnd: style?.markerEnd === "arrow" ? "arrow" : "none",
+    showLabel: style?.showLabel ?? true,
+  };
+}
+
 export function V2ConnectorInspector({
   connection,
   connectionType,
@@ -70,6 +90,7 @@ export function V2ConnectorInspector({
   saveStatus,
   onUpdateConnection,
   onDeleteConnection,
+  onSaveStyleAsType,
   onManageConnectionType,
   onClose,
 }: V2ConnectorInspectorProps) {
@@ -78,6 +99,8 @@ export function V2ConnectorInspector({
   const [basicError, setBasicError] = useState<string | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
   const [isTypeSaving, setIsTypeSaving] = useState(false);
+  const [isStyleTypeSaving, setIsStyleTypeSaving] = useState(false);
+  const [styleTypeError, setStyleTypeError] = useState<string | null>(null);
   const schemaFields = useMemo(
     () => connectionType?.schema?.fields ?? [],
     [connectionType]
@@ -140,6 +163,12 @@ export function V2ConnectorInspector({
   const dataDirty =
     currentDataSignature !== initialDataSignature ||
     (hasSchemaFields && currentSchemaSignature !== initialSchemaSignature);
+  const connectionAppearance = typeAppearance(connection.visualStyle);
+  const hasCustomAppearance = Boolean(
+    connectionType &&
+      JSON.stringify(connectionAppearance) !==
+        JSON.stringify(typeAppearance(connectionType.defaultVisualStyle))
+  );
 
   useEffect(() => {
     if (!basicDirty || saveStatus === "saving") return;
@@ -231,6 +260,19 @@ export function V2ConnectorInspector({
       setTypeError("Could not update connection type.");
     } finally {
       setIsTypeSaving(false);
+    }
+  }
+
+  async function saveStyleAsType() {
+    if (!connectionType || isStyleTypeSaving) return;
+    setIsStyleTypeSaving(true);
+    setStyleTypeError(null);
+    try {
+      await onSaveStyleAsType(connectionType.id, connectionAppearance);
+    } catch {
+      setStyleTypeError("Could not update connector type.");
+    } finally {
+      setIsStyleTypeSaving(false);
     }
   }
 
@@ -704,6 +746,20 @@ export function V2ConnectorInspector({
         </section>
 
         <V2ConnectorFilesSection connectionId={connection.id} />
+
+        {hasCustomAppearance && connectionType ? (
+          <section className="v2ConnectorSaveTypeSection">
+            <button
+              type="button"
+              disabled={isStyleTypeSaving}
+              onClick={() => void saveStyleAsType()}
+            >
+              <BookmarkPlus size={14} strokeWidth={2.2} aria-hidden="true" />
+              <span>{isStyleTypeSaving ? "Updating..." : `Save style to ${connectionType.name}`}</span>
+            </button>
+            {styleTypeError ? <p className="v2InspectorDataError">{styleTypeError}</p> : null}
+          </section>
+        ) : null}
 
       </div>
     </aside>

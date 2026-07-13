@@ -7208,6 +7208,48 @@ button:disabled {
 .v2ConnectorTypeSelector { gap: 4px; }
 .v2ConnectorTypeSelector > span { display: none; }
 
+.v2ConnectorSaveTypeSection {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  padding-top: 2px;
+}
+
+.v2ConnectorSaveTypeSection button {
+  display: inline-flex;
+  min-height: 30px;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #a9bdf7;
+  border-radius: 6px;
+  background: #eef4ff;
+  padding: 0 9px;
+  color: #175cd3;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.v2ConnectorSaveTypeSection button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ConnectorSaveTypeSection button:hover:not(:disabled),
+.v2ConnectorSaveTypeSection button:focus-visible:not(:disabled) {
+  border-color: #7a9bf2;
+  background: #dfeaff;
+  outline: 0;
+}
+
+.v2ConnectorSaveTypeSection button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .v2InspectorAttachmentRow { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 7px; padding: 7px 0; border: 0; border-bottom: 1px solid #f0f1f3; border-radius: 0; background: transparent; }
 .v2InspectorAttachmentIcon { width: 28px; height: 28px; border: 0; border-radius: 5px; background: #f2f4f7; }
 .v2InspectorAttachmentText strong,

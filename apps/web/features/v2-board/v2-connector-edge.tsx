@@ -37,7 +37,6 @@ const PORT_RADIUS = 8;
 
 function markerClearance(marker: V2ConnectionMarker | undefined): number {
   if (marker === "circle" || marker === "square") return 4;
-  if (marker && marker !== "none") return 2;
   return 0;
 }
 

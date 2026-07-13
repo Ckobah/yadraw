@@ -2611,7 +2611,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
             <marker
               id={V2_CONNECTOR_MARKER_IDS.arrow}
               viewBox="0 0 10 10"
-              refX="8"
+              refX="9"
               refY="5"
               markerWidth="8"
               markerHeight="8"
@@ -2622,7 +2622,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
             <marker
               id={V2_CONNECTOR_MARKER_IDS.reverseArrow}
               viewBox="0 0 10 10"
-              refX="2"
+              refX="1"
               refY="5"
               markerWidth="8"
               markerHeight="8"
@@ -2633,7 +2633,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
             <marker
               id={V2_CONNECTOR_MARKER_IDS.triangle}
               viewBox="0 0 10 10"
-              refX="8"
+              refX="9"
               refY="5"
               markerWidth="8"
               markerHeight="8"
@@ -2802,6 +2802,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
           onDeleteConnection={handleDeleteConnection}
+          onSaveStyleAsType={async (connectionTypeId, visualStyle) => {
+            await handleUpdateConnectionType(connectionTypeId, { defaultVisualStyle: visualStyle });
+          }}
           onManageConnectionType={handleOpenConnectionTypeManager}
           onClose={() => setInspectedConnectionId(null)}
         />

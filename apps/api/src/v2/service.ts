@@ -508,6 +508,23 @@ export function createV2BoardService(
     return generic?.id ?? null;
   }
 
+  function createDefaultConnectionTitle(
+    typeName: string,
+    connections: V2Connection[]
+  ): string {
+    const usedTitles = new Set(
+      connections
+        .map((connection) => connection.title?.trim().toLowerCase())
+        .filter((title): title is string => Boolean(title))
+    );
+    for (let attempt = 0; attempt < 128; attempt += 1) {
+      const suffix = randomUUID().replace(/-/g, "").slice(0, 3).toUpperCase();
+      const title = `${typeName} ${suffix}`;
+      if (!usedTitles.has(title.toLowerCase())) return title;
+    }
+    return `${typeName} ${Date.now().toString(36).slice(-3).toUpperCase()}`;
+  }
+
   async function requireBoardForAccess(
     context: RequestContext,
     boardId: string,
@@ -1184,6 +1201,9 @@ export function createV2BoardService(
       const connectionType = connectionTypeId
         ? await requireConnectionTypeRepository().getConnectionType(connectionTypeId)
         : null;
+      const title =
+        input.title ??
+        createDefaultConnectionTitle(connectionType?.name ?? "Connector", detail?.connections ?? []);
 
       return repository.createConnection({
         workspaceId: board.workspaceId,
@@ -1195,6 +1215,7 @@ export function createV2BoardService(
         targetPortKey: input.targetPortKey,
         type: input.type,
         label: input.label,
+        title,
         visualStyle: input.visualStyle ?? connectionType?.defaultVisualStyle ?? {},
         status: "active"
       });

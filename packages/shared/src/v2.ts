@@ -672,6 +672,7 @@ export const v2CreateConnectionBodySchema = z.object({
   targetPortKey: z.string().trim().min(1),
   type: z.string().trim().min(1).default("data"),
   label: z.string().default(""),
+  title: z.string().trim().min(1).optional(),
   visualStyle: v2ConnectionVisualStyleSchema.optional()
 });
 
