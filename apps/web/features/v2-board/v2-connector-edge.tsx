@@ -676,8 +676,19 @@ export function V2ConnectorEdge({
     const baseWaypoints = getEditableWaypoints();
     const routeBeforeDrag = getEditableRoutePoints(baseWaypoints);
     let latestWaypoints = baseWaypoints;
+    const startClient = { x: event.clientX, y: event.clientY };
+    let didDrag = false;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
+      const dragDistance = Math.hypot(
+        moveEvent.clientX - startClient.x,
+        moveEvent.clientY - startClient.y
+      );
+      if (!didDrag && dragDistance < 3) {
+        return;
+      }
+      didDrag = true;
+
       const rawPoint = getEventFlowPoint(moveEvent, screenToFlowPosition);
       const previous = routeBeforeDrag[waypointIndex];
       const next = routeBeforeDrag[waypointIndex + 2];
@@ -695,7 +706,9 @@ export function V2ConnectorEdge({
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
       setIsSnapActive(false);
-      void saveWaypoints(latestWaypoints);
+      if (didDrag) {
+        void saveWaypoints(latestWaypoints);
+      }
     };
 
     window.addEventListener("pointermove", handlePointerMove);
