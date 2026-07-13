@@ -25,6 +25,10 @@ type VisualStyleDraft = Required<Omit<V2ConnectionVisualStyle, "labelPosition" |
 const markerOptions: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "none", label: "Line" },
   { value: "arrow", label: "Arrow" },
+  { value: "reverseArrow", label: "Reverse arrow" },
+  { value: "circle", label: "Circle" },
+  { value: "square", label: "Square" },
+  { value: "ring", label: "Ring" },
 ];
 
 function normalizeStyle(style: V2ConnectionVisualStyle | undefined): VisualStyleDraft {

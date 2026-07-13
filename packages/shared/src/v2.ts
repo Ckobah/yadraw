@@ -76,7 +76,8 @@ export const v2ConnectionMarkerSchema = z.enum([
   "reverseArrow",
   "triangle",
   "circle",
-  "square"
+  "square",
+  "ring"
 ]);
 
 export const v2ConnectionRouteModeSchema = z.enum(["auto", "manual"]);

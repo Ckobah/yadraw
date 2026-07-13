@@ -234,6 +234,7 @@ const V2_CONNECTOR_MARKER_IDS = {
   triangle: "v2ConnectorMarkerTriangle",
   circle: "v2ConnectorMarkerCircle",
   square: "v2ConnectorMarkerSquare",
+  ring: "v2ConnectorMarkerRing",
 } as const;
 
 function getConnectionMarkerId(
@@ -2611,7 +2612,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
             <marker
               id={V2_CONNECTOR_MARKER_IDS.arrow}
               viewBox="0 0 14 14"
-              refX="0"
+              refX="3"
               refY="7"
               markerWidth="14"
               markerHeight="14"
@@ -2622,51 +2623,70 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
             </marker>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.reverseArrow}
-              viewBox="0 0 10 10"
-              refX="1"
-              refY="5"
-              markerWidth="12"
-              markerHeight="12"
+              viewBox="0 0 14 14"
+              refX="3"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
               markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
-              <path d="M 9 1 L 1 5 L 9 9 z" fill="context-stroke" />
+              <path d="M 14 0 L 0 7 L 14 14 z" fill="context-stroke" />
             </marker>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.triangle}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="12"
-              markerHeight="12"
+              viewBox="0 0 14 14"
+              refX="3"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
               markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
-              <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
+              <path d="M 0 0 L 14 7 L 0 14 z" fill="context-stroke" />
             </marker>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.circle}
-              viewBox="0 0 10 10"
-              refX="5"
-              refY="5"
-              markerWidth="10"
-              markerHeight="10"
+              viewBox="0 0 14 14"
+              refX="3"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
               markerUnits="userSpaceOnUse"
-              orient="auto"
+              orient="auto-start-reverse"
             >
-              <circle cx="5" cy="5" r="3" fill="context-stroke" />
+              <circle cx="7" cy="7" r="7" fill="context-stroke" />
             </marker>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.square}
-              viewBox="0 0 10 10"
-              refX="5"
-              refY="5"
-              markerWidth="10"
-              markerHeight="10"
+              viewBox="0 0 14 14"
+              refX="3"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
               markerUnits="userSpaceOnUse"
-              orient="auto"
+              orient="auto-start-reverse"
             >
-              <rect x="2" y="2" width="6" height="6" rx="1" fill="context-stroke" />
+              <rect x="0" y="0" width="14" height="14" rx="1" fill="context-stroke" />
+            </marker>
+            <marker
+              id={V2_CONNECTOR_MARKER_IDS.ring}
+              viewBox="0 0 14 14"
+              refX="3"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
+              markerUnits="userSpaceOnUse"
+              orient="auto-start-reverse"
+            >
+              <circle
+                cx="7"
+                cy="7"
+                r="5.5"
+                fill="var(--yd-surface-app, #f7f9fc)"
+                stroke="context-stroke"
+                strokeWidth="3"
+              />
             </marker>
           </defs>
         </svg>

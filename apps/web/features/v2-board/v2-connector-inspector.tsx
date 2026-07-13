@@ -71,12 +71,20 @@ function formatDataValue(value: unknown): string {
 }
 
 function typeAppearance(style: V2ConnectionVisualStyle | undefined): V2ConnectionVisualStyle {
+  const normalizeMarker = (marker: V2ConnectionVisualStyle["markerStart"]) =>
+    marker === "arrow" ||
+    marker === "reverseArrow" ||
+    marker === "circle" ||
+    marker === "square" ||
+    marker === "ring"
+      ? marker
+      : "none";
   return {
     strokeColor: style?.strokeColor ?? "#475467",
     strokeWidth: style?.strokeWidth ?? 2,
     cornerRadius: style?.cornerRadius ?? 12,
-    markerStart: style?.markerStart === "arrow" ? "arrow" : "none",
-    markerEnd: style?.markerEnd === "arrow" ? "arrow" : "none",
+    markerStart: normalizeMarker(style?.markerStart),
+    markerEnd: normalizeMarker(style?.markerEnd),
     showLabel: style?.showLabel ?? true,
   };
 }

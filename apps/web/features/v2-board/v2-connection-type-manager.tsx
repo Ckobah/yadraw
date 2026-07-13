@@ -52,6 +52,10 @@ type Props = {
 const MARKER_OPTIONS: Array<{ value: V2ConnectionMarker; label: string }> = [
   { value: "none", label: "Line" },
   { value: "arrow", label: "Arrow" },
+  { value: "reverseArrow", label: "Reverse arrow" },
+  { value: "circle", label: "Circle" },
+  { value: "square", label: "Square" },
+  { value: "ring", label: "Ring" },
 ];
 
 const DEFAULT_STYLE: V2ConnectionVisualStyle = {

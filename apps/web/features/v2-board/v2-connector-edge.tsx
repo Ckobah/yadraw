@@ -34,11 +34,10 @@ const DUPLICATE_POINT_DISTANCE = 6;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 const ENDPOINT_GAP = 2;
-const ARROW_LENGTH = 14;
+const MARKER_FORWARD_LENGTH = 11;
 
 function markerClearance(marker: V2ConnectionMarker | undefined): number {
-  if (marker === "arrow") return ENDPOINT_GAP + ARROW_LENGTH;
-  if (marker === "circle" || marker === "square") return 4;
+  if (marker && marker !== "none") return ENDPOINT_GAP + MARKER_FORWARD_LENGTH;
   return ENDPOINT_GAP;
 }
 

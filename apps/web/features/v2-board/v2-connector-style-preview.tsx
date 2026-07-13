@@ -18,8 +18,20 @@ const DEFAULT_STYLE = {
 };
 
 function MarkerShape({ marker }: { marker: V2ConnectionMarker }) {
-  if (marker === "circle") return <circle cx="7" cy="7" r="3.5" fill="context-stroke" />;
-  if (marker === "square") return <rect x="3" y="3" width="8" height="8" rx="1" fill="context-stroke" />;
+  if (marker === "circle") return <circle cx="7" cy="7" r="7" fill="context-stroke" />;
+  if (marker === "square") return <rect x="0" y="0" width="14" height="14" rx="1" fill="context-stroke" />;
+  if (marker === "ring") {
+    return (
+      <circle
+        cx="7"
+        cy="7"
+        r="5.5"
+        fill="var(--yd-surface-app, #f7f9fc)"
+        stroke="context-stroke"
+        strokeWidth="3"
+      />
+    );
+  }
   if (marker === "triangle") return <path d="M 0 0 L 14 7 L 0 14 Z" fill="context-stroke" />;
   if (marker === "reverseArrow") {
     return <path d="M 14 0 L 0 7 L 14 14 Z" fill="context-stroke" />;
@@ -28,9 +40,7 @@ function MarkerShape({ marker }: { marker: V2ConnectionMarker }) {
 }
 
 function markerReferenceX(marker: V2ConnectionMarker): number {
-  if (marker === "reverseArrow") return 14;
-  if (marker === "circle" || marker === "square") return 7;
-  return 0;
+  return marker === "none" ? 0 : 3;
 }
 
 export function V2ConnectorStylePreview({ style, className = "", label }: Props) {

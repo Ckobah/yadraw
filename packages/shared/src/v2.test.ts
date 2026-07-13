@@ -803,6 +803,9 @@ describe("v2ConnectionVisualStyleSchema", () => {
       markerStart: "none",
       markerEnd: "arrow"
     });
+    expect(v2ConnectionVisualStyleSchema.parse({ markerEnd: "ring" })).toEqual({
+      markerEnd: "ring"
+    });
   });
 
   it("accepts automatic and manual connector routes", () => {
