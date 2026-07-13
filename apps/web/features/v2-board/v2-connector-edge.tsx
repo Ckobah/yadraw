@@ -287,13 +287,6 @@ function nearestSegmentIndex(points: Point[], point: Point): number {
   return bestIndex;
 }
 
-function clampSegmentIndex(index: number | null | undefined, segmentCount: number): number | null {
-  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || segmentCount <= 0) {
-    return null;
-  }
-  return Math.min(index, segmentCount - 1);
-}
-
 function moveWaypointSegment(waypoints: Point[], segmentIndex: number, delta: Point): Point[] {
   return normalizeWaypoints(
     waypoints.map((waypoint, index) => {
@@ -323,6 +316,23 @@ function projectPointToSegment(point: Point, start: Point, end: Point): Point {
   return {
     x: start.x + dx * ratio,
     y: start.y + dy * ratio,
+  };
+}
+
+function resolveLabelAnchor(
+  points: Point[],
+  point: Point
+): { position: Point; segmentIndex: number } | null {
+  if (points.length < 2) return null;
+
+  const segmentIndex = nearestSegmentIndex(points, point);
+  const start = points[segmentIndex];
+  const end = points[segmentIndex + 1];
+  if (!start || !end) return null;
+
+  return {
+    position: projectPointToSegment(point, start, end),
+    segmentIndex,
   };
 }
 
@@ -384,7 +394,11 @@ export function V2ConnectorEdge({
     visualStyle.routeMode === "manual" && visualStyle.labelPosition && isFinitePoint(visualStyle.labelPosition)
       ? visualStyle.labelPosition
       : null;
-  const labelPosition = savedLabelPosition ?? (usesManualRoute ? getPolylineLabelPosition(routePoints) : automaticLabel);
+  const savedLabelAnchor = savedLabelPosition
+    ? resolveLabelAnchor(routePoints, savedLabelPosition)
+    : null;
+  const labelPosition =
+    savedLabelAnchor?.position ?? (usesManualRoute ? getPolylineLabelPosition(routePoints) : automaticLabel);
   const path = usesManualRoute ? manualPath : automaticPath;
   const baseStrokeWidth = getStrokeWidth(visualStyle);
   const strokeWidth = selected || isVisualEditing ? baseStrokeWidth + 1.25 : baseStrokeWidth;
@@ -439,17 +453,32 @@ export function V2ConnectorEdge({
     });
   }
 
+  function getSavedLabelPatch(
+    nextWaypoints: Point[],
+    requestedPosition: Point | null = savedLabelPosition
+  ): Partial<Pick<V2ConnectionVisualStyle, "labelPosition" | "labelSegmentIndex">> {
+    if (!requestedPosition) return {};
+    const anchor = resolveLabelAnchor(getRoutePoints(nextWaypoints), requestedPosition);
+    return anchor
+      ? { labelPosition: anchor.position, labelSegmentIndex: anchor.segmentIndex }
+      : {};
+  }
+
   function previewWaypoints(nextWaypoints: Point[]) {
+    const normalizedWaypoints = normalizeWaypoints(nextWaypoints);
     previewVisualStyle({
-      routeMode: nextWaypoints.length > 0 ? "manual" : "auto",
-      waypoints: normalizeWaypoints(nextWaypoints),
+      routeMode: normalizedWaypoints.length > 0 ? "manual" : "auto",
+      waypoints: normalizedWaypoints,
+      ...getSavedLabelPatch(normalizedWaypoints),
     });
   }
 
   async function saveWaypoints(nextWaypoints: Point[]) {
+    const normalizedWaypoints = normalizeWaypoints(nextWaypoints);
     await saveVisualStyle({
-      routeMode: nextWaypoints.length > 0 ? "manual" : "auto",
-      waypoints: normalizeWaypoints(nextWaypoints),
+      routeMode: normalizedWaypoints.length > 0 ? "manual" : "auto",
+      waypoints: normalizedWaypoints,
+      ...getSavedLabelPatch(normalizedWaypoints),
     });
   }
 
@@ -493,13 +522,11 @@ export function V2ConnectorEdge({
     const startFlow = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
     const baseWaypoints = getEditableWaypoints();
     const baseRoutePoints = getRoutePoints(baseWaypoints);
-    const baseLabelPosition = savedLabelPosition ?? labelPosition;
-    const baseLabelSegmentIndex =
-      clampSegmentIndex(visualStyle.labelSegmentIndex, baseRoutePoints.length - 1) ??
-      nearestSegmentIndex(baseRoutePoints, baseLabelPosition);
-    const shouldMoveLabel = baseLabelSegmentIndex === segmentIndex;
+    const baseLabelAnchor = savedLabelPosition
+      ? resolveLabelAnchor(baseRoutePoints, savedLabelPosition)
+      : null;
     let latestWaypoints = baseWaypoints;
-    let latestLabelPosition = baseLabelPosition;
+    let latestLabelAnchor = baseLabelAnchor;
     let didDrag = false;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
@@ -510,15 +537,26 @@ export function V2ConnectorEdge({
       const delta = { x: point.x - startFlow.x, y: point.y - startFlow.y };
       latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, delta);
       setIsSnapActive(true);
-      latestLabelPosition = shouldMoveLabel
-        ? { x: baseLabelPosition.x + delta.x, y: baseLabelPosition.y + delta.y }
-        : baseLabelPosition;
+      const requestedLabelPosition = baseLabelAnchor
+        ? baseLabelAnchor.segmentIndex === segmentIndex
+          ? {
+              x: baseLabelAnchor.position.x + delta.x,
+              y: baseLabelAnchor.position.y + delta.y,
+            }
+          : baseLabelAnchor.position
+        : null;
+      latestLabelAnchor = requestedLabelPosition
+        ? resolveLabelAnchor(getRoutePoints(latestWaypoints), requestedLabelPosition)
+        : null;
 
       previewVisualStyle({
         routeMode: "manual",
         waypoints: latestWaypoints,
-        ...(shouldMoveLabel
-          ? { labelPosition: latestLabelPosition, labelSegmentIndex: segmentIndex }
+        ...(latestLabelAnchor
+          ? {
+              labelPosition: latestLabelAnchor.position,
+              labelSegmentIndex: latestLabelAnchor.segmentIndex,
+            }
           : {}),
       });
     };
@@ -531,8 +569,11 @@ export function V2ConnectorEdge({
         void saveVisualStyle({
           routeMode: "manual",
           waypoints: latestWaypoints,
-          ...(shouldMoveLabel
-            ? { labelPosition: latestLabelPosition, labelSegmentIndex: segmentIndex }
+          ...(latestLabelAnchor
+            ? {
+                labelPosition: latestLabelAnchor.position,
+                labelSegmentIndex: latestLabelAnchor.segmentIndex,
+              }
             : {}),
         });
       }
@@ -550,18 +591,19 @@ export function V2ConnectorEdge({
     event.preventDefault();
     event.stopPropagation();
 
-    let latestWaypoints = waypoints;
+    const baseWaypoints = getEditableWaypoints();
+    const routeBeforeDrag = getRoutePoints(baseWaypoints);
+    let latestWaypoints = baseWaypoints;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const rawPoint = getEventFlowPoint(moveEvent, screenToFlowPosition);
-      const routeBeforeDrag = getRoutePoints(waypoints);
       const previous = routeBeforeDrag[waypointIndex];
       const next = routeBeforeDrag[waypointIndex + 2];
       const { point, snapped } = moveEvent.altKey
         ? { point: rawPoint, snapped: false }
         : snapBendPoint(rawPoint, previous, next);
       setIsSnapActive(snapped);
-      latestWaypoints = waypoints.map((waypoint, index) =>
+      latestWaypoints = baseWaypoints.map((waypoint, index) =>
         index === waypointIndex ? point : waypoint
       );
       previewWaypoints(latestWaypoints);
@@ -585,7 +627,7 @@ export function V2ConnectorEdge({
     if (!canEditGeometry || !connection) return;
     event.preventDefault();
     event.stopPropagation();
-    const next = waypoints.filter((_waypoint, index) => index !== waypointIndex);
+    const next = getEditableWaypoints().filter((_waypoint, index) => index !== waypointIndex);
     previewWaypoints(next);
     void saveWaypoints(next);
   }
@@ -601,13 +643,13 @@ export function V2ConnectorEdge({
     const currentLabelPosition = savedLabelPosition ?? labelPosition;
     const baseWaypoints = getEditableWaypoints();
     const baseRoutePoints = getRoutePoints(baseWaypoints);
-    const segmentIndex =
-      clampSegmentIndex(visualStyle.labelSegmentIndex, baseRoutePoints.length - 1) ??
-      nearestSegmentIndex(baseRoutePoints, currentLabelPosition);
+    const baseLabelAnchor = resolveLabelAnchor(baseRoutePoints, currentLabelPosition);
+    const segmentIndex = baseLabelAnchor?.segmentIndex ?? 0;
     const segmentStart = baseRoutePoints[segmentIndex] ?? baseRoutePoints[0] ?? currentLabelPosition;
     const segmentEnd = baseRoutePoints[segmentIndex + 1] ?? segmentStart;
     const segmentOrientation = getSegmentOrientation(segmentStart, segmentEnd);
     let latestLabelPosition = currentLabelPosition;
+    let latestLabelSegmentIndex = segmentIndex;
     let latestWaypoints = baseWaypoints;
     let didDrag = false;
 
@@ -631,16 +673,18 @@ export function V2ConnectorEdge({
         x: currentLabelPosition.x + delta.x,
         y: currentLabelPosition.y + delta.y,
       };
-      latestLabelPosition = projectPointToSegment(
+      const latestLabelAnchor = resolveLabelAnchor(movedRoutePoints, requestedLabelPosition);
+      latestLabelPosition = latestLabelAnchor?.position ?? projectPointToSegment(
         requestedLabelPosition,
         movedSegmentStart,
         movedSegmentEnd
       );
+      latestLabelSegmentIndex = latestLabelAnchor?.segmentIndex ?? segmentIndex;
       previewVisualStyle({
         routeMode: "manual",
         waypoints: latestWaypoints,
         labelPosition: latestLabelPosition,
-        labelSegmentIndex: segmentIndex,
+        labelSegmentIndex: latestLabelSegmentIndex,
       });
     };
 
@@ -653,7 +697,7 @@ export function V2ConnectorEdge({
           routeMode: "manual",
           waypoints: latestWaypoints,
           labelPosition: latestLabelPosition,
-          labelSegmentIndex: segmentIndex,
+          labelSegmentIndex: latestLabelSegmentIndex,
         });
       }
     };
