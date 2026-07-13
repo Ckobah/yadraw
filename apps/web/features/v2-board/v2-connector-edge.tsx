@@ -37,6 +37,8 @@ const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 const ENDPOINT_GAP = 2;
 const MARKER_FORWARD_LENGTH = 11;
+const MANUAL_ENDPOINT_LEAD_LENGTH = MARKER_FORWARD_LENGTH * 2 + 2;
+const ENDPOINT_ALIGNMENT_TOLERANCE = 0.5;
 
 function markerClearance(marker: V2ConnectionMarker | undefined): number {
   if (marker && marker !== "none") return ENDPOINT_GAP + MARKER_FORWARD_LENGTH;
@@ -52,6 +54,64 @@ function offsetFromPort(point: Point, position: unknown, marker: V2ConnectionMar
     case "bottom": return { x: point.x, y: point.y + distance };
     default: return point;
   }
+}
+
+function getOutwardDirection(position: unknown): Point | null {
+  switch (String(position).toLowerCase()) {
+    case "left": return { x: -1, y: 0 };
+    case "right": return { x: 1, y: 0 };
+    case "top": return { x: 0, y: -1 };
+    case "bottom": return { x: 0, y: 1 };
+    default: return null;
+  }
+}
+
+function getManualEndpointLeadPoint(
+  endpoint: Point,
+  position: unknown,
+  adjacentWaypoint: Point | undefined
+): Point {
+  const direction = getOutwardDirection(position);
+  if (!direction) return endpoint;
+
+  if (adjacentWaypoint) {
+    const delta = {
+      x: adjacentWaypoint.x - endpoint.x,
+      y: adjacentWaypoint.y - endpoint.y,
+    };
+    const outwardDistance = delta.x * direction.x + delta.y * direction.y;
+    const lateralDistance = Math.abs(delta.x * direction.y - delta.y * direction.x);
+    if (
+      outwardDistance >= MARKER_FORWARD_LENGTH &&
+      lateralDistance <= ENDPOINT_ALIGNMENT_TOLERANCE
+    ) {
+      return adjacentWaypoint;
+    }
+  }
+
+  return {
+    x: endpoint.x + direction.x * MANUAL_ENDPOINT_LEAD_LENGTH,
+    y: endpoint.y + direction.y * MANUAL_ENDPOINT_LEAD_LENGTH,
+  };
+}
+
+function buildManualRouteGeometry(
+  sourcePoint: Point,
+  sourcePosition: unknown,
+  targetPoint: Point,
+  targetPosition: unknown,
+  waypoints: Point[]
+): { routePoints: Point[]; editableRoutePoints: Point[] } {
+  const sourceLead = getManualEndpointLeadPoint(sourcePoint, sourcePosition, waypoints[0]);
+  const targetLead = getManualEndpointLeadPoint(
+    targetPoint,
+    targetPosition,
+    waypoints[waypoints.length - 1]
+  );
+  return {
+    routePoints: [sourcePoint, sourceLead, ...waypoints, targetLead, targetPoint],
+    editableRoutePoints: [sourceLead, ...waypoints, targetLead],
+  };
 }
 
 function isFinitePoint(point: V2ConnectionWaypoint): boolean {
@@ -388,7 +448,13 @@ export function V2ConnectorEdge({
       ? materializedAutoWaypoints
       : storedWaypoints;
   const usesManualRoute = visualStyle.routeMode === "manual" && waypoints.length > 0;
-  const routePoints = [visibleSourcePoint, ...waypoints, visibleTargetPoint];
+  const { routePoints, editableRoutePoints } = buildManualRouteGeometry(
+    visibleSourcePoint,
+    sourcePosition,
+    visibleTargetPoint,
+    targetPosition,
+    waypoints
+  );
   const manualPath = buildRoundedManualPath(routePoints, getCornerRadius(visualStyle));
   const savedLabelPosition =
     visualStyle.routeMode === "manual" && visualStyle.labelPosition && isFinitePoint(visualStyle.labelPosition)
@@ -494,7 +560,23 @@ export function V2ConnectorEdge({
   }
 
   function getRoutePoints(nextWaypoints: Point[]): Point[] {
-    return [sourcePoint, ...nextWaypoints, targetPoint];
+    return buildManualRouteGeometry(
+      sourcePoint,
+      sourcePosition,
+      targetPoint,
+      targetPosition,
+      nextWaypoints
+    ).routePoints;
+  }
+
+  function getEditableRoutePoints(nextWaypoints: Point[]): Point[] {
+    return buildManualRouteGeometry(
+      sourcePoint,
+      sourcePosition,
+      targetPoint,
+      targetPosition,
+      nextWaypoints
+    ).editableRoutePoints;
   }
 
   function handleSegmentDoubleClick(
@@ -521,7 +603,7 @@ export function V2ConnectorEdge({
     const startClient = { x: event.clientX, y: event.clientY };
     const startFlow = getEventFlowPoint(event.nativeEvent, screenToFlowPosition);
     const baseWaypoints = getEditableWaypoints();
-    const baseRoutePoints = getRoutePoints(baseWaypoints);
+    const baseRoutePoints = getEditableRoutePoints(baseWaypoints);
     const baseLabelAnchor = savedLabelPosition
       ? resolveLabelAnchor(baseRoutePoints, savedLabelPosition)
       : null;
@@ -592,7 +674,7 @@ export function V2ConnectorEdge({
     event.stopPropagation();
 
     const baseWaypoints = getEditableWaypoints();
-    const routeBeforeDrag = getRoutePoints(baseWaypoints);
+    const routeBeforeDrag = getEditableRoutePoints(baseWaypoints);
     let latestWaypoints = baseWaypoints;
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
@@ -642,7 +724,7 @@ export function V2ConnectorEdge({
     const startClient = { x: event.clientX, y: event.clientY };
     const currentLabelPosition = savedLabelPosition ?? labelPosition;
     const baseWaypoints = getEditableWaypoints();
-    const baseRoutePoints = getRoutePoints(baseWaypoints);
+    const baseRoutePoints = getEditableRoutePoints(baseWaypoints);
     const baseLabelAnchor = resolveLabelAnchor(baseRoutePoints, currentLabelPosition);
     const segmentIndex = baseLabelAnchor?.segmentIndex ?? 0;
     const segmentStart = baseRoutePoints[segmentIndex] ?? baseRoutePoints[0] ?? currentLabelPosition;
@@ -666,7 +748,7 @@ export function V2ConnectorEdge({
           : { x: delta.x, y: 0 };
       latestWaypoints = moveWaypointSegment(baseWaypoints, segmentIndex, segmentDelta);
       setIsSnapActive(true);
-      const movedRoutePoints = getRoutePoints(latestWaypoints);
+      const movedRoutePoints = getEditableRoutePoints(latestWaypoints);
       const movedSegmentStart = movedRoutePoints[segmentIndex] ?? segmentStart;
       const movedSegmentEnd = movedRoutePoints[segmentIndex + 1] ?? movedSegmentStart;
       const requestedLabelPosition = {
@@ -679,7 +761,7 @@ export function V2ConnectorEdge({
         movedSegmentStart,
         movedSegmentEnd
       );
-      latestLabelSegmentIndex = latestLabelAnchor?.segmentIndex ?? segmentIndex;
+      latestLabelSegmentIndex = (latestLabelAnchor?.segmentIndex ?? segmentIndex) + 1;
       previewVisualStyle({
         routeMode: "manual",
         waypoints: latestWaypoints,
@@ -707,8 +789,8 @@ export function V2ConnectorEdge({
   }
 
   const segmentPaths = usesManualRoute
-    ? routePoints.slice(0, -1).flatMap((point, index) => {
-        const nextPoint = routePoints[index + 1];
+    ? editableRoutePoints.slice(0, -1).flatMap((point, index) => {
+        const nextPoint = editableRoutePoints[index + 1];
         return nextPoint ? [buildSegmentPath(point, nextPoint)] : [];
       })
     : [automaticPath];
