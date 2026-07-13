@@ -9,6 +9,8 @@ import {
   type EdgeProps,
 } from "@xyflow/react";
 import {
+  useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
@@ -130,36 +132,36 @@ function snapBendPoint(point: Point, previous: Point | undefined, next: Point | 
   return { point: nextPoint, snapped };
 }
 
-function getAutoRouteWaypoints(params: {
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourcePosition: unknown;
-  targetPosition: unknown;
-}): Point[] {
-  const { sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = params;
-  const sourceSide = String(sourcePosition).toLowerCase();
-  const targetSide = String(targetPosition).toLowerCase();
-  const horizontal =
-    sourceSide === "right" ||
-    sourceSide === "left" ||
-    targetSide === "right" ||
-    targetSide === "left";
+function getAutoRouteWaypoints(path: string): Point[] {
+  const numberPattern = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:e[+-]?\\d+)?";
+  const valuePattern = new RegExp(numberPattern, "gi");
+  const commands = Array.from(path.matchAll(/([MLQ])([^MLQ]*)/gi), (match) => ({
+    type: match[1]?.toUpperCase(),
+    values: Array.from(match[2]?.matchAll(valuePattern) ?? [], (value) => Number(value[0])),
+  }));
+  const waypoints: Point[] = [];
 
-  if (horizontal) {
-    const midX = sourceX + (targetX - sourceX) / 2;
-    return normalizeWaypoints([
-      { x: midX, y: sourceY },
-      { x: midX, y: targetY },
-    ]);
+  for (let index = 1; index < commands.length; index += 1) {
+    const command = commands[index];
+    if (!command) continue;
+    if (command.type === "Q") {
+      const [x, y] = command.values;
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        waypoints.push({ x, y });
+      }
+      continue;
+    }
+    const nextCommand = commands[index + 1];
+    const isFinalEndpoint = index === commands.length - 1;
+    const isRoundedCornerApproach = nextCommand?.type === "Q";
+    if (command.type === "L" && !isFinalEndpoint && !isRoundedCornerApproach) {
+      const [x, y] = command.values;
+      if (typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y)) {
+        waypoints.push({ x, y });
+      }
+    }
   }
-
-  const midY = sourceY + (targetY - sourceY) / 2;
-  return normalizeWaypoints([
-    { x: sourceX, y: midY },
-    { x: targetX, y: midY },
-  ]);
+  return waypoints.slice(0, MAX_WAYPOINTS);
 }
 
 function buildRoundedManualPath(points: Point[], radius: number): string {
@@ -340,6 +342,7 @@ export function V2ConnectorEdge({
 }: EdgeProps<V2ConnectorEdgeModel>) {
   const { screenToFlowPosition } = useReactFlow();
   const [isSnapActive, setIsSnapActive] = useState(false);
+  const materializedRouteRef = useRef<string | null>(null);
   const connection = data?.connection;
   const visualStyle = connection?.visualStyle ?? {};
   const storedWaypoints = getWaypoints(visualStyle);
@@ -369,14 +372,7 @@ export function V2ConnectorEdge({
   });
   const automaticPath = automaticPathResult[0];
   const automaticLabel = { x: automaticPathResult[1], y: automaticPathResult[2] };
-  const materializedAutoWaypoints = getAutoRouteWaypoints({
-    sourceX: visibleSourcePoint.x,
-    sourceY: visibleSourcePoint.y,
-    targetX: visibleTargetPoint.x,
-    targetY: visibleTargetPoint.y,
-    sourcePosition,
-    targetPosition,
-  });
+  const materializedAutoWaypoints = getAutoRouteWaypoints(automaticPath);
   const waypoints =
     visualStyle.routeMode === "manual" && storedWaypoints.length === 0
       ? materializedAutoWaypoints
@@ -397,6 +393,35 @@ export function V2ConnectorEdge({
     strokeWidth,
     strokeLinecap: "butt",
   };
+
+  const materializedRouteKey =
+    connection &&
+    isVisualEditing &&
+    visualStyle.routeMode === "manual" &&
+    storedWaypoints.length === 0 &&
+    materializedAutoWaypoints.length > 0
+      ? `${connection.id}:${JSON.stringify(materializedAutoWaypoints)}`
+      : null;
+
+  useEffect(() => {
+    if (!connection || !materializedRouteKey) {
+      materializedRouteRef.current = null;
+      return;
+    }
+    if (materializedRouteRef.current === materializedRouteKey) return;
+    materializedRouteRef.current = materializedRouteKey;
+    void Promise.resolve(
+      data?.onSaveVisualStyle?.(connection.id, {
+        ...visualStyle,
+        routeMode: "manual",
+        waypoints: materializedAutoWaypoints,
+      })
+    ).catch(() => {
+      if (materializedRouteRef.current === materializedRouteKey) {
+        materializedRouteRef.current = null;
+      }
+    });
+  }, [connection, data, materializedAutoWaypoints, materializedRouteKey, visualStyle]);
 
   function previewVisualStyle(patch: V2ConnectionVisualStyle) {
     if (!connection) return;
