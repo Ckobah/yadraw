@@ -960,7 +960,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   return (
     <article
       ref={articleRef}
-      className={`v2CardNode${isLocked ? " v2CardNodeLocked" : ""}`}
+      className={`v2CardNode${isLocked ? " v2CardNodeLocked nopan" : ""}`}
       onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",
