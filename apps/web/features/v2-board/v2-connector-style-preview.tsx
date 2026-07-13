@@ -18,19 +18,19 @@ const DEFAULT_STYLE = {
 };
 
 function MarkerShape({ marker }: { marker: V2ConnectionMarker }) {
-  if (marker === "circle") return <circle cx="6" cy="6" r="3.2" fill="context-stroke" />;
-  if (marker === "square") return <rect x="2.8" y="2.8" width="6.4" height="6.4" rx="1" fill="context-stroke" />;
-  if (marker === "triangle") return <path d="M 1.5 1.5 L 10.5 6 L 1.5 10.5 Z" fill="context-stroke" />;
+  if (marker === "circle") return <circle cx="7" cy="7" r="3.5" fill="context-stroke" />;
+  if (marker === "square") return <rect x="3" y="3" width="8" height="8" rx="1" fill="context-stroke" />;
+  if (marker === "triangle") return <path d="M 0 0 L 14 7 L 0 14 Z" fill="context-stroke" />;
   if (marker === "reverseArrow") {
-    return <path d="M 10 1.5 L 2 6 L 10 10.5 Z" fill="context-stroke" />;
+    return <path d="M 14 0 L 0 7 L 14 14 Z" fill="context-stroke" />;
   }
-  return <path d="M 2 1.5 L 10 6 L 2 10.5 Z" fill="context-stroke" />;
+  return <path d="M 0 0 L 14 7 L 0 14 Z" fill="context-stroke" />;
 }
 
 function markerReferenceX(marker: V2ConnectionMarker): number {
-  if (marker === "reverseArrow") return 2;
-  if (marker === "circle" || marker === "square") return 6;
-  return 10;
+  if (marker === "reverseArrow") return 14;
+  if (marker === "circle" || marker === "square") return 7;
+  return 0;
 }
 
 export function V2ConnectorStylePreview({ style, className = "", label }: Props) {
@@ -52,12 +52,12 @@ export function V2ConnectorStylePreview({ style, className = "", label }: Props)
       <svg viewBox="0 0 122 40" role="img" aria-label={label ?? "Connector preview"}>
         <defs>
           {markerStart !== "none" ? (
-            <marker id={startId} viewBox="0 0 12 12" refX={markerReferenceX(markerStart)} refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+            <marker id={startId} viewBox="0 0 14 14" refX={markerReferenceX(markerStart)} refY="7" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
               <MarkerShape marker={markerStart} />
             </marker>
           ) : null}
           {markerEnd !== "none" ? (
-            <marker id={endId} viewBox="0 0 12 12" refX={markerReferenceX(markerEnd)} refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+            <marker id={endId} viewBox="0 0 14 14" refX={markerReferenceX(markerEnd)} refY="7" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
               <MarkerShape marker={markerEnd} />
             </marker>
           ) : null}

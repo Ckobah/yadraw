@@ -2610,15 +2610,15 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           <defs>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.arrow}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="12"
-              markerHeight="12"
+              viewBox="0 0 14 14"
+              refX="0"
+              refY="7"
+              markerWidth="14"
+              markerHeight="14"
               markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
-              <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
+              <path d="M 0 0 L 14 7 L 0 14 z" fill="context-stroke" />
             </marker>
             <marker
               id={V2_CONNECTOR_MARKER_IDS.reverseArrow}

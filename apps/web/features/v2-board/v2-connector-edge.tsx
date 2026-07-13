@@ -34,8 +34,10 @@ const DUPLICATE_POINT_DISTANCE = 6;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 const ENDPOINT_GAP = 2;
+const ARROW_LENGTH = 14;
 
 function markerClearance(marker: V2ConnectionMarker | undefined): number {
+  if (marker === "arrow") return ENDPOINT_GAP + ARROW_LENGTH;
   if (marker === "circle" || marker === "square") return 4;
   return ENDPOINT_GAP;
 }
@@ -394,6 +396,7 @@ export function V2ConnectorEdge({
   const edgeStyle: CSSProperties = {
     stroke: selected ? "var(--yd-graph-connector-selected)" : getStrokeColor(visualStyle),
     strokeWidth,
+    strokeLinecap: "butt",
   };
 
   function previewVisualStyle(patch: V2ConnectionVisualStyle) {
