@@ -16,10 +16,17 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { V2Connection, V2ConnectionMarker, V2ConnectionVisualStyle, V2ConnectionWaypoint } from "@yadraw/shared";
+import type {
+  V2Connection,
+  V2ConnectionMarker,
+  V2ConnectionType,
+  V2ConnectionVisualStyle,
+  V2ConnectionWaypoint
+} from "@yadraw/shared";
 
 export type V2ConnectorEdgeData = {
   connection: V2Connection;
+  connectionType?: V2ConnectionType | null;
   isVisualEditing?: boolean;
   onSelect?: (connectionId: string) => void;
   onOpenEditor?: (connectionId: string) => void;

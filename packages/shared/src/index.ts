@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./v2.js";
+export * from "./v2-quantitative.js";
 
 export const uuidSchema = z.string().uuid();
 

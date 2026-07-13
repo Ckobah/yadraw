@@ -30,6 +30,7 @@ import type {
   V2BoardDetail,
   V2Card,
   V2CardAttachment,
+  V2CalculationEvaluation,
   V2Connection,
   V2ConnectionType,
   V2ConnectionVisualStyle,
@@ -37,6 +38,10 @@ import type {
   V2CardVisualStyle,
   V2DryRunResult,
   V2LinkedFieldBinding,
+} from "@yadraw/shared";
+import {
+  buildV2ConnectionDefaultData,
+  getV2ConnectionSemanticLabel
 } from "@yadraw/shared";
 import {
   V2_CARD_MIN_SIZE,
@@ -67,6 +72,7 @@ import {
   deleteV2Card,
   duplicateV2Card,
   runV2BoardDryRun,
+  evaluateV2BoardCalculations,
   listV2LinkedFieldBindings,
   createV2LinkedFieldBinding,
   updateV2LinkedFieldBinding,
@@ -97,6 +103,7 @@ import type { SaveStatus } from "./v2-card-inspector-helpers";
 
 type Props = {
   boardDetail: V2BoardDetail;
+  initialCalculationEvaluation: V2CalculationEvaluation | null;
   onSaveStatusChange?: (status: SaveStatus) => void;
 };
 
@@ -212,20 +219,6 @@ function isValidHandle(
   );
 }
 
-function getConnectionEdgeLabel(connection: V2Connection): string | undefined {
-  if (connection.title?.trim()) return connection.title.trim();
-  const quantity = connection.data?.quantity;
-  const unit = connection.data?.unit;
-  if (
-    (typeof quantity === "number" || typeof quantity === "string") &&
-    String(quantity).trim()
-  ) {
-    const unitText = typeof unit === "string" ? unit.trim() : "";
-    return unitText ? `${quantity} ${unitText}` : String(quantity);
-  }
-  return connection.label || undefined;
-}
-
 type V2StyledEdge = Edge<V2ConnectorEdgeData> & {
   pathOptions?: {
     borderRadius?: number;
@@ -283,7 +276,10 @@ function applyConnectionTypeStyle(
   };
 }
 
-function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
+function buildConnectionEdge(
+  connection: V2Connection,
+  connectionType?: V2ConnectionType | null
+): V2StyledEdge {
   const visualStyle = connection.visualStyle ?? {};
   return {
     id: connection.id,
@@ -291,12 +287,13 @@ function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
     target: connection.targetCardId,
     sourceHandle: connection.sourcePortKey,
     targetHandle: connection.targetPortKey,
-    label: getConnectionEdgeLabel(connection),
+    label: getV2ConnectionSemanticLabel(connection, connectionType),
     type: "v2Connector",
     deletable: false,
     reconnectable: true,
     data: {
       connection,
+      connectionType,
     },
     animated: false,
     markerStart: getConnectionMarkerId(visualStyle.markerStart),
@@ -316,13 +313,20 @@ function buildConnectionEdge(connection: V2Connection): V2StyledEdge {
   };
 }
 
-function applyConnectionToEdge(edge: Edge, connection: V2Connection): V2StyledEdge {
+function applyConnectionToEdge(
+  edge: Edge,
+  connection: V2Connection,
+  connectionType?: V2ConnectionType | null
+): V2StyledEdge {
+  const resolvedConnectionType = connectionType ??
+    (edge.data as V2ConnectorEdgeData | undefined)?.connectionType;
   return {
     ...edge,
-    ...buildConnectionEdge(connection),
+    ...buildConnectionEdge(connection, resolvedConnectionType),
     data: {
       ...(edge.data ?? {}),
       connection,
+      connectionType: resolvedConnectionType,
     },
     selected: edge.selected,
   };
@@ -335,6 +339,7 @@ function isSameConnectionEndpoint(
     targetCardId: string;
     sourcePortKey: string;
     targetPortKey: string;
+    connectionTypeId?: string | null;
     type?: string;
   }
 ): boolean {
@@ -343,7 +348,9 @@ function isSameConnectionEndpoint(
     connection.targetCardId === input.targetCardId &&
     connection.sourcePortKey === input.sourcePortKey &&
     connection.targetPortKey === input.targetPortKey &&
-    connection.type === (input.type ?? "data")
+    (input.connectionTypeId
+      ? connection.connectionTypeId === input.connectionTypeId
+      : connection.connectionTypeId === null && connection.type === (input.type ?? "data"))
   );
 }
 
@@ -352,6 +359,7 @@ function getConnectionEndpointKey(input: {
   targetCardId: string;
   sourcePortKey: string;
   targetPortKey: string;
+  connectionTypeId?: string | null;
   type?: string;
 }): string {
   return [
@@ -359,7 +367,7 @@ function getConnectionEndpointKey(input: {
     input.sourcePortKey,
     input.targetCardId,
     input.targetPortKey,
-    input.type ?? "data",
+    input.connectionTypeId ?? `legacy:${input.type ?? "data"}`,
   ].join("::");
 }
 
@@ -427,7 +435,11 @@ function getMiniMapNodeColor(node: V2CardNode): string {
   return getV2CardTypeAccentToken(node.data.cardType);
 }
 
-export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
+export function V2BoardCanvas({
+  boardDetail,
+  initialCalculationEvaluation,
+  onSaveStatusChange
+}: Props) {
   const {
     board,
     cards,
@@ -438,9 +450,20 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const [connectionTypes, setConnectionTypes] = useState<V2ConnectionType[]>(initialConnectionTypes);
+  const [calculationEvaluation, setCalculationEvaluation] =
+    useState<V2CalculationEvaluation | null>(initialCalculationEvaluation);
+  const [calculationLoading, setCalculationLoading] = useState(
+    initialCalculationEvaluation === null
+  );
+  const [calculationError, setCalculationError] = useState<string | null>(null);
+  const [calculationRefreshNonce, setCalculationRefreshNonce] = useState(0);
   const [activeConnectionTypeId, setActiveConnectionTypeId] = useState<string | null>(null);
   const [connectionTypePreferenceLoaded, setConnectionTypePreferenceLoaded] = useState(false);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
+  const connectionTypeMap = useMemo(
+    () => new Map(connectionTypes.map((connectionType) => [connectionType.id, connectionType])),
+    [connectionTypes]
+  );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   useEffect(() => {
@@ -498,10 +521,22 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       )
     );
 
-    const edges: Edge[] = connections.map((conn: V2Connection) => buildConnectionEdge(conn));
+    const edges: Edge[] = connections.map((conn: V2Connection) =>
+      buildConnectionEdge(
+        conn,
+        conn.connectionTypeId ? connectionTypeMap.get(conn.connectionTypeId) : null
+      )
+    );
 
     return { nodes, edges };
-  }, [cards, connections, cardTypeMap, board.workspaceId, initialCardAttachmentCounts]);
+  }, [
+    cards,
+    connections,
+    cardTypeMap,
+    connectionTypeMap,
+    board.workspaceId,
+    initialCardAttachmentCounts
+  ]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -525,6 +560,22 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   const pendingConnectionKeysRef = useRef(new Set<string>());
   const cardAttachmentsCacheRef = useRef(cardAttachmentsByCardId);
   const attachmentRequestsRef = useRef(new Map<string, Promise<V2CardAttachment[]>>());
+
+  useEffect(() => {
+    const connectionById = new Map(
+      connectionRecords.map((connection) => [connection.id, connection])
+    );
+    setEdges((current) =>
+      current.map((edge) => {
+        const connection = connectionById.get(edge.id);
+        if (!connection) return edge;
+        const connectionType = connection.connectionTypeId
+          ? connectionTypeMap.get(connection.connectionTypeId) ?? null
+          : null;
+        return applyConnectionToEdge(edge, connection, connectionType);
+      })
+    );
+  }, [connectionRecords, connectionTypeMap, setEdges]);
 
   const handleAttachmentsChange = useCallback(
     (cardId: string, attachments: V2CardAttachment[]) => {
@@ -880,6 +931,66 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       ),
     [nodes]
   );
+  const calculationInputSignature = useMemo(
+    () =>
+      JSON.stringify({
+        cards: boardCardPreviewSignature,
+        connections: connectionRecords.map((connection) => ({
+          id: connection.id,
+          connectionTypeId: connection.connectionTypeId,
+          sourceCardId: connection.sourceCardId,
+          targetCardId: connection.targetCardId,
+          sourcePortKey: connection.sourcePortKey,
+          targetPortKey: connection.targetPortKey,
+          data: connection.data,
+          status: connection.status,
+          updatedAt: connection.updatedAt
+        })),
+        connectionTypes: connectionTypes.map((connectionType) => ({
+          id: connectionType.id,
+          schema: connectionType.schema,
+          updatedAt: connectionType.updatedAt
+        })),
+        refresh: calculationRefreshNonce
+      }),
+    [boardCardPreviewSignature, calculationRefreshNonce, connectionRecords, connectionTypes]
+  );
+  const lastCalculationSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      lastCalculationSignatureRef.current === null &&
+      initialCalculationEvaluation !== null
+    ) {
+      lastCalculationSignatureRef.current = calculationInputSignature;
+      return;
+    }
+    if (lastCalculationSignatureRef.current === calculationInputSignature) return;
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      lastCalculationSignatureRef.current = calculationInputSignature;
+      setCalculationLoading(true);
+      setCalculationError(null);
+      void evaluateV2BoardCalculations(board.id)
+        .then((evaluation) => {
+          if (!controller.signal.aborted) setCalculationEvaluation(evaluation);
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            setCalculationError("Calculated values are temporarily unavailable.");
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setCalculationLoading(false);
+        });
+    }, 450);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [board.id, calculationInputSignature, initialCalculationEvaluation]);
   const assistantContext = useMemo<V2BoardAssistantContext>(
     () => ({
       board,
@@ -1163,6 +1274,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       setSaveStatus("saving");
       try {
         await updateV2CardData(cardId, data);
+        setCalculationRefreshNonce((current) => current + 1);
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to save card data:", err);
@@ -2301,6 +2413,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         connectionTypeId: activeConnectionType?.id ?? null,
         type: "data",
         label: connectionInput.sourcePortKey,
+        data: buildV2ConnectionDefaultData(activeConnectionType),
         visualStyle: activeConnectionType?.defaultVisualStyle ?? {},
       };
       const duplicate = connectionRecordsRef.current.find((record) =>
@@ -2328,7 +2441,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         const created = await createV2Connection(board.id, createInput);
 
         // Add the new edge from the API response
-        const newEdge: Edge = buildConnectionEdge(created);
+        const newEdge: Edge = buildConnectionEdge(created, activeConnectionType);
         setEdges((prev) => [...prev, newEdge]);
         setConnectionRecords((prev) => [...prev, created]);
         setSaveStatus("saved");
@@ -2898,6 +3011,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           linkedFieldBindings={linkedFieldBindings}
           linkedFieldBindingsLoading={linkedFieldBindingsLoading}
           linkedFieldBindingsError={linkedFieldBindingsError}
+          calculationEvaluation={calculationEvaluation}
+          calculationLoading={calculationLoading}
+          calculationError={calculationError}
           saveStatus={saveStatus}
           pendingAction={pendingCardAction?.cardId === inspectedCard.id ? pendingCardAction.action : null}
           actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}

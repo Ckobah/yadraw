@@ -9,6 +9,10 @@ import type {
   V2ConnectionVisualStyle,
 } from "@yadraw/shared";
 import {
+  buildV2EffectiveConnectionData,
+  validateV2ConnectionData
+} from "@yadraw/shared";
+import {
   createDataDraftFromRecord,
   createLocalFieldId,
   createSchemaDraftFromData,
@@ -173,6 +177,10 @@ export function V2ConnectorInspector({
     currentDataSignature !== initialDataSignature ||
     (hasSchemaFields && currentSchemaSignature !== initialSchemaSignature);
   const connectionAppearance = typeAppearance(connection.visualStyle);
+  const relationshipValidation = validateV2ConnectionData(
+    connectionType,
+    buildV2EffectiveConnectionData(connectionType, connection.data)
+  );
   const hasCustomAppearance = Boolean(
     connectionType &&
       JSON.stringify(connectionAppearance) !==
@@ -471,6 +479,9 @@ export function V2ConnectorInspector({
       <input
         className="v2InspectorDataValue"
         type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+        min={field.type === "number" ? field.numberConstraints?.min : undefined}
+        max={field.type === "number" ? field.numberConstraints?.max : undefined}
+        step={field.type === "number" && field.numberConstraints?.integer ? 1 : undefined}
         value={field.value}
         placeholder={field.placeholder ?? (field.type === "number" ? "0" : "Value")}
         aria-label={`${field.label} value`}
@@ -509,6 +520,11 @@ export function V2ConnectorInspector({
       </header>
 
       <div className="v2InspectorContent">
+        {connection.status === "draft" || relationshipValidation.validity !== "valid" ? (
+          <p className="v2ConnectorDraftNotice" role="status">
+            Complete the required relationship fields to include this connector in calculations.
+          </p>
+        ) : null}
         <section className="v2InspectorHero v2InspectorEditor">
           <div className="v2InspectorField">
             <label htmlFor={`connector-title-${connection.id}`}>Name</label>
@@ -547,9 +563,19 @@ export function V2ConnectorInspector({
         <section className="v2InspectorSection">
           <h3>Route</h3>
           <div className="v2ConnectorRouteFlow">
-            <strong>{cardTitle(sourceCard, connection.sourceCardId)}</strong>
+            <strong>
+              {cardTitle(sourceCard, connection.sourceCardId)}
+              {connectionType?.schema.semantics?.sourceRole ? (
+                <small>{connectionType.schema.semantics.sourceRole}</small>
+              ) : null}
+            </strong>
             <span aria-hidden="true">→</span>
-            <strong>{cardTitle(targetCard, connection.targetCardId)}</strong>
+            <strong>
+              {cardTitle(targetCard, connection.targetCardId)}
+              {connectionType?.schema.semantics?.targetRole ? (
+                <small>{connectionType.schema.semantics.targetRole}</small>
+              ) : null}
+            </strong>
           </div>
           <div className="v2ConnectorPortPair"><span>{connection.sourcePortKey}</span><span>{connection.targetPortKey}</span></div>
         </section>

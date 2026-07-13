@@ -5,6 +5,9 @@ import type {
   V2CardTypeFieldSchema,
   V2CardTypeFieldType,
   V2CardTypeSchema,
+  V2ConnectionTypeSchema,
+  V2ConnectionTypeFieldSchema,
+  V2NumberConstraints,
 } from "@yadraw/shared";
 
 export type V2CardTypeSchemaFieldDraft = {
@@ -16,6 +19,8 @@ export type V2CardTypeSchemaFieldDraft = {
   placeholder: string;
   description: string;
   optionsText: string;
+  defaultValue?: unknown;
+  numberConstraints?: V2NumberConstraints;
 };
 
 type V2CardTypeSchemaEditorProps = {
@@ -68,7 +73,7 @@ function createFieldId(): string {
 }
 
 export function createV2CardTypeSchemaFieldDrafts(
-  schema: V2CardTypeSchema | null | undefined
+  schema: V2CardTypeSchema | V2ConnectionTypeSchema | null | undefined
 ): V2CardTypeSchemaFieldDraft[] {
   return (schema?.fields ?? []).map((field) => ({
     id: `schema-${field.key}`,
@@ -79,6 +84,8 @@ export function createV2CardTypeSchemaFieldDrafts(
     placeholder: field.placeholder ?? "",
     description: field.description ?? "",
     optionsText: optionsToText(field),
+    defaultValue: field.defaultValue,
+    numberConstraints: (field as Partial<V2ConnectionTypeFieldSchema>).numberConstraints,
   }));
 }
 
@@ -126,6 +133,7 @@ export function buildV2CardTypeSchemaFromDrafts(
       ...(field.placeholder.trim() ? { placeholder: field.placeholder.trim() } : {}),
       ...(field.description.trim() ? { description: field.description.trim() } : {}),
       ...(field.type === "select" ? { options: parseOptions(field.optionsText) } : {}),
+      ...(field.defaultValue !== undefined ? { defaultValue: field.defaultValue } : {}),
     });
   }
 
@@ -170,6 +178,8 @@ export function V2CardTypeSchemaEditor({
         placeholder: "",
         description: "",
         optionsText: "",
+        defaultValue: undefined,
+        numberConstraints: undefined,
       },
     ]);
   }

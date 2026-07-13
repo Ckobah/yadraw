@@ -27,7 +27,7 @@ export const v2ViewportSchema = z.object({
 
 export const v2CardStatusSchema = z.enum(["draft", "active", "archived"]);
 export const v2PortDirectionSchema = z.enum(["input", "output"]);
-export const v2ConnectionStatusSchema = z.enum(["active", "disabled"]);
+export const v2ConnectionStatusSchema = z.enum(["draft", "active", "disabled"]);
 export const v2WorkspaceRoleSchema = z.enum(["owner", "admin", "editor", "viewer", "service"]);
 export const v2CardTypeFieldTypeSchema = z.enum(["text", "number", "boolean", "select", "json", "date"]);
 export const v2ConnectionTypeFieldTypeSchema = z.enum(["text", "number", "boolean", "select", "json", "date"]);
@@ -204,6 +204,27 @@ export const v2ConnectionTypeFieldOptionSchema = z.object({
   label: z.string().trim().min(1)
 });
 
+export const v2NumberConstraintsSchema = z
+  .object({
+    min: z.number().finite().optional(),
+    max: z.number().finite().optional(),
+    integer: z.boolean().optional()
+  })
+  .strict()
+  .superRefine((constraints, context) => {
+    if (
+      constraints.min !== undefined &&
+      constraints.max !== undefined &&
+      constraints.min > constraints.max
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["max"],
+        message: "Maximum must be greater than or equal to minimum"
+      });
+    }
+  });
+
 export const v2ConnectionTypeFieldSchema = z
   .object({
     key: z.string().trim().min(1),
@@ -213,7 +234,8 @@ export const v2ConnectionTypeFieldSchema = z
     description: z.string().optional(),
     placeholder: z.string().optional(),
     defaultValue: z.unknown().optional(),
-    options: z.array(v2ConnectionTypeFieldOptionSchema).optional()
+    options: z.array(v2ConnectionTypeFieldOptionSchema).optional(),
+    numberConstraints: v2NumberConstraintsSchema.optional()
   })
   .strict()
   .transform((field) => ({
@@ -221,9 +243,46 @@ export const v2ConnectionTypeFieldSchema = z
     label: field.label ?? field.key
   }));
 
+export const v2ConnectionQuantitySemanticsSchema = z
+  .object({
+    valueField: z.string().trim().min(1),
+    unitField: z.string().trim().min(1).optional(),
+    fixedUnitCode: z.string().trim().regex(/^[a-z][a-z0-9._/-]*$/).optional(),
+    basis: z.enum(["absolute", "per_target"]),
+    targetMultiplierField: z.string().trim().min(1).optional(),
+    aggregation: z.literal("sum").default("sum")
+  })
+  .strict()
+  .superRefine((quantity, context) => {
+    if (Boolean(quantity.unitField) === Boolean(quantity.fixedUnitCode)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["unitField"],
+        message: "Use exactly one unit field or fixed unit code"
+      });
+    }
+    if (quantity.basis === "absolute" && quantity.targetMultiplierField) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["targetMultiplierField"],
+        message: "Absolute quantities cannot use a target multiplier field"
+      });
+    }
+  });
+
+export const v2ConnectionTypeSemanticsSchema = z
+  .object({
+    version: z.literal(1).default(1),
+    sourceRole: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
+    targetRole: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
+    quantity: v2ConnectionQuantitySemanticsSchema.optional()
+  })
+  .strict();
+
 export const v2ConnectionTypeDefinitionSchema = z
   .object({
-    fields: z.array(v2ConnectionTypeFieldSchema).default([])
+    fields: z.array(v2ConnectionTypeFieldSchema).default([]),
+    semantics: v2ConnectionTypeSemanticsSchema.optional()
   })
   .strict()
   .superRefine((schema, context) => {
@@ -237,6 +296,29 @@ export const v2ConnectionTypeDefinitionSchema = z
         });
       }
       seenKeys.add(field.key);
+    }
+
+    const quantity = schema.semantics?.quantity;
+    if (!quantity) return;
+
+    const valueField = schema.fields.find((field) => field.key === quantity.valueField);
+    if (!valueField || valueField.type !== "number") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["semantics", "quantity", "valueField"],
+        message: "Quantity value field must reference a number field"
+      });
+    }
+
+    if (quantity.unitField) {
+      const unitField = schema.fields.find((field) => field.key === quantity.unitField);
+      if (!unitField || (unitField.type !== "text" && unitField.type !== "select")) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["semantics", "quantity", "unitField"],
+          message: "Quantity unit field must reference a text or choice field"
+        });
+      }
     }
   });
 
@@ -675,6 +757,7 @@ export const v2CreateConnectionBodySchema = z.object({
   type: z.string().trim().min(1).default("data"),
   label: z.string().default(""),
   title: z.string().trim().min(1).optional(),
+  data: v2JsonObjectSchema.optional(),
   visualStyle: v2ConnectionVisualStyleSchema.optional()
 });
 
@@ -749,6 +832,121 @@ export const v2DryRunResultSchema = z.object({
   steps: z.array(v2DryRunStepSchema),
   warnings: z.array(z.string())
 });
+
+export const v2SemanticIssueSchema = z.object({
+  code: z.string().trim().min(1),
+  path: z.string(),
+  message: z.string().trim().min(1)
+});
+
+export const v2SemanticGraphNodeSchema = z.object({
+  id: v2UuidSchema,
+  typeId: v2UuidSchema,
+  typeKey: z.string().trim().min(1),
+  typeName: z.string().trim().min(1),
+  title: z.string().trim().min(1),
+  description: z.string(),
+  status: v2CardStatusSchema,
+  data: v2JsonObjectSchema
+});
+
+export const v2SemanticQuantityFactSchema = z.object({
+  value: z.number().finite(),
+  unitCode: z.string().trim().min(1),
+  basis: z.enum(["absolute", "per_target"]),
+  targetMultiplierField: z.string().trim().min(1).optional()
+});
+
+export const v2SemanticGraphRelationSchema = z.object({
+  id: v2UuidSchema,
+  predicate: z.string().trim().min(1),
+  connectionTypeId: v2UuidSchema.nullable(),
+  connectionTypeName: z.string().trim().min(1),
+  title: z.string().nullable(),
+  description: z.string().nullable(),
+  status: v2ConnectionStatusSchema,
+  source: z.object({
+    cardId: v2UuidSchema,
+    role: z.string().trim().min(1),
+    portKey: z.string().trim().min(1)
+  }),
+  target: z.object({
+    cardId: v2UuidSchema,
+    role: z.string().trim().min(1),
+    portKey: z.string().trim().min(1)
+  }),
+  data: v2JsonObjectSchema,
+  quantity: v2SemanticQuantityFactSchema.nullable(),
+  validity: z.enum(["valid", "incomplete", "invalid"]),
+  issues: z.array(v2SemanticIssueSchema)
+});
+
+export const v2SemanticGraphSchema = z.object({
+  schemaVersion: z.literal(1),
+  boardId: v2UuidSchema,
+  graphRevision: z.string().trim().min(1),
+  generatedAt: v2TimestampSchema,
+  nodes: z.array(v2SemanticGraphNodeSchema),
+  relations: z.array(v2SemanticGraphRelationSchema)
+});
+
+export const v2CalculationInputSchema = z.object({
+  kind: z.enum(["connection_field", "card_field", "override", "default"]),
+  id: v2UuidSchema,
+  path: z.string().trim().min(1),
+  value: z.unknown()
+});
+
+export const v2CalculationResultSchema = z.object({
+  id: z.string().trim().min(1),
+  metric: z.literal("required_quantity"),
+  sourceCardId: v2UuidSchema,
+  targetCardId: v2UuidSchema,
+  connectionId: v2UuidSchema,
+  value: z.number().finite(),
+  unitCode: z.string().trim().min(1),
+  formulaId: z.literal("bom.required.v1"),
+  inputs: z.array(v2CalculationInputSchema)
+});
+
+export const v2CalculationTotalSchema = z.object({
+  cardId: v2UuidSchema,
+  value: z.number().finite(),
+  unitCode: z.string().trim().min(1),
+  resultIds: z.array(z.string().trim().min(1))
+});
+
+export const v2CalculationWarningSchema = z.object({
+  code: z.string().trim().min(1),
+  message: z.string().trim().min(1),
+  cardId: v2UuidSchema.optional(),
+  connectionId: v2UuidSchema.optional()
+});
+
+export const v2CalculationEvaluationSchema = z.object({
+  schemaVersion: z.literal(1),
+  boardId: v2UuidSchema,
+  graphRevision: z.string().trim().min(1),
+  computedAt: v2TimestampSchema,
+  formulaVersion: z.literal("bom.required.v1"),
+  results: z.array(v2CalculationResultSchema),
+  totals: z.array(v2CalculationTotalSchema),
+  warnings: z.array(v2CalculationWarningSchema)
+});
+
+export const v2EvaluateCalculationsBodySchema = z
+  .object({
+    overrides: z
+      .array(
+        z.object({
+          cardId: v2UuidSchema,
+          patch: v2JsonObjectSchema
+        }).strict()
+      )
+      .max(100)
+      .default([])
+  })
+  .strict();
 
 export const v2ApiContracts = {
   bootstrapSession: {
@@ -914,6 +1112,19 @@ export const v2ApiContracts = {
     body: v2RunDryRunBodySchema,
     response: v2DryRunResultSchema
   },
+  getSemanticGraph: {
+    method: "GET",
+    path: "/v2/boards/{boardId}/semantic-graph",
+    params: v2RunDryRunParamsSchema,
+    response: v2SemanticGraphSchema
+  },
+  evaluateBoardCalculations: {
+    method: "POST",
+    path: "/v2/boards/{boardId}/calculations/evaluate",
+    params: v2RunDryRunParamsSchema,
+    body: v2EvaluateCalculationsBodySchema,
+    response: v2CalculationEvaluationSchema
+  },
   listLinkedFieldBindings: {
     method: "GET",
     path: "/v2/boards/{boardId}/field-bindings",
@@ -961,6 +1172,9 @@ export const V2ConnectionAttachmentSchema = v2ConnectionAttachmentSchema;
 export const V2ConnectionVisualStyleSchema = v2ConnectionVisualStyleSchema;
 export const V2ConnectionTypeFieldSchema = v2ConnectionTypeFieldSchema;
 export const V2ConnectionTypeSchema = v2ConnectionTypeSchema;
+export const V2ConnectionTypeSemanticsSchema = v2ConnectionTypeSemanticsSchema;
+export const V2CalculationEvaluationSchema = v2CalculationEvaluationSchema;
+export const V2SemanticGraphSchema = v2SemanticGraphSchema;
 export const V2LinkedFieldBindingSchema = v2LinkedFieldBindingSchema;
 export const V2CardTypeDefinitionSchema = v2CardTypeDefinitionSchema;
 export const V2ConnectionTypeDefinitionSchema = v2ConnectionTypeDefinitionSchema;
@@ -988,6 +1202,9 @@ export type V2ConnectionTypeFieldType = z.infer<typeof v2ConnectionTypeFieldType
 export type V2ConnectionTypeFieldOption = z.infer<typeof v2ConnectionTypeFieldOptionSchema>;
 export type V2ConnectionTypeFieldSchema = z.infer<typeof v2ConnectionTypeFieldSchema>;
 export type V2ConnectionTypeSchema = z.infer<typeof v2ConnectionTypeDefinitionSchema>;
+export type V2NumberConstraints = z.infer<typeof v2NumberConstraintsSchema>;
+export type V2ConnectionQuantitySemantics = z.infer<typeof v2ConnectionQuantitySemanticsSchema>;
+export type V2ConnectionTypeSemantics = z.infer<typeof v2ConnectionTypeSemanticsSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardTypePortInput = z.infer<typeof v2CardTypePortInputSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
@@ -1039,6 +1256,18 @@ export type V2LinkedFieldBindingListResponse = z.infer<typeof v2LinkedFieldBindi
 export type V2RunDryRunInput = z.infer<typeof v2RunDryRunBodySchema>;
 export type V2DryRunStep = z.infer<typeof v2DryRunStepSchema>;
 export type V2DryRunResult = z.infer<typeof v2DryRunResultSchema>;
+export type V2SemanticIssue = z.infer<typeof v2SemanticIssueSchema>;
+export type V2SemanticGraphNode = z.infer<typeof v2SemanticGraphNodeSchema>;
+export type V2SemanticQuantityFact = z.infer<typeof v2SemanticQuantityFactSchema>;
+export type V2SemanticGraphRelation = z.infer<typeof v2SemanticGraphRelationSchema>;
+export type V2SemanticGraph = z.infer<typeof v2SemanticGraphSchema>;
+export type V2CalculationInput = z.infer<typeof v2CalculationInputSchema>;
+export type V2CalculationResult = z.infer<typeof v2CalculationResultSchema>;
+export type V2CalculationTotal = z.infer<typeof v2CalculationTotalSchema>;
+export type V2CalculationWarning = z.infer<typeof v2CalculationWarningSchema>;
+export type V2CalculationEvaluation = z.infer<typeof v2CalculationEvaluationSchema>;
+export type V2EvaluateCalculationsInput = z.infer<typeof v2EvaluateCalculationsBodySchema>;
+export type V2EvaluateCalculationsRequest = z.input<typeof v2EvaluateCalculationsBodySchema>;
 export type V2CreateCardTypeRequest = z.input<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeRequest = z.input<typeof v2UpdateCardTypeBodySchema>;
 export type V2CreateConnectionTypeRequest = z.input<typeof v2CreateConnectionTypeBodySchema>;

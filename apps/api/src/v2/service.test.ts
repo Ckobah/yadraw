@@ -375,6 +375,236 @@ describe("v2 board service", () => {
     expect(detail.cards.find((card) => card.id === task.id)?.data).toEqual({ targetBusiness: true });
   });
 
+  it("keeps incomplete quantitative relationships as drafts and activates them after valid autosave", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const quantitativeType = await service.createConnectionType(ownerContext, seed.board.id, {
+      key: "requires_quantity",
+      name: "Requires quantity",
+      schema: {
+        fields: [
+          {
+            key: "quantity",
+            label: "Quantity",
+            type: "number",
+            required: true,
+            numberConstraints: { min: 0 }
+          },
+          {
+            key: "unit",
+            label: "Unit",
+            type: "select",
+            required: true,
+            options: [{ value: "piece", label: "Pieces" }]
+          }
+        ],
+        semantics: {
+          version: 1,
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            unitField: "unit",
+            basis: "per_target",
+            targetMultiplierField: "plannedQuantity",
+            aggregation: "sum"
+          }
+        }
+      },
+      defaultVisualStyle: {}
+    });
+    const component = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id
+    });
+    const assembly = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id,
+      data: { plannedQuantity: 2 }
+    });
+
+    const draft = await service.createConnection(ownerContext, seed.board.id, {
+      connectionTypeId: quantitativeType.id,
+      sourceCardId: component.id,
+      targetCardId: assembly.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+    expect(draft.status).toBe("draft");
+
+    const draftEvaluation = await service.evaluateBoardCalculations(
+      viewerContext,
+      seed.board.id
+    );
+    expect(draftEvaluation.results).toEqual([]);
+    expect(draftEvaluation.warnings).toEqual([
+      expect.objectContaining({ code: "draft_quantitative_connection", connectionId: draft.id })
+    ]);
+
+    const active = await service.updateConnection(ownerContext, draft.id, {
+      data: { quantity: 5, unit: "piece" }
+    });
+    expect(active.status).toBe("active");
+
+    const evaluation = await service.evaluateBoardCalculations(viewerContext, seed.board.id);
+    expect(evaluation.results).toEqual([
+      expect.objectContaining({
+        connectionId: draft.id,
+        sourceCardId: component.id,
+        targetCardId: assembly.id,
+        value: 10,
+        unitCode: "piece"
+      })
+    ]);
+    expect(evaluation.totals).toEqual([
+      expect.objectContaining({ cardId: component.id, value: 10, unitCode: "piece" })
+    ]);
+
+    const graph = await service.getSemanticGraph(viewerContext, seed.board.id);
+    expect(graph.graphRevision).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(graph.relations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: draft.id,
+        predicate: "requires_quantity",
+        source: expect.objectContaining({ role: "component" }),
+        target: expect.objectContaining({ role: "assembly" }),
+        quantity: expect.objectContaining({ value: 5, unitCode: "piece" })
+      })
+    ]));
+  });
+
+  it("allows different semantic connection types between the same typed ports", async () => {
+    const { seed, sourceType, taskType, containsConnectionType, genericConnectionType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const target = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+    const endpoint = {
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    };
+
+    await expect(service.createConnection(ownerContext, seed.board.id, {
+      ...endpoint,
+      connectionTypeId: containsConnectionType.id
+    })).resolves.toMatchObject({ connectionTypeId: containsConnectionType.id });
+    await expect(service.createConnection(ownerContext, seed.board.id, {
+      ...endpoint,
+      connectionTypeId: genericConnectionType.id
+    })).resolves.toMatchObject({ connectionTypeId: genericConnectionType.id });
+  });
+
+  it("applies type defaults in semantic projections without rewriting existing relationships", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const type = await service.createConnectionType(ownerContext, seed.board.id, {
+      key: "schema_upgrade",
+      name: "Schema upgrade",
+      schema: { fields: [] },
+      defaultVisualStyle: {}
+    });
+    const source = await service.createCard(ownerContext, seed.board.id, { cardTypeId: sourceType.id });
+    const target = await service.createCard(ownerContext, seed.board.id, { cardTypeId: taskType.id });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      connectionTypeId: type.id,
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    await service.updateConnectionType(ownerContext, seed.board.id, type.id, {
+      schema: {
+        fields: [
+          {
+            key: "quantity",
+            label: "Quantity",
+            type: "number",
+            required: true,
+            defaultValue: 1
+          },
+          {
+            key: "unit",
+            label: "Unit",
+            type: "text",
+            required: true,
+            defaultValue: "piece"
+          }
+        ],
+        semantics: {
+          version: 1,
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            unitField: "unit",
+            basis: "absolute",
+            aggregation: "sum"
+          }
+        }
+      }
+    });
+    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({
+      status: "active",
+      data: {}
+    });
+    await expect(service.evaluateBoardCalculations(viewerContext, seed.board.id)).resolves.toMatchObject({
+      results: [expect.objectContaining({ connectionId: connection.id, value: 1, unitCode: "piece" })]
+    });
+    await expect(service.getSemanticGraph(viewerContext, seed.board.id)).resolves.toMatchObject({
+      relations: expect.arrayContaining([
+        expect.objectContaining({
+          id: connection.id,
+          data: { quantity: 1, unit: "piece" },
+          validity: "valid"
+        })
+      ])
+    });
+
+    await service.updateConnectionType(ownerContext, seed.board.id, type.id, {
+      schema: {
+        fields: [
+          {
+            key: "quantity",
+            label: "Quantity",
+            type: "number",
+            required: true,
+            defaultValue: 1
+          },
+          {
+            key: "unit",
+            label: "Unit",
+            type: "text",
+            required: true,
+            defaultValue: "piece"
+          },
+          { key: "batch", label: "Batch", type: "text", required: true }
+        ],
+        semantics: {
+          version: 1,
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            unitField: "unit",
+            basis: "absolute",
+            aggregation: "sum"
+          }
+        }
+      }
+    });
+    await expect(repository.getConnection(connection.id)).resolves.toMatchObject({
+      status: "active",
+      data: {}
+    });
+    await expect(service.evaluateBoardCalculations(viewerContext, seed.board.id)).resolves.toMatchObject({
+      results: [],
+      warnings: expect.arrayContaining([
+        expect.objectContaining({ code: "missing_required", connectionId: connection.id })
+      ])
+    });
+  });
+
   it("creates connections through persisted visual connector slots", async () => {
     const { seed, sourceType, taskType } = getSeedParts();
     const service = createV2BoardService(createV2MemoryRepository(seed));

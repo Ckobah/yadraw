@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  buildV2ConnectionDefaultData,
+  buildV2SemanticGraph,
+  evaluateV2QuantitativeGraph,
+  validateV2ConnectionData,
   v2BootstrapSessionBodySchema,
   v2CreateBoardBodySchema,
   v2DuplicateBoardBodySchema,
@@ -15,6 +19,7 @@ import {
   v2CreateLinkedFieldBindingBodySchema,
   v2ConnectorSlotSchema,
   v2DemoIds,
+  v2EvaluateCalculationsBodySchema,
   v2RunDryRunBodySchema,
   v2UpdateBoardLayoutBodySchema,
   v2UpdateBoardBodySchema,
@@ -32,11 +37,14 @@ import {
   type V2ConnectionType,
   type V2CardTypePortInput,
   type V2Connection,
+  type V2CalculationEvaluation,
   type V2CreateCardRequest,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
+  type V2EvaluateCalculationsRequest,
   type V2LinkedFieldBinding,
   type V2RunDryRunRequest,
+  type V2SemanticGraph,
   type V2UpdateCardTypeRequest,
   type V2UpdateBoardLayoutRequest,
   type V2UpdateBoardLayoutResponse,
@@ -100,6 +108,12 @@ export type V2BoardService = {
   exportBoard(context: RequestContext, boardId: string): Promise<V2BoardExport>;
   deleteAccount(context: RequestContext): Promise<{ deleted: true; id: string }>;
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
+  getSemanticGraph(context: RequestContext, boardId: string): Promise<V2SemanticGraph>;
+  evaluateBoardCalculations(
+    context: RequestContext,
+    boardId: string,
+    input?: V2EvaluateCalculationsRequest
+  ): Promise<V2CalculationEvaluation>;
   updateBoardLayout(
     context: RequestContext,
     boardId: string,
@@ -226,6 +240,15 @@ function conflict(message: string): never {
   throw new V2ServiceError("conflict", message);
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505"
+  );
+}
+
 function forbidden(): never {
   throw new V2ServiceError("forbidden", "Forbidden");
 }
@@ -296,6 +319,73 @@ function isValidConnectionPort(
 
 function sha256Hex(body: Buffer): string {
   return createHash("sha256").update(body).digest("hex");
+}
+
+function canonicalizeJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeJson);
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entryValue]) => [key, canonicalizeJson(entryValue)])
+  );
+}
+
+function createSemanticGraphRevision(board: V2BoardDetail): string {
+  const payload = {
+    boardId: board.board.id,
+    cards: [...board.cards]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((card) => ({
+        id: card.id,
+        cardTypeId: card.cardTypeId,
+        title: card.title,
+        description: card.description,
+        data: card.data,
+        status: card.status,
+        updatedAt: card.updatedAt
+      })),
+    connections: [...board.connections]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((connection) => ({
+        id: connection.id,
+        connectionTypeId: connection.connectionTypeId,
+        sourceCardId: connection.sourceCardId,
+        targetCardId: connection.targetCardId,
+        sourcePortKey: connection.sourcePortKey,
+        targetPortKey: connection.targetPortKey,
+        type: connection.type,
+        title: connection.title,
+        description: connection.description,
+        data: connection.data,
+        status: connection.status,
+        updatedAt: connection.updatedAt
+      })),
+    cardTypes: [...board.cardTypes]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((cardType) => ({
+        id: cardType.id,
+        key: cardType.key,
+        name: cardType.name,
+        schema: cardType.schema,
+        updatedAt: cardType.updatedAt
+      })),
+    connectionTypes: [...board.connectionTypes]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((connectionType) => ({
+        id: connectionType.id,
+        key: connectionType.key,
+        name: connectionType.name,
+        description: connectionType.description,
+        schema: connectionType.schema,
+        updatedAt: connectionType.updatedAt
+      }))
+  };
+
+  return `sha256:${createHash("sha256")
+    .update(JSON.stringify(canonicalizeJson(payload)))
+    .digest("hex")}`;
 }
 
 function compareNullableIso(a?: string | null, b?: string | null): number {
@@ -711,6 +801,38 @@ export function createV2BoardService(
       await authorizeWorkspace(context, board.workspace.id, "read");
 
       return board;
+    },
+
+    async getSemanticGraph(context, boardId) {
+      const board = await repository.getBoardDetail(boardId);
+      if (!board) notFound("Board not found");
+      await authorizeWorkspace(context, board.workspace.id, "read");
+
+      return buildV2SemanticGraph(
+        board,
+        createSemanticGraphRevision(board),
+        new Date().toISOString()
+      );
+    },
+
+    async evaluateBoardCalculations(context, boardId, rawInput = {}) {
+      const parsedInput = v2EvaluateCalculationsBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid calculation input");
+
+      const board = await repository.getBoardDetail(boardId);
+      if (!board) notFound("Board not found");
+      await authorizeWorkspace(context, board.workspace.id, "read");
+
+      const cardIds = new Set(board.cards.map((card) => card.id));
+      if (parsedInput.data.overrides.some((override) => !cardIds.has(override.cardId))) {
+        validationFailed("Calculation override references a card outside the board");
+      }
+
+      return evaluateV2QuantitativeGraph(board, {
+        graphRevision: createSemanticGraphRevision(board),
+        computedAt: new Date().toISOString(),
+        overrides: parsedInput.data.overrides
+      });
     },
 
     async updateBoardLayout(context, boardId, rawInput) {
@@ -1182,6 +1304,12 @@ export function createV2BoardService(
         validationFailed("Target port is not a valid input connector on the target card");
       }
 
+      const connectionTypeId = await resolveConnectionTypeId(board.workspaceId, input.connectionTypeId, {
+        useGenericFallback: true
+      });
+      const connectionType = connectionTypeId
+        ? await requireConnectionTypeRepository().getConnectionType(connectionTypeId)
+        : null;
       const detail = await repository.getBoardDetail(board.id);
       const duplicate = detail?.connections.some(
         (connection) =>
@@ -1189,36 +1317,46 @@ export function createV2BoardService(
           connection.targetCardId === input.targetCardId &&
           connection.sourcePortKey === input.sourcePortKey &&
           connection.targetPortKey === input.targetPortKey &&
-          connection.type === input.type
+          (connectionTypeId
+            ? connection.connectionTypeId === connectionTypeId
+            : connection.connectionTypeId === null && connection.type === input.type)
       );
       if (duplicate) {
         conflict("Connection already exists");
       }
 
-      const connectionTypeId = await resolveConnectionTypeId(board.workspaceId, input.connectionTypeId, {
-        useGenericFallback: true
-      });
-      const connectionType = connectionTypeId
-        ? await requireConnectionTypeRepository().getConnectionType(connectionTypeId)
-        : null;
+      const data = {
+        ...buildV2ConnectionDefaultData(connectionType),
+        ...cloneJson(input.data ?? {})
+      };
+      const dataValidation = validateV2ConnectionData(connectionType, data);
+      if (dataValidation.validity === "invalid") {
+        validationFailed(dataValidation.issues[0]?.message ?? "Invalid connection data");
+      }
       const title =
         input.title ??
         createDefaultConnectionTitle(connectionType?.name ?? "Connector", detail?.connections ?? []);
 
-      return repository.createConnection({
-        workspaceId: board.workspaceId,
-        boardId: board.id,
-        connectionTypeId,
-        sourceCardId: input.sourceCardId,
-        targetCardId: input.targetCardId,
-        sourcePortKey: input.sourcePortKey,
-        targetPortKey: input.targetPortKey,
-        type: input.type,
-        label: input.label,
-        title,
-        visualStyle: input.visualStyle ?? connectionType?.defaultVisualStyle ?? {},
-        status: "active"
-      });
+      try {
+        return await repository.createConnection({
+          workspaceId: board.workspaceId,
+          boardId: board.id,
+          connectionTypeId,
+          sourceCardId: input.sourceCardId,
+          targetCardId: input.targetCardId,
+          sourcePortKey: input.sourcePortKey,
+          targetPortKey: input.targetPortKey,
+          type: input.type,
+          label: input.label,
+          title,
+          data,
+          visualStyle: input.visualStyle ?? connectionType?.defaultVisualStyle ?? {},
+          status: dataValidation.validity === "incomplete" ? "draft" : "active"
+        });
+      } catch (error) {
+        if (isUniqueViolation(error)) conflict("Connection already exists");
+        throw error;
+      }
     },
 
     async updateConnection(context, connectionId, rawInput) {
@@ -1243,6 +1381,29 @@ export function createV2BoardService(
               useGenericFallback: false
             })
           : existing.connectionTypeId;
+      const connectionTypeChanged = nextConnectionTypeId !== existing.connectionTypeId;
+      const nextConnectionType = nextConnectionTypeId
+        ? await requireConnectionTypeRepository().getConnectionType(nextConnectionTypeId)
+        : null;
+      if (nextConnectionTypeId && !nextConnectionType) {
+        validationFailed("Connection type does not belong to the board workspace");
+      }
+      const nextData = connectionTypeChanged
+        ? {
+            ...buildV2ConnectionDefaultData(nextConnectionType),
+            ...cloneJson(existing.data),
+            ...cloneJson(input.data ?? {})
+          }
+        : cloneJson(input.data ?? existing.data);
+      const dataValidation = validateV2ConnectionData(nextConnectionType, nextData);
+      if (dataValidation.validity === "invalid" && !connectionTypeChanged) {
+        validationFailed(dataValidation.issues[0]?.message ?? "Invalid connection data");
+      }
+      const nextStatus = existing.status === "disabled"
+        ? "disabled"
+        : dataValidation.validity !== "valid"
+          ? "draft"
+          : "active";
 
       const nextEndpoint = {
         sourceCardId: input.sourceCardId ?? existing.sourceCardId,
@@ -1294,6 +1455,9 @@ export function createV2BoardService(
           validationFailed("Target port is not a valid input connector on the target card");
         }
 
+      }
+
+      if (endpointChanged || connectionTypeChanged) {
         const detail = await repository.getBoardDetail(existing.boardId);
         const duplicate = detail?.connections.some(
           (connection) =>
@@ -1302,17 +1466,27 @@ export function createV2BoardService(
             connection.targetCardId === nextEndpoint.targetCardId &&
             connection.sourcePortKey === nextEndpoint.sourcePortKey &&
             connection.targetPortKey === nextEndpoint.targetPortKey &&
-            connection.type === nextEndpoint.type
+            (nextConnectionTypeId
+              ? connection.connectionTypeId === nextConnectionTypeId
+              : connection.connectionTypeId === null && connection.type === nextEndpoint.type)
         );
         if (duplicate) {
           conflict("Connection already exists");
         }
       }
 
-      const updated = await repository.updateConnection(connectionId, {
-        ...input,
-        ...(input.connectionTypeId !== undefined ? { connectionTypeId: nextConnectionTypeId } : {})
-      });
+      let updated: V2Connection | null;
+      try {
+        updated = await repository.updateConnection(connectionId, {
+          ...input,
+          data: nextData,
+          status: nextStatus,
+          ...(input.connectionTypeId !== undefined ? { connectionTypeId: nextConnectionTypeId } : {})
+        });
+      } catch (error) {
+        if (isUniqueViolation(error)) conflict("Connection already exists");
+        throw error;
+      }
       if (!updated) {
         notFound("Connection not found");
       }

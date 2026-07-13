@@ -169,6 +169,49 @@ describe("v2 API contracts", () => {
     ).toThrow();
   });
 
+  it("validates quantitative connection semantics against declared fields", () => {
+    expect(
+      v2ConnectionTypeDefinitionSchema.parse({
+        fields: [
+          {
+            key: "quantity",
+            label: "Quantity",
+            type: "number",
+            required: true,
+            numberConstraints: { min: 0 }
+          },
+          { key: "unit", label: "Unit", type: "text", required: true }
+        ],
+        semantics: {
+          version: 1,
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            unitField: "unit",
+            basis: "absolute",
+            aggregation: "sum"
+          }
+        }
+      })
+    ).toMatchObject({ semantics: { sourceRole: "component", targetRole: "assembly" } });
+
+    expect(() =>
+      v2ConnectionTypeDefinitionSchema.parse({
+        fields: [{ key: "quantity", label: "Quantity", type: "text" }],
+        semantics: {
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            fixedUnitCode: "piece",
+            basis: "absolute"
+          }
+        }
+      })
+    ).toThrow();
+  });
+
   it("parses connection type entity and defaults safely", () => {
     expect(
       v2ConnectionTypeSchema.parse({

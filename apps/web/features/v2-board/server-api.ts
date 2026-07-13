@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { V2BoardDetail, V2CardType } from "@yadraw/shared";
+import type { V2BoardDetail, V2CalculationEvaluation, V2CardType } from "@yadraw/shared";
 import { getCurrentV2User } from "../../lib/auth/current-user";
 import { buildInternalApiHeaders } from "../../lib/api/internal-api";
 
@@ -43,6 +43,37 @@ export async function fetchV2Board(boardId: string): Promise<V2BoardDetail> {
   }
 
   return response.json() as Promise<V2BoardDetail>;
+}
+
+export async function fetchV2CalculationEvaluation(
+  boardId: string
+): Promise<V2CalculationEvaluation> {
+  const url = `${apiBaseUrl}/v2/boards/${encodeURIComponent(boardId)}/calculations/evaluate`;
+  const response = await fetch(url, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      ...(await buildHeaders()),
+      "Content-Type": "application/json"
+    },
+    body: "{}"
+  });
+
+  if (!response.ok) {
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      // ignore parse errors
+    }
+    throw new V2ApiError(
+      response.status,
+      `Calculation request failed with ${response.status}`,
+      body
+    );
+  }
+
+  return response.json() as Promise<V2CalculationEvaluation>;
 }
 
 export async function fetchV2CardTypes(

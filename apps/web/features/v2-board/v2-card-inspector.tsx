@@ -4,6 +4,7 @@ import { Database, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
+  V2CalculationEvaluation,
   V2CardType,
   V2Connection,
   V2CreateLinkedFieldBindingRequest,
@@ -18,6 +19,7 @@ import type { SaveStatus } from "./v2-card-inspector-helpers";
 import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
+import { V2CardCalculatedSection } from "./v2-card-calculated-section";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -31,6 +33,9 @@ type V2CardInspectorProps = {
   linkedFieldBindings: V2LinkedFieldBinding[];
   linkedFieldBindingsLoading: boolean;
   linkedFieldBindingsError: string | null;
+  calculationEvaluation: V2CalculationEvaluation | null;
+  calculationLoading: boolean;
+  calculationError: string | null;
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
   actionError: string | null;
@@ -71,6 +76,9 @@ export function V2CardInspector({
   linkedFieldBindings,
   linkedFieldBindingsLoading,
   linkedFieldBindingsError,
+  calculationEvaluation,
+  calculationLoading,
+  calculationError,
   saveStatus,
   pendingAction,
   actionError,
@@ -170,6 +178,17 @@ export function V2CardInspector({
           onLoad={onLoadAttachments}
           onAttachmentsChange={onAttachmentsChange}
           onPreview={onOpenAttachment}
+        />
+        <V2CardCalculatedSection
+          card={card}
+          cardById={cardById}
+          evaluation={calculationEvaluation}
+          incidentConnectionIds={[
+            ...incomingConnections.map((connection) => connection.id),
+            ...outgoingConnections.map((connection) => connection.id)
+          ]}
+          isLoading={calculationLoading}
+          error={calculationError}
         />
         {(incomingConnections.length + outgoingConnections.length) > 0 ? <V2CardConnectionsSection
           incomingConnections={incomingConnections}

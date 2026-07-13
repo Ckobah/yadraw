@@ -60,6 +60,28 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get("/v2/boards/:boardId/semantic-graph", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.getSemanticGraph(request.requestContext, boardId);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/boards/:boardId/calculations/evaluate", async (request, reply) => {
+    try {
+      const { boardId } = request.params as { boardId: string };
+      return await service.evaluateBoardCalculations(
+        request.requestContext,
+        boardId,
+        request.body as any
+      );
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.patch("/v2/boards/:boardId", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };

@@ -97,6 +97,10 @@ export type V2CreateConnectionRecordInput = V2CreateConnectionInput & {
   status: V2ConnectionStatus;
 };
 
+export type V2UpdateConnectionRecordInput = V2UpdateConnectionInput & {
+  status?: V2ConnectionStatus;
+};
+
 export type V2CreateLinkedFieldBindingRecordInput = V2CreateLinkedFieldBindingInput & {
   workspaceId: string;
   boardId: string;
@@ -190,7 +194,7 @@ export type V2Repository = {
   deleteCard(cardId: string): Promise<boolean>;
   getConnection(connectionId: string): Promise<V2Connection | null>;
   createConnection(input: V2CreateConnectionRecordInput): Promise<V2Connection>;
-  updateConnection?(connectionId: string, input: V2UpdateConnectionInput): Promise<V2Connection | null>;
+  updateConnection?(connectionId: string, input: V2UpdateConnectionRecordInput): Promise<V2Connection | null>;
   deleteConnection(connectionId: string): Promise<boolean>;
   listLinkedFieldBindings?(boardId: string): Promise<V2LinkedFieldBinding[]>;
   getLinkedFieldBinding?(bindingId: string): Promise<V2LinkedFieldBinding | null>;
@@ -611,10 +615,39 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
       description: "One card contains another.",
       schema: {
         fields: [
-          { key: "quantity", label: "Quantity", type: "number" },
-          { key: "unit", label: "Unit", type: "text" },
+          {
+            key: "quantity",
+            label: "Quantity per assembly",
+            type: "number",
+            required: true,
+            defaultValue: 1,
+            numberConstraints: { min: 0, integer: true }
+          },
+          {
+            key: "unit",
+            label: "Unit",
+            type: "select",
+            required: true,
+            defaultValue: "piece",
+            options: [
+              { value: "piece", label: "pcs" },
+              { value: "pcs", label: "pcs (legacy)" }
+            ]
+          },
           { key: "note", label: "Note", type: "text" }
-        ]
+        ],
+        semantics: {
+          version: 1,
+          sourceRole: "component",
+          targetRole: "assembly",
+          quantity: {
+            valueField: "quantity",
+            unitField: "unit",
+            basis: "per_target",
+            targetMultiplierField: "plannedQuantity",
+            aggregation: "sum"
+          }
+        }
       },
       defaultVisualStyle: {},
       createdAt: timestamp,
@@ -1217,7 +1250,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         label: input.label,
         title: input.title ?? null,
         description: null,
-        data: {},
+        data: cloneJson(input.data ?? {}),
         visualStyle: input.visualStyle ?? {},
         status: input.status,
         createdAt: timestamp,
@@ -1245,6 +1278,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         ...(input.sourcePortKey !== undefined ? { sourcePortKey: input.sourcePortKey } : {}),
         ...(input.targetPortKey !== undefined ? { targetPortKey: input.targetPortKey } : {}),
         ...(input.data !== undefined ? { data: cloneJson(input.data) } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.visualStyle !== undefined
           ? { visualStyle: { ...existing.visualStyle, ...cloneJson(input.visualStyle) } }
           : {}),
@@ -2941,10 +2975,11 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             type,
             label,
             title,
+            data,
             visual_style,
             status
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12::jsonb, $13)
           returning *
         `,
         [
@@ -2958,7 +2993,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           input.type,
           input.label,
           input.title ?? null,
-          input.visualStyle ?? {},
+          JSON.stringify(input.data ?? {}),
+          JSON.stringify(input.visualStyle ?? {}),
           input.status
         ]
       );
@@ -2983,7 +3019,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         visualStyle:
           input.visualStyle !== undefined
             ? { ...existing.visualStyle, ...input.visualStyle }
-            : existing.visualStyle
+            : existing.visualStyle,
+        status: input.status ?? existing.status
       };
 
       const result = await pool.query(
@@ -2998,6 +3035,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               target_port_key = $8,
               data = $9::jsonb,
               visual_style = $10::jsonb,
+              status = $11,
               updated_at = now()
           where id = $1
             and deleted_at is null
@@ -3013,7 +3051,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           next.sourcePortKey,
           next.targetPortKey,
           JSON.stringify(next.data),
-          JSON.stringify(next.visualStyle)
+          JSON.stringify(next.visualStyle),
+          next.status
         ]
       );
 

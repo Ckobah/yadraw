@@ -1,5 +1,8 @@
-import type { V2BoardDetail } from "@yadraw/shared";
-import { fetchV2Board } from "../../../../features/v2-board/server-api";
+import type { V2BoardDetail, V2CalculationEvaluation } from "@yadraw/shared";
+import {
+  fetchV2Board,
+  fetchV2CalculationEvaluation
+} from "../../../../features/v2-board/server-api";
 import { V2BoardPage } from "../../../../features/v2-board/v2-board-page";
 import { V2BoardErrorState } from "../../../../features/v2-board/v2-board-error-state";
 import { getCurrentV2User } from "../../../../lib/auth/current-user";
@@ -20,17 +23,30 @@ export default async function V2BoardRoute({ params }: PageProps) {
     redirect(`/login?next=${encodeURIComponent(`/v2/boards/${boardId}`)}`);
   }
 
-  let boardDetail: V2BoardDetail;
-  try {
-    boardDetail = await fetchV2Board(boardId);
-  } catch (error) {
+  const [boardResult, calculationResult] = await Promise.allSettled([
+    fetchV2Board(boardId),
+    fetchV2CalculationEvaluation(boardId)
+  ]);
+  if (boardResult.status === "rejected") {
     return (
       <V2BoardErrorState
         boardId={boardId}
-        error={error instanceof Error ? error : new Error(String(error))}
+        error={
+          boardResult.reason instanceof Error
+            ? boardResult.reason
+            : new Error(String(boardResult.reason))
+        }
       />
     );
   }
+  const boardDetail: V2BoardDetail = boardResult.value;
+  const calculationEvaluation: V2CalculationEvaluation | null =
+    calculationResult.status === "fulfilled" ? calculationResult.value : null;
 
-  return <V2BoardPage boardDetail={boardDetail} />;
+  return (
+    <V2BoardPage
+      boardDetail={boardDetail}
+      initialCalculationEvaluation={calculationEvaluation}
+    />
+  );
 }

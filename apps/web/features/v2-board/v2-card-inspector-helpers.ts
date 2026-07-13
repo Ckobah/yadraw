@@ -1,4 +1,8 @@
-import type { V2CardTypeFieldSchema, V2ConnectionTypeFieldSchema } from "@yadraw/shared";
+import type {
+  V2CardTypeFieldSchema,
+  V2ConnectionTypeFieldSchema,
+  V2NumberConstraints
+} from "@yadraw/shared";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -23,6 +27,7 @@ export type SchemaFieldDraft = {
   description?: string;
   placeholder?: string;
   options: Array<{ value: string; label: string }>;
+  numberConstraints?: V2NumberConstraints;
 };
 
 export type DataFieldValidationResult =
@@ -132,6 +137,7 @@ export function createSchemaDraftFromData(
     description: field.description,
     placeholder: field.placeholder,
     options: field.options ?? [],
+    numberConstraints: "numberConstraints" in field ? field.numberConstraints : undefined,
   }));
 }
 
@@ -230,6 +236,24 @@ export function validateAndBuildSchemaDataRecord(
       const nextNumber = Number(field.value);
       if (Number.isNaN(nextNumber)) {
         errors[field.id] = "Invalid number";
+        continue;
+      }
+      if (field.numberConstraints?.integer && !Number.isInteger(nextNumber)) {
+        errors[field.id] = "Use a whole number";
+        continue;
+      }
+      if (
+        field.numberConstraints?.min !== undefined &&
+        nextNumber < field.numberConstraints.min
+      ) {
+        errors[field.id] = `Minimum is ${field.numberConstraints.min}`;
+        continue;
+      }
+      if (
+        field.numberConstraints?.max !== undefined &&
+        nextNumber > field.numberConstraints.max
+      ) {
+        errors[field.id] = `Maximum is ${field.numberConstraints.max}`;
         continue;
       }
       data[field.key] = nextNumber;

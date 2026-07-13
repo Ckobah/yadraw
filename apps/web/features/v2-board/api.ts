@@ -4,6 +4,7 @@ import type {
   V2CardType,
   V2CardTypeSchema,
   V2CardVisualStyle,
+  V2CalculationEvaluation,
   V2Connection,
   V2ConnectionAttachment,
   V2ConnectionType,
@@ -388,6 +389,8 @@ export async function createV2Connection(
     targetPortKey: string;
     type?: string;
     label?: string;
+    data?: Record<string, unknown>;
+    visualStyle?: V2ConnectionVisualStyle;
   }
 ): Promise<V2Connection> {
   const response = await fetch(
@@ -403,6 +406,8 @@ export async function createV2Connection(
         targetPortKey: input.targetPortKey,
         type: input.type ?? "data",
         label: input.label ?? "",
+        ...(input.data !== undefined ? { data: input.data } : {}),
+        ...(input.visualStyle !== undefined ? { visualStyle: input.visualStyle } : {}),
       }),
     }
   );
@@ -416,6 +421,30 @@ export async function createV2Connection(
     );
   }
   return response.json() as Promise<V2Connection>;
+}
+
+export async function evaluateV2BoardCalculations(
+  boardId: string,
+  input: { overrides?: Array<{ cardId: string; patch: Record<string, unknown> }> } = {}
+): Promise<V2CalculationEvaluation> {
+  const response = await fetch(
+    `/v2/actions/boards/${encodeURIComponent(boardId)}/calculations/evaluate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input)
+    }
+  );
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Calculation request failed with ${response.status}`,
+      body
+    );
+  }
+  return response.json() as Promise<V2CalculationEvaluation>;
 }
 
 export async function runV2BoardDryRun(

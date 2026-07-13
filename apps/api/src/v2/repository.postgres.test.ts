@@ -59,8 +59,10 @@ async function applySqlFiles(connectionString: string) {
       .filter((filename) => filename.endsWith(".sql"))
       .sort();
 
-    for (const filename of migrationFiles) {
-      await client.query(await readFile(join(migrationsDir, filename), "utf8"));
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (const filename of migrationFiles) {
+        await client.query(await readFile(join(migrationsDir, filename), "utf8"));
+      }
     }
 
     await client.query(await readFile(seedPath, "utf8"));
@@ -323,6 +325,50 @@ describePostgres("v2 Postgres repository", () => {
     await expect(
       service.createBoard(viewerContext, seedIds.workspace, { name: "Viewer board" })
     ).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("persists distinct semantic relationship types on the same endpoint identity", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const detail = await service.getBoard(ownerContext, seedIds.board);
+    const containsType = detail.connectionTypes.find((type) => type.key === "contains");
+    const genericType = detail.connectionTypes.find((type) => type.key === "generic");
+    if (!containsType || !genericType) throw new Error("Seed connection types were not found");
+    const source = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.sourceType
+    });
+    const target = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.taskType,
+      data: { plannedQuantity: 2 }
+    });
+    const endpoint = {
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    };
+
+    const quantitative = await service.createConnection(ownerContext, seedIds.board, {
+      ...endpoint,
+      connectionTypeId: containsType.id,
+      data: { quantity: 5, unit: "piece" }
+    });
+    await expect(service.createConnection(ownerContext, seedIds.board, {
+      ...endpoint,
+      connectionTypeId: genericType.id
+    })).resolves.toMatchObject({ connectionTypeId: genericType.id });
+    await expect(service.createConnection(ownerContext, seedIds.board, {
+      ...endpoint,
+      connectionTypeId: containsType.id
+    })).rejects.toMatchObject({ code: "conflict" });
+    await expect(service.evaluateBoardCalculations(viewerContext, seedIds.board)).resolves.toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ connectionId: quantitative.id, value: 10, unitCode: "piece" })
+      ])
+    });
+
+    await service.deleteCard(ownerContext, source.id);
+    await service.deleteCard(ownerContext, target.id);
   });
 
   it("commits or rolls back a complete board layout batch", async () => {
