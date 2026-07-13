@@ -915,7 +915,8 @@ describe("v2CardVisualStyleSchema", () => {
         textColor: "#111827",
         fontWeight: "700",
         fontStyle: "italic",
-        textDecoration: "underline"
+        textDecoration: "underline",
+        locked: true
       })
     ).toEqual({
       fontFamily: "Inter",
@@ -923,7 +924,8 @@ describe("v2CardVisualStyleSchema", () => {
       textColor: "#111827",
       fontWeight: "700",
       fontStyle: "italic",
-      textDecoration: "underline"
+      textDecoration: "underline",
+      locked: true
     });
   });
 

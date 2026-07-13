@@ -14,6 +14,7 @@ import {
   type OnNodeDrag,
   type OnReconnect,
   type OnSelectionChangeParams,
+  type NodeChange,
   type Viewport,
 } from "@xyflow/react";
 import {
@@ -369,6 +370,10 @@ function clampCardSize(size: V2Card["size"]): V2Card["size"] {
   };
 }
 
+function isCardLocked(card: V2Card): boolean {
+  return card.visualStyle?.locked === true;
+}
+
 function fallbackCardType(card: V2Card, workspaceId: string): V2CardType {
   return {
     id: card.cardTypeId,
@@ -398,6 +403,7 @@ function buildCardNode(
     id: card.id,
     type: "v2Card",
     position: { x: card.position.x, y: card.position.y },
+    draggable: !isCardLocked(card),
     data: {
       card: {
         ...card,
@@ -1007,9 +1013,11 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         patch,
         "connectorSlots"
       );
+      const touchesPositionLock = Object.prototype.hasOwnProperty.call(patch, "locked");
       const node = nodesRef.current.find((n) => n.id === cardId);
       const current = (node?.data as { card?: { visualStyle?: V2CardVisualStyle } })?.card?.visualStyle ?? {};
       const previousConnectorSlots = current.connectorSlots;
+      const previousLocked = current.locked;
       const nextVisualStyle = Object.fromEntries(
         Object.entries({ ...current, ...patch }).filter(([, value]) => value !== undefined && value !== "")
       ) as V2CardVisualStyle;
@@ -1020,6 +1028,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           if (n.id !== cardId) return n;
           return {
             ...n,
+            draggable: nextVisualStyle.locked !== true,
             data: {
               ...n.data,
               card: { ...n.data.card, visualStyle: nextVisualStyle },
@@ -1034,7 +1043,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to save visual style:", err);
-        if (touchesConnectorSlots) {
+        if (touchesConnectorSlots || touchesPositionLock) {
           setNodes((nds) =>
             nds.map((n) => {
               if (n.id !== cardId) return n;
@@ -1045,8 +1054,14 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               } else {
                 restoredVisualStyle.connectorSlots = previousConnectorSlots;
               }
+              if (previousLocked === undefined) {
+                delete restoredVisualStyle.locked;
+              } else {
+                restoredVisualStyle.locked = previousLocked;
+              }
               return {
                 ...n,
+                draggable: restoredVisualStyle.locked !== true,
                 data: {
                   ...n.data,
                   card: { ...n.data.card, visualStyle: restoredVisualStyle },
@@ -2001,7 +2016,13 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
 
   const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
     (_event, node, draggedNodes) => {
-      const movingNodes = draggedNodes.length > 0 ? draggedNodes : [node];
+      const movingNodes = (draggedNodes.length > 0 ? draggedNodes : [node]).filter(
+        (movingNode) => !isCardLocked(movingNode.data.card)
+      );
+      if (movingNodes.length === 0 || isCardLocked(node.data.card)) {
+        groupDragSnapshotRef.current = null;
+        return;
+      }
       const movedCardIds = new Set(movingNodes.map((movingNode) => movingNode.id));
       groupDragSnapshotRef.current = {
         draggedNodeId: node.id,
@@ -2118,6 +2139,22 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       void runEditorCommand(movementCommand);
     },
     [applyMovement, runEditorCommand]
+  );
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<V2CardNode>[]) => {
+      const lockedCardIds = new Set(
+        nodesRef.current
+          .filter((node) => isCardLocked(node.data.card))
+          .map((node) => node.id)
+      );
+      onNodesChange(
+        changes.filter(
+          (change) => change.type !== "position" || !lockedCardIds.has(change.id)
+        )
+      );
+    },
+    [onNodesChange]
   );
 
   const handlePreviewConnectionVisualStyle = useCallback(
@@ -2611,7 +2648,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       <ReactFlow
         nodes={nodes}
         edges={displayedEdges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onSelectionChange={handleSelectionChange}
         onSelectionStart={() => setInspectedCardId(null)}

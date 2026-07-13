@@ -3946,6 +3946,27 @@ button:disabled {
   user-select: none;
 }
 
+.react-flow__node.draggable .v2CardNode {
+  cursor: grab;
+}
+
+.react-flow__node.dragging .v2CardNode {
+  cursor: grabbing;
+}
+
+.v2CardLockIndicator {
+  flex: 0 0 auto;
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--yd-text-muted, #667085) 28%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--yd-text-muted, #667085) 8%, transparent);
+  color: var(--yd-text-muted, #667085);
+  pointer-events: none;
+}
+
 .v2CardHeader {
   display: flex;
   align-items: center;

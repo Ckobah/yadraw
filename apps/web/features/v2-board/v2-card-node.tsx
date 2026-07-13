@@ -17,7 +17,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { MoreHorizontal, Paperclip, X } from "lucide-react";
+import { Lock, MoreHorizontal, Paperclip, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -602,6 +602,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
   const cardSummary = getCardSummary(card);
   const visualStyle = card.visualStyle ?? {};
+  const isLocked = visualStyle.locked === true;
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
     ports: cardType.ports,
@@ -959,7 +960,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   return (
     <article
       ref={articleRef}
-      className="v2CardNode"
+      className={`v2CardNode${isLocked ? " v2CardNodeLocked" : ""}`}
       onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",
@@ -1155,6 +1156,11 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           <CardTypeIcon size={17} strokeWidth={2.1} />
         </span>
         <span className="v2CardTypeLabel">{cardType.name}</span>
+        {isLocked ? (
+          <span className="v2CardLockIndicator nodrag nopan" title="Card locked" aria-label="Card locked">
+            <Lock size={13} strokeWidth={2.4} />
+          </span>
+        ) : null}
         {(data.attachmentCount ?? 0) > 0 ? (
           <div
             className="v2CardAttachmentIndicator nodrag nopan"

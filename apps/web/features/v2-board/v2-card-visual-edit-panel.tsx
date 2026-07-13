@@ -8,6 +8,8 @@ import {
   ChevronsUpDown,
   Italic,
   CircleAlert,
+  Lock,
+  LockOpen,
   Underline,
   X,
 } from "lucide-react";
@@ -141,6 +143,21 @@ export function V2CardVisualEditPanel({
             onChange={(event) => updateVisualStyle({ textColor: event.target.value })}
           />
         </label>
+
+        <button
+          type="button"
+          className={`v2ConnectorVisualIconButton${visualStyle.locked ? " v2ConnectorVisualIconButtonActive" : ""}`}
+          title={visualStyle.locked ? "Unlock card" : "Lock card"}
+          aria-label={visualStyle.locked ? "Unlock card" : "Lock card"}
+          aria-pressed={visualStyle.locked === true}
+          onClick={() => updateVisualStyle({ locked: visualStyle.locked ? undefined : true })}
+        >
+          {visualStyle.locked ? (
+            <Lock size={14} strokeWidth={2.3} />
+          ) : (
+            <LockOpen size={14} strokeWidth={2.3} />
+          )}
+        </button>
 
         {saveStatus === "error" ? <CircleAlert className="v2ConnectorVisualEditError" size={15} aria-label="Save failed" /> : null}
 

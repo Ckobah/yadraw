@@ -67,6 +67,7 @@ export const v2CardVisualStyleSchema = z.object({
   fontStyle: z.enum(["normal", "italic"]).optional(),
   textDecoration: z.enum(["none", "underline"]).optional(),
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
+  locked: z.boolean().optional(),
   connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
 
