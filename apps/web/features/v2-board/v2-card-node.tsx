@@ -980,7 +980,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     >
       {/* Resize handles in visual edit mode */}
       <NodeResizer
-        isVisible={Boolean(data.isVisualEditing)}
+        isVisible={Boolean(data.isVisualEditing) && !isLocked}
         minWidth={V2_CARD_MIN_SIZE.width}
         minHeight={V2_CARD_MIN_SIZE.height}
         handleClassName="v2CardResizeHandle"
@@ -997,6 +997,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           backgroundColor: "transparent",
         }}
         onResizeEnd={(_event, params) => {
+          if (isLocked) return;
           data.onResizeCard?.(card.id, {
             width: params.width,
             height: params.height,
@@ -1157,7 +1158,11 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         </span>
         <span className="v2CardTypeLabel">{cardType.name}</span>
         {isLocked ? (
-          <span className="v2CardLockIndicator nodrag nopan" title="Card locked" aria-label="Card locked">
+          <span
+            className="v2CardLockIndicator nodrag nopan"
+            title="Position and size locked"
+            aria-label="Position and size locked"
+          >
             <Lock size={13} strokeWidth={2.4} />
           </span>
         ) : null}

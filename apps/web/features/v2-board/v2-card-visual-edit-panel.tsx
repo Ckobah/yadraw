@@ -147,8 +147,8 @@ export function V2CardVisualEditPanel({
         <button
           type="button"
           className={`v2ConnectorVisualIconButton${visualStyle.locked ? " v2ConnectorVisualIconButtonActive" : ""}`}
-          title={visualStyle.locked ? "Unlock card" : "Lock card"}
-          aria-label={visualStyle.locked ? "Unlock card" : "Lock card"}
+          title={visualStyle.locked ? "Unlock position and size" : "Lock position and size"}
+          aria-label={visualStyle.locked ? "Unlock position and size" : "Lock position and size"}
           aria-pressed={visualStyle.locked === true}
           onClick={() => updateVisualStyle({ locked: visualStyle.locked ? undefined : true })}
         >

@@ -906,6 +906,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   // ── Visual edit handlers ─────────────────────────────────────────
   const handleResizeCard = useCallback(
     async (cardId: string, size: { width: number; height: number }) => {
+      const card = nodesRef.current.find((node) => node.id === cardId)?.data.card;
+      if (card && isCardLocked(card)) return;
+
       const nextSize = clampCardSize(size);
 
       // Optimistic local update
