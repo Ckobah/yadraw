@@ -33,15 +33,15 @@ const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
-const PORT_RADIUS = 8;
+const ENDPOINT_GAP = 2;
 
 function markerClearance(marker: V2ConnectionMarker | undefined): number {
   if (marker === "circle" || marker === "square") return 4;
-  return 0;
+  return ENDPOINT_GAP;
 }
 
 function offsetFromPort(point: Point, position: unknown, marker: V2ConnectionMarker | undefined): Point {
-  const distance = PORT_RADIUS + markerClearance(marker);
+  const distance = markerClearance(marker);
   switch (String(position).toLowerCase()) {
     case "left": return { x: point.x - distance, y: point.y };
     case "right": return { x: point.x + distance, y: point.y };

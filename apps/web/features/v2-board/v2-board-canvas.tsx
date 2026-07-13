@@ -2613,8 +2613,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               viewBox="0 0 10 10"
               refX="9"
               refY="5"
-              markerWidth="8"
-              markerHeight="8"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
               <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
@@ -2624,8 +2625,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               viewBox="0 0 10 10"
               refX="1"
               refY="5"
-              markerWidth="8"
-              markerHeight="8"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
               <path d="M 9 1 L 1 5 L 9 9 z" fill="context-stroke" />
@@ -2635,8 +2637,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               viewBox="0 0 10 10"
               refX="9"
               refY="5"
-              markerWidth="8"
-              markerHeight="8"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
               orient="auto-start-reverse"
             >
               <path d="M 1 1 L 9 5 L 1 9 z" fill="context-stroke" />
@@ -2646,8 +2649,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               viewBox="0 0 10 10"
               refX="5"
               refY="5"
-              markerWidth="7"
-              markerHeight="7"
+              markerWidth="10"
+              markerHeight="10"
+              markerUnits="userSpaceOnUse"
               orient="auto"
             >
               <circle cx="5" cy="5" r="3" fill="context-stroke" />
@@ -2657,8 +2661,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
               viewBox="0 0 10 10"
               refX="5"
               refY="5"
-              markerWidth="7"
-              markerHeight="7"
+              markerWidth="10"
+              markerHeight="10"
+              markerUnits="userSpaceOnUse"
               orient="auto"
             >
               <rect x="2" y="2" width="6" height="6" rx="1" fill="context-stroke" />

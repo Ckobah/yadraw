@@ -22,9 +22,15 @@ function MarkerShape({ marker }: { marker: V2ConnectionMarker }) {
   if (marker === "square") return <rect x="2.8" y="2.8" width="6.4" height="6.4" rx="1" fill="context-stroke" />;
   if (marker === "triangle") return <path d="M 1.5 1.5 L 10.5 6 L 1.5 10.5 Z" fill="context-stroke" />;
   if (marker === "reverseArrow") {
-    return <path d="M 10 1.5 L 2 6 L 10 10.5" fill="none" stroke="context-stroke" strokeWidth="1.8" />;
+    return <path d="M 10 1.5 L 2 6 L 10 10.5 Z" fill="context-stroke" />;
   }
-  return <path d="M 2 1.5 L 10 6 L 2 10.5" fill="none" stroke="context-stroke" strokeWidth="1.8" />;
+  return <path d="M 2 1.5 L 10 6 L 2 10.5 Z" fill="context-stroke" />;
+}
+
+function markerReferenceX(marker: V2ConnectionMarker): number {
+  if (marker === "reverseArrow") return 2;
+  if (marker === "circle" || marker === "square") return 6;
+  return 10;
 }
 
 export function V2ConnectorStylePreview({ style, className = "", label }: Props) {
@@ -46,12 +52,12 @@ export function V2ConnectorStylePreview({ style, className = "", label }: Props)
       <svg viewBox="0 0 122 40" role="img" aria-label={label ?? "Connector preview"}>
         <defs>
           {markerStart !== "none" ? (
-            <marker id={startId} viewBox="0 0 12 12" refX="6" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <marker id={startId} viewBox="0 0 12 12" refX={markerReferenceX(markerStart)} refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
               <MarkerShape marker={markerStart} />
             </marker>
           ) : null}
           {markerEnd !== "none" ? (
-            <marker id={endId} viewBox="0 0 12 12" refX="6" refY="6" markerWidth="7" markerHeight="7" orient="auto">
+            <marker id={endId} viewBox="0 0 12 12" refX={markerReferenceX(markerEnd)} refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
               <MarkerShape marker={markerEnd} />
             </marker>
           ) : null}
