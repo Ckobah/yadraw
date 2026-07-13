@@ -79,7 +79,10 @@ import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
 import { V2RunDryRunPanel } from "./v2-run-dry-run-panel";
 import { V2CardTypeManager } from "./v2-card-type-manager";
-import { V2ConnectionTypeManager } from "./v2-connection-type-manager";
+import {
+  V2ConnectionTypeManager,
+  type V2NewConnectionTypeSeed,
+} from "./v2-connection-type-manager";
 import { V2FilePreviewModal } from "./v2-file-preview-modal";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 import {
@@ -458,6 +461,8 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   const [cardTypeManagerInitialId, setCardTypeManagerInitialId] = useState<string | null>(null);
   const [isConnectionTypeManagerOpen, setIsConnectionTypeManagerOpen] = useState(false);
   const [connectionTypeManagerInitialId, setConnectionTypeManagerInitialId] = useState<string | null>(null);
+  const [connectionTypeManagerNewTypeSeed, setConnectionTypeManagerNewTypeSeed] =
+    useState<V2NewConnectionTypeSeed | null>(null);
   const [linkedFieldBindings, setLinkedFieldBindings] = useState<V2LinkedFieldBinding[]>([]);
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
@@ -1536,7 +1541,14 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   }, []);
 
   const handleOpenConnectionTypeManager = useCallback((connectionTypeId?: string | null) => {
+    setConnectionTypeManagerNewTypeSeed(null);
     setConnectionTypeManagerInitialId(connectionTypeId ?? null);
+    setIsConnectionTypeManagerOpen(true);
+  }, []);
+
+  const handleCreateTypeFromConnection = useCallback((seed: V2NewConnectionTypeSeed) => {
+    setConnectionTypeManagerInitialId(null);
+    setConnectionTypeManagerNewTypeSeed(seed);
     setIsConnectionTypeManagerOpen(true);
   }, []);
 
@@ -2827,9 +2839,7 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
           onDeleteConnection={handleDeleteConnection}
-          onSaveStyleAsType={async (connectionTypeId, visualStyle) => {
-            await handleUpdateConnectionType(connectionTypeId, { defaultVisualStyle: visualStyle });
-          }}
+          onCreateTypeFromConnection={handleCreateTypeFromConnection}
           onManageConnectionType={handleOpenConnectionTypeManager}
           onClose={() => setInspectedConnectionId(null)}
         />
@@ -2864,9 +2874,13 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         <V2ConnectionTypeManager
           connectionTypes={connectionTypes}
           initialConnectionTypeId={connectionTypeManagerInitialId}
+          initialNewTypeSeed={connectionTypeManagerNewTypeSeed}
           onCreateConnectionType={handleCreateConnectionType}
           onUpdateConnectionType={handleUpdateConnectionType}
-          onClose={() => setIsConnectionTypeManagerOpen(false)}
+          onClose={() => {
+            setIsConnectionTypeManagerOpen(false);
+            setConnectionTypeManagerNewTypeSeed(null);
+          }}
         />
       ) : null}
     </>

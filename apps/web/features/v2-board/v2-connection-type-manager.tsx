@@ -38,9 +38,15 @@ type ConnectionTypeDraft = {
   defaultVisualStyle: V2ConnectionVisualStyle;
 };
 
+export type V2NewConnectionTypeSeed = {
+  schema?: V2ConnectionTypeSchema | null;
+  defaultVisualStyle: V2ConnectionVisualStyle;
+};
+
 type Props = {
   connectionTypes: V2ConnectionType[];
   initialConnectionTypeId?: string | null;
+  initialNewTypeSeed?: V2NewConnectionTypeSeed | null;
   onCreateConnectionType: (input: V2CreateConnectionTypeRequest) => Promise<V2ConnectionType>;
   onUpdateConnectionType: (
     connectionTypeId: string,
@@ -116,27 +122,41 @@ function fromType(connectionType: V2ConnectionType): ConnectionTypeDraft {
   };
 }
 
-function emptyDraft(): ConnectionTypeDraft {
-  return { id: null, key: "", name: "", fields: [], defaultVisualStyle: { ...DEFAULT_STYLE } };
+function emptyDraft(seed?: V2NewConnectionTypeSeed | null): ConnectionTypeDraft {
+  return {
+    id: null,
+    key: "",
+    name: "",
+    fields: schemaDrafts(seed?.schema),
+    defaultVisualStyle: normalizeStyle(seed?.defaultVisualStyle),
+  };
 }
 
 export function V2ConnectionTypeManager({
   connectionTypes,
   initialConnectionTypeId,
+  initialNewTypeSeed,
   onCreateConnectionType,
   onUpdateConnectionType,
   onClose,
 }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   useDialogFocus(dialogRef, () => { void closeManager(); });
   const sortedTypes = useMemo(
     () => [...connectionTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [connectionTypes]
   );
-  const initialType = sortedTypes.find((type) => type.id === initialConnectionTypeId) ?? sortedTypes[0] ?? null;
-  const [mode, setMode] = useState<ConnectionTypeManagerMode>(initialType ? "existing" : "new");
+  const initialType = initialNewTypeSeed
+    ? null
+    : sortedTypes.find((type) => type.id === initialConnectionTypeId) ?? sortedTypes[0] ?? null;
+  const [mode, setMode] = useState<ConnectionTypeManagerMode>(
+    initialNewTypeSeed ? "new" : initialType ? "existing" : "new"
+  );
   const [selectedId, setSelectedId] = useState<string | null>(initialType?.id ?? null);
-  const [draft, setDraft] = useState<ConnectionTypeDraft>(() => initialType ? fromType(initialType) : emptyDraft());
+  const [draft, setDraft] = useState<ConnectionTypeDraft>(() =>
+    initialType ? fromType(initialType) : emptyDraft(initialNewTypeSeed)
+  );
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const selectedType = connectionTypes.find((type) => type.id === selectedId) ?? null;
@@ -155,6 +175,10 @@ export function V2ConnectionTypeManager({
     const timeout = window.setTimeout(() => void saveDraft(), 700);
     return () => window.clearTimeout(timeout);
   }, [draft, hasChanges, isSaving]);
+
+  useEffect(() => {
+    if (mode === "new") nameInputRef.current?.focus();
+  }, [mode]);
 
   function updateDraft(patch: Partial<Omit<ConnectionTypeDraft, "id">>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -278,6 +302,7 @@ export function V2ConnectionTypeManager({
 
             <section className="v2CardTypeManagerSection">
               <input
+                ref={nameInputRef}
                 className="v2InspectorDataValue"
                 value={draft.name}
                 placeholder="Type name"

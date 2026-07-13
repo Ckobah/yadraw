@@ -42,10 +42,10 @@ type V2ConnectorInspectorProps = {
     }
   ) => Promise<void>;
   onDeleteConnection: (connectionId: string) => Promise<void>;
-  onSaveStyleAsType: (
-    connectionTypeId: string,
-    visualStyle: V2ConnectionVisualStyle
-  ) => Promise<void>;
+  onCreateTypeFromConnection: (input: {
+    schema: V2ConnectionType["schema"];
+    defaultVisualStyle: V2ConnectionVisualStyle;
+  }) => void;
   onManageConnectionType: (connectionTypeId?: string | null) => void;
   onClose: () => void;
 };
@@ -98,7 +98,7 @@ export function V2ConnectorInspector({
   saveStatus,
   onUpdateConnection,
   onDeleteConnection,
-  onSaveStyleAsType,
+  onCreateTypeFromConnection,
   onManageConnectionType,
   onClose,
 }: V2ConnectorInspectorProps) {
@@ -107,8 +107,6 @@ export function V2ConnectorInspector({
   const [basicError, setBasicError] = useState<string | null>(null);
   const [typeError, setTypeError] = useState<string | null>(null);
   const [isTypeSaving, setIsTypeSaving] = useState(false);
-  const [isStyleTypeSaving, setIsStyleTypeSaving] = useState(false);
-  const [styleTypeError, setStyleTypeError] = useState<string | null>(null);
   const schemaFields = useMemo(
     () => connectionType?.schema?.fields ?? [],
     [connectionType]
@@ -268,19 +266,6 @@ export function V2ConnectorInspector({
       setTypeError("Could not update connection type.");
     } finally {
       setIsTypeSaving(false);
-    }
-  }
-
-  async function saveStyleAsType() {
-    if (!connectionType || isStyleTypeSaving) return;
-    setIsStyleTypeSaving(true);
-    setStyleTypeError(null);
-    try {
-      await onSaveStyleAsType(connectionType.id, connectionAppearance);
-    } catch {
-      setStyleTypeError("Could not update connector type.");
-    } finally {
-      setIsStyleTypeSaving(false);
     }
   }
 
@@ -759,13 +744,16 @@ export function V2ConnectorInspector({
           <section className="v2ConnectorSaveTypeSection">
             <button
               type="button"
-              disabled={isStyleTypeSaving}
-              onClick={() => void saveStyleAsType()}
+              onClick={() =>
+                onCreateTypeFromConnection({
+                  schema: connectionType.schema,
+                  defaultVisualStyle: connectionAppearance,
+                })
+              }
             >
               <BookmarkPlus size={14} strokeWidth={2.2} aria-hidden="true" />
-              <span>{isStyleTypeSaving ? "Updating..." : `Save style to ${connectionType.name}`}</span>
+              <span>Save as new connector type</span>
             </button>
-            {styleTypeError ? <p className="v2InspectorDataError">{styleTypeError}</p> : null}
           </section>
         ) : null}
 
