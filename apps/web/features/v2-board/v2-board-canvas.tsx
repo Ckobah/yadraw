@@ -463,6 +463,8 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   const [connectionTypeManagerInitialId, setConnectionTypeManagerInitialId] = useState<string | null>(null);
   const [connectionTypeManagerNewTypeSeed, setConnectionTypeManagerNewTypeSeed] =
     useState<V2NewConnectionTypeSeed | null>(null);
+  const [connectionTypeManagerSourceConnectionId, setConnectionTypeManagerSourceConnectionId] =
+    useState<string | null>(null);
   const [linkedFieldBindings, setLinkedFieldBindings] = useState<V2LinkedFieldBinding[]>([]);
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
@@ -1542,15 +1544,20 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
 
   const handleOpenConnectionTypeManager = useCallback((connectionTypeId?: string | null) => {
     setConnectionTypeManagerNewTypeSeed(null);
+    setConnectionTypeManagerSourceConnectionId(null);
     setConnectionTypeManagerInitialId(connectionTypeId ?? null);
     setIsConnectionTypeManagerOpen(true);
   }, []);
 
-  const handleCreateTypeFromConnection = useCallback((seed: V2NewConnectionTypeSeed) => {
-    setConnectionTypeManagerInitialId(null);
-    setConnectionTypeManagerNewTypeSeed(seed);
-    setIsConnectionTypeManagerOpen(true);
-  }, []);
+  const handleCreateTypeFromConnection = useCallback(
+    (connectionId: string, seed: V2NewConnectionTypeSeed) => {
+      setConnectionTypeManagerInitialId(null);
+      setConnectionTypeManagerNewTypeSeed(seed);
+      setConnectionTypeManagerSourceConnectionId(connectionId);
+      setIsConnectionTypeManagerOpen(true);
+    },
+    []
+  );
 
   const handleCreateCardType = useCallback(
     async (input: Parameters<typeof createV2CardType>[1]) => {
@@ -1850,6 +1857,25 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
       }
     },
     [connectionTypes, setEdges]
+  );
+
+  const handleCreateConnectionTypeFromManager = useCallback(
+    async (input: Parameters<typeof createV2ConnectionType>[1]) => {
+      const created = await handleCreateConnectionType(input);
+      const sourceConnectionId = connectionTypeManagerSourceConnectionId;
+      setConnectionTypeManagerSourceConnectionId(null);
+      if (sourceConnectionId) {
+        try {
+          await handleUpdateConnection(sourceConnectionId, {
+            connectionTypeId: created.id,
+          });
+        } catch (error) {
+          console.error("Failed to assign the new connector type:", error);
+        }
+      }
+      return created;
+    },
+    [connectionTypeManagerSourceConnectionId, handleCreateConnectionType, handleUpdateConnection]
   );
 
   const applyMovement = useCallback(
@@ -2875,11 +2901,12 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
           connectionTypes={connectionTypes}
           initialConnectionTypeId={connectionTypeManagerInitialId}
           initialNewTypeSeed={connectionTypeManagerNewTypeSeed}
-          onCreateConnectionType={handleCreateConnectionType}
+          onCreateConnectionType={handleCreateConnectionTypeFromManager}
           onUpdateConnectionType={handleUpdateConnectionType}
           onClose={() => {
             setIsConnectionTypeManagerOpen(false);
             setConnectionTypeManagerNewTypeSeed(null);
+            setConnectionTypeManagerSourceConnectionId(null);
           }}
         />
       ) : null}

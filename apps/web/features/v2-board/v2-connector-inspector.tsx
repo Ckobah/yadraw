@@ -42,10 +42,13 @@ type V2ConnectorInspectorProps = {
     }
   ) => Promise<void>;
   onDeleteConnection: (connectionId: string) => Promise<void>;
-  onCreateTypeFromConnection: (input: {
-    schema: V2ConnectionType["schema"];
-    defaultVisualStyle: V2ConnectionVisualStyle;
-  }) => void;
+  onCreateTypeFromConnection: (
+    connectionId: string,
+    input: {
+      schema: V2ConnectionType["schema"];
+      defaultVisualStyle: V2ConnectionVisualStyle;
+    }
+  ) => void;
   onManageConnectionType: (connectionTypeId?: string | null) => void;
   onClose: () => void;
 };
@@ -745,10 +748,13 @@ export function V2ConnectorInspector({
             <button
               type="button"
               onClick={() =>
-                onCreateTypeFromConnection({
-                  schema: connectionType.schema,
-                  defaultVisualStyle: connectionAppearance,
-                })
+                onCreateTypeFromConnection(
+                  connection.id,
+                  {
+                    schema: connectionType.schema,
+                    defaultVisualStyle: connectionAppearance,
+                  }
+                )
               }
             >
               <BookmarkPlus size={14} strokeWidth={2.2} aria-hidden="true" />
