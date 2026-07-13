@@ -432,12 +432,9 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   } = boardDetail;
   const [cardTypes, setCardTypes] = useState<V2CardType[]>(initialCardTypes);
   const [connectionTypes, setConnectionTypes] = useState<V2ConnectionType[]>(initialConnectionTypes);
-  const [activeConnectionTypeId, setActiveConnectionTypeId] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return window.localStorage.getItem(`yadraw:v2:board:${board.id}:connection-type`);
-  });
+  const [activeConnectionTypeId, setActiveConnectionTypeId] = useState<string | null>(null);
+  const [connectionTypePreferenceLoaded, setConnectionTypePreferenceLoaded] = useState(false);
   const cardTypeMap = useMemo(() => buildCardTypeMap(cardTypes), [cardTypes]);
-  const [storedViewport] = useState<Viewport | null>(() => readStoredBoardViewport(board.id));
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   useEffect(() => {
@@ -828,9 +825,28 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
   );
 
   useEffect(() => {
-    if (!activeConnectionType || activeConnectionType.id === activeConnectionTypeId) return;
+    let storedConnectionTypeId: string | null = null;
+    try {
+      storedConnectionTypeId = window.localStorage.getItem(
+        `yadraw:v2:board:${board.id}:connection-type`
+      );
+    } catch {
+      // Browser storage can be unavailable in restricted contexts.
+    }
+    setActiveConnectionTypeId(storedConnectionTypeId);
+    setConnectionTypePreferenceLoaded(true);
+  }, [board.id]);
+
+  useEffect(() => {
+    if (
+      !connectionTypePreferenceLoaded ||
+      !activeConnectionType ||
+      activeConnectionType.id === activeConnectionTypeId
+    ) {
+      return;
+    }
     setActiveConnectionTypeId(activeConnectionType.id);
-  }, [activeConnectionType, activeConnectionTypeId]);
+  }, [activeConnectionType, activeConnectionTypeId, connectionTypePreferenceLoaded]);
 
   const handleSelectConnectionType = useCallback(
     (connectionTypeId: string) => {
@@ -2623,9 +2639,14 @@ export function V2BoardCanvas({ boardDetail, onSaveStatusChange }: Props) {
         }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        defaultViewport={storedViewport ?? undefined}
-        fitView={!storedViewport}
-        fitViewOptions={{ padding: 0.3 }}
+        onInit={(instance) => {
+          const storedViewport = readStoredBoardViewport(board.id);
+          if (storedViewport) {
+            void instance.setViewport(storedViewport);
+          } else {
+            void instance.fitView({ padding: 0.3 });
+          }
+        }}
         onMoveEnd={(_event, viewport) => {
           storeBoardViewport(board.id, viewport);
         }}
