@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   LoaderCircle,
   Plus,
+  Save,
   Search,
   Trash2,
   X,
@@ -115,6 +116,14 @@ function draftFromEntry(
 
 function serializeDraft(draft: LibraryRowDraft): string {
   return JSON.stringify(draft);
+}
+
+function draftHasContent(draft: LibraryRowDraft): boolean {
+  return Boolean(
+    draft.title.trim() ||
+      draft.description.trim() ||
+      Object.values(draft.fieldValues).some((value) => value.trim())
+  );
 }
 
 function prepareDraft(
@@ -309,7 +318,11 @@ const V2CardLibraryRow = forwardRef<V2CardLibraryRowHandle, V2CardLibraryRowProp
         const currentDraft = draftRef.current;
         const currentEntryId = entryIdRef.current;
         const changed = serializeDraft(currentDraft) !== serializeDraft(baselineRef.current);
-        if (!currentEntryId && !currentDraft.title.trim()) return true;
+        if (!currentEntryId && !currentDraft.title.trim()) {
+          if (!draftHasContent(currentDraft)) return true;
+          setError("Name is required before this row can be saved.");
+          return false;
+        }
         if (!changed && archived === undefined) return true;
 
         const prepared = prepareDraft(cardType, currentDraft);
@@ -582,10 +595,19 @@ export function V2CardLibraryManager({
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const rowHandlesRef = useRef(new Map<string, V2CardLibraryRowHandle>());
 
-  const flushRows = useCallback(async (): Promise<boolean> => {
+  const flushRows = useCallback(async (blurActiveEditor = false): Promise<boolean> => {
+    if (
+      blurActiveEditor &&
+      document.activeElement instanceof HTMLElement &&
+      dialogRef.current?.contains(document.activeElement)
+    ) {
+      document.activeElement.blur();
+      await Promise.resolve();
+    }
     const results = await Promise.all(
       [...rowHandlesRef.current.values()].map((handle) => handle.flush())
     );
@@ -593,12 +615,12 @@ export function V2CardLibraryManager({
   }, []);
 
   const closeManager = useCallback(async () => {
-    if (isTransitioning) return;
+    if (isTransitioning || isSavingAll) return;
     setIsTransitioning(true);
-    const flushed = await flushRows();
+    const flushed = await flushRows(true);
     setIsTransitioning(false);
     if (flushed) onClose();
-  }, [flushRows, isTransitioning, onClose]);
+  }, [flushRows, isSavingAll, isTransitioning, onClose]);
 
   useDialogFocus(dialogRef, () => { void closeManager(); });
 
@@ -640,27 +662,34 @@ export function V2CardLibraryManager({
   }, [flushRows, searchInput]);
 
   async function selectCardType(cardTypeId: string) {
-    if (cardTypeId === selectedCardTypeId || isTransitioning) return;
+    if (cardTypeId === selectedCardTypeId || isTransitioning || isSavingAll) return;
     setIsTransitioning(true);
-    const flushed = await flushRows();
+    const flushed = await flushRows(true);
     if (flushed) setSelectedCardTypeId(cardTypeId);
     setIsTransitioning(false);
   }
 
   async function changeStatusFilter(nextStatus: LibraryStatusFilter) {
-    if (nextStatus === statusFilter || isTransitioning) return;
+    if (nextStatus === statusFilter || isTransitioning || isSavingAll) return;
     setIsTransitioning(true);
-    const flushed = await flushRows();
+    const flushed = await flushRows(true);
     if (flushed) setStatusFilter(nextStatus);
     setIsTransitioning(false);
   }
 
   async function goBack() {
-    if (!selectedCardType || isTransitioning) return;
+    if (!selectedCardType || isTransitioning || isSavingAll) return;
     setIsTransitioning(true);
-    const flushed = await flushRows();
+    const flushed = await flushRows(true);
     setIsTransitioning(false);
     if (flushed) onBack(selectedCardType.id);
+  }
+
+  async function saveRows() {
+    if (isTransitioning || isSavingAll) return;
+    setIsSavingAll(true);
+    await flushRows(true);
+    setIsSavingAll(false);
   }
 
   function addRow() {
@@ -727,7 +756,13 @@ export function V2CardLibraryManager({
       <section className="v2CardLibraryManager" onPointerDown={(event) => event.stopPropagation()}>
         <header className="v2CardTypeManagerHeader v2CardLibraryHeader">
           <div className="v2CardLibraryHeading">
-            <button type="button" aria-label="Back to card types" title="Back to card types" onClick={() => void goBack()}>
+            <button
+              type="button"
+              aria-label="Back to card types"
+              title="Back to card types"
+              disabled={isTransitioning || isSavingAll}
+              onClick={() => void goBack()}
+            >
               <ArrowLeft size={16} />
             </button>
             <div>
@@ -735,7 +770,13 @@ export function V2CardLibraryManager({
               <p>Each row is a reusable card record. Changes save automatically.</p>
             </div>
           </div>
-          <button type="button" className="v2InspectorCloseButton" aria-label="Close library" onClick={() => void closeManager()}>
+          <button
+            type="button"
+            className="v2InspectorCloseButton"
+            aria-label="Close library"
+            disabled={isTransitioning || isSavingAll}
+            onClick={() => void closeManager()}
+          >
             <X size={16} strokeWidth={2.2} />
           </button>
         </header>
@@ -754,7 +795,7 @@ export function V2CardLibraryManager({
                     ["--v2-manager-row-accent" as string]: `var(--yd-accent-${accentKey}-solid)`,
                     ["--v2-manager-row-accent-soft" as string]: `var(--yd-accent-${accentKey}-soft)`,
                   }}
-                  disabled={isTransitioning}
+                  disabled={isTransitioning || isSavingAll}
                   onClick={() => void selectCardType(cardType.id)}
                 >
                   <span className="v2CardTypeManagerRowIcon" aria-hidden="true"><Icon size={15} /></span>
@@ -778,17 +819,33 @@ export function V2CardLibraryManager({
               <select
                 value={statusFilter}
                 aria-label="Library status"
-                disabled={isTransitioning}
+                disabled={isTransitioning || isSavingAll}
                 onChange={(event) => void changeStatusFilter(event.target.value as LibraryStatusFilter)}
               >
                 <option value="active">Active</option>
                 <option value="archived">Archived</option>
                 <option value="all">All</option>
               </select>
-              <button type="button" className="v2InspectorPrimaryAction" disabled={!selectedCardType || isLoading} onClick={addRow}>
-                <Plus size={14} />
-                <span>New row</span>
-              </button>
+              <div className="v2CardLibraryToolbarActions">
+                <button
+                  type="button"
+                  className="v2SchemaEditButton"
+                  disabled={!selectedCardType || isLoading || isTransitioning || isSavingAll}
+                  onClick={addRow}
+                >
+                  <Plus size={14} />
+                  <span>New row</span>
+                </button>
+                <button
+                  type="button"
+                  className="v2InspectorPrimaryAction"
+                  disabled={!selectedCardType || isLoading || isTransitioning || isSavingAll}
+                  onClick={() => void saveRows()}
+                >
+                  {isSavingAll ? <LoaderCircle size={14} className="v2CardLibrarySpinner" /> : <Save size={14} />}
+                  <span>{isSavingAll ? "Saving…" : "Save changes"}</span>
+                </button>
+              </div>
             </div>
 
             {loadError ? <p className="v2CardLibraryLoadError">{loadError}</p> : null}

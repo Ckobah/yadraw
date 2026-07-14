@@ -7591,7 +7591,13 @@ button:disabled {
   padding: 0 9px;
 }
 
-.v2CardLibraryToolbar .v2InspectorPrimaryAction {
+.v2CardLibraryToolbarActions {
+  display: flex;
+  gap: 8px;
+}
+
+.v2CardLibraryToolbarActions .v2SchemaEditButton,
+.v2CardLibraryToolbarActions .v2InspectorPrimaryAction {
   min-height: 34px;
   justify-content: center;
   white-space: nowrap;
@@ -7886,8 +7892,10 @@ button:disabled {
     grid-template-columns: minmax(0, 1fr) 110px;
   }
 
-  .v2CardLibraryToolbar .v2InspectorPrimaryAction {
+  .v2CardLibraryToolbarActions {
     grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .v2CardLibraryHeading p {
