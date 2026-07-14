@@ -20,6 +20,7 @@ import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
 import { V2CardCalculatedSection } from "./v2-card-calculated-section";
+import { V2CardLibrarySelector } from "../v2-card-library/v2-card-library-selector";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -48,6 +49,11 @@ type V2CardInspectorProps = {
   onUpdateCardData: (
     cardId: string,
     data: Record<string, unknown>
+  ) => Promise<void>;
+  onSetLibraryEntry: (
+    cardId: string,
+    libraryEntryId: string | null,
+    expectedLibraryEntryId: string | null
   ) => Promise<void>;
   onManageCardType: (cardTypeId: string | null) => void;
   onCreateLinkedFieldBinding: (input: V2CreateLinkedFieldBindingRequest) => Promise<void>;
@@ -86,6 +92,7 @@ export function V2CardInspector({
   attachmentsLoading,
   onUpdateCardBasics,
   onUpdateCardData,
+  onSetLibraryEntry,
   onManageCardType,
   onCreateLinkedFieldBinding,
   onUpdateLinkedFieldBinding,
@@ -144,15 +151,24 @@ export function V2CardInspector({
 
       <div className="v2InspectorContent">
         {actionError ? <p className="v2InspectorActionError" role="alert">{actionError}</p> : null}
+        {cardType ? (
+          <V2CardLibrarySelector
+            card={card}
+            cardType={cardType}
+            onSetLibraryEntry={onSetLibraryEntry}
+          />
+        ) : null}
         <V2CardBasicsSection
           card={card}
           saveStatus={saveStatus}
+          readOnly={Boolean(card.libraryEntryId)}
           onUpdateCardBasics={onUpdateCardBasics}
         />
         <V2CardDataSection
           card={card}
           cardType={cardType}
           saveStatus={saveStatus}
+          readOnly={Boolean(card.libraryEntryId)}
           onUpdateCardData={onUpdateCardData}
         />
         {(linkedFieldBindings.length > 0 || incomingConnections.length > 0 || outgoingConnections.length > 0) ? <V2LinkedFieldsPreview

@@ -22,6 +22,7 @@ type V2CardDataSectionProps = {
   card: V2Card;
   cardType: V2CardType | null;
   saveStatus: SaveStatus;
+  readOnly?: boolean;
   onUpdateCardData: (
     cardId: string,
     data: Record<string, unknown>
@@ -32,6 +33,7 @@ export function V2CardDataSection({
   card,
   cardType,
   saveStatus,
+  readOnly = false,
   onUpdateCardData,
 }: V2CardDataSectionProps) {
   const schemaFields = useMemo(() => cardType?.schema?.fields ?? [], [cardType?.schema?.fields]);
@@ -47,7 +49,7 @@ export function V2CardDataSection({
   const [dataFieldErrors, setDataFieldErrors] = useState<Record<string, string>>({});
   const [schemaFieldErrors, setSchemaFieldErrors] = useState<Record<string, string>>({});
   const [dataError, setDataError] = useState<string | null>(null);
-  const editorIdentity = `${card.id}:${JSON.stringify(schemaFields)}`;
+  const editorIdentity = `${card.id}:${card.libraryEntryId ?? "local"}:${JSON.stringify(schemaFields)}`;
   const editorIdentityRef = useRef(editorIdentity);
 
   const dataBaseline = normalizeDataDraftForCompare(
@@ -73,10 +75,10 @@ export function V2CardDataSection({
   }, [card.data, editorIdentity, hasDataChanges, hasSchemaFields, saveStatus, schemaFields]);
 
   useEffect(() => {
-    if (!hasDataChanges || saveStatus === "saving") return;
+    if (readOnly || !hasDataChanges || saveStatus === "saving") return;
     const timeout = window.setTimeout(() => void saveDataDraft(), 600);
     return () => window.clearTimeout(timeout);
-  }, [dataDraftFields, schemaDraftFields, card.id, card.data, saveStatus]);
+  }, [dataDraftFields, schemaDraftFields, card.id, card.data, readOnly, saveStatus]);
 
   function updateSchemaField(
     fieldId: string,
@@ -157,6 +159,7 @@ export function V2CardDataSection({
   }
 
   async function saveDataDraft() {
+    if (readOnly) return;
     const parsedSchema = hasSchemaFields
       ? validateAndBuildSchemaDataRecord(schemaDraftFields)
       : { ok: true as const, data: {} };
@@ -194,10 +197,11 @@ export function V2CardDataSection({
   }
 
   return (
-    <div
-      className="v2InspectorDataSections"
+    <fieldset
+      className={`v2InspectorDataSections${readOnly ? " v2InspectorLibraryReadOnly" : ""}`}
+      disabled={readOnly}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) void saveDataDraft();
+        if (!readOnly && !event.currentTarget.contains(event.relatedTarget)) void saveDataDraft();
       }}
     >
       {hasSchemaFields ? (
@@ -320,7 +324,7 @@ export function V2CardDataSection({
           </div>
         </div>
       </section>
-    </div>
+    </fieldset>
   );
 }
 

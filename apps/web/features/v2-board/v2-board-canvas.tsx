@@ -49,6 +49,7 @@ import {
   type V2CardNode,
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
+import { setV2CardLibraryEntry } from "../v2-card-library/api";
 import { V2ConnectorInspector } from "./v2-connector-inspector";
 import { V2ConnectorVisualEditPanel } from "./v2-connector-visual-edit-panel";
 import { V2CardVisualEditPanel } from "./v2-card-visual-edit-panel";
@@ -560,6 +561,22 @@ export function V2BoardCanvas({
   const pendingConnectionKeysRef = useRef(new Set<string>());
   const cardAttachmentsCacheRef = useRef(cardAttachmentsByCardId);
   const attachmentRequestsRef = useRef(new Map<string, Promise<V2CardAttachment[]>>());
+  const pendingCardContentSavesRef = useRef(new Map<string, Set<Promise<void>>>());
+
+  const beginCardContentSave = useCallback((cardId: string): (() => void) => {
+    let resolveSave: (() => void) | null = null;
+    const save = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    const pending = pendingCardContentSavesRef.current.get(cardId) ?? new Set<Promise<void>>();
+    pending.add(save);
+    pendingCardContentSavesRef.current.set(cardId, pending);
+    return () => {
+      pending.delete(save);
+      if (pending.size === 0) pendingCardContentSavesRef.current.delete(cardId);
+      resolveSave?.();
+    };
+  }, []);
 
   useEffect(() => {
     const connectionById = new Map(
@@ -1221,6 +1238,7 @@ export function V2BoardCanvas({
       );
 
       setSaveStatus("saving");
+      const finishCardContentSave = beginCardContentSave(cardId);
       try {
         await updateV2CardBasics(cardId, patch);
         setSaveStatus("saved");
@@ -1246,9 +1264,11 @@ export function V2BoardCanvas({
         }
         setSaveStatus("error");
         throw err;
+      } finally {
+        finishCardContentSave();
       }
     },
-    [setNodes]
+    [beginCardContentSave, setNodes]
   );
 
   const handleUpdateCardData = useCallback(
@@ -1272,6 +1292,7 @@ export function V2BoardCanvas({
       );
 
       setSaveStatus("saving");
+      const finishCardContentSave = beginCardContentSave(cardId);
       try {
         await updateV2CardData(cardId, data);
         setCalculationRefreshNonce((current) => current + 1);
@@ -1297,6 +1318,44 @@ export function V2BoardCanvas({
         }
         setSaveStatus("error");
         throw err;
+      } finally {
+        finishCardContentSave();
+      }
+    },
+    [beginCardContentSave, setNodes]
+  );
+
+  const handleSetCardLibraryEntry = useCallback(
+    async (
+      cardId: string,
+      libraryEntryId: string | null,
+      expectedLibraryEntryId: string | null
+    ) => {
+      setSaveStatus("saving");
+      try {
+        const pendingContentSaves = [
+          ...(pendingCardContentSavesRef.current.get(cardId) ?? []),
+        ];
+        if (pendingContentSaves.length > 0) {
+          await Promise.all(pendingContentSaves);
+        }
+        const updatedCard = await setV2CardLibraryEntry(cardId, {
+          libraryEntryId,
+          expectedLibraryEntryId,
+        });
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === cardId
+              ? { ...node, data: { ...node.data, card: updatedCard } }
+              : node
+          )
+        );
+        setCalculationRefreshNonce((current) => current + 1);
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error("Failed to change card library selection:", error);
+        setSaveStatus("error");
+        throw error;
       }
     },
     [setNodes]
@@ -3019,6 +3078,7 @@ export function V2BoardCanvas({
           actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
+          onSetLibraryEntry={handleSetCardLibraryEntry}
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}
           onDeleteLinkedFieldBinding={handleDeleteLinkedFieldBinding}

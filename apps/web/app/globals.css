@@ -7902,3 +7902,137 @@ button:disabled {
     display: none;
   }
 }
+
+.v2CardLibrarySelector {
+  display: grid;
+  gap: 8px;
+}
+
+.v2CardLibrarySelectorHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.v2CardLibrarySelectorHeading > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.v2CardLibrarySelectorHeading h3,
+.v2CardLibrarySelectorHeading p,
+.v2CardLibrarySelectorStatus,
+.v2CardLibrarySelectorError {
+  margin: 0;
+}
+
+.v2CardLibrarySelectorHeading p,
+.v2CardLibrarySelectorStatus {
+  color: #667085;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.v2CardLibrarySelectorHeading > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 12%, #fff);
+  color: color-mix(in srgb, var(--v2-inspector-accent) 78%, #344054);
+  font-size: 9px;
+  font-weight: 760;
+}
+
+.v2CardLibrarySelectorSearch {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #fff;
+  color: #667085;
+}
+
+.v2CardLibrarySelectorSearch:focus-within {
+  border-color: #84adff;
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.1);
+}
+
+.v2CardLibrarySelectorSearch input {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+  outline: 0;
+}
+
+.v2CardLibrarySelectorSelect {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #dfe3e8;
+  border-radius: 6px;
+  background: #fff;
+  padding: 0 9px;
+  color: #344054;
+  font: inherit;
+  font-size: 12px;
+}
+
+.v2CardLibrarySelectorSelect:focus-visible {
+  border-color: #84adff;
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.1);
+  outline: 0;
+}
+
+.v2CardLibrarySelectorStatus {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.v2CardLibrarySelectorError {
+  color: #b42318;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+fieldset.v2InspectorDataSections {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.v2InspectorLibraryReadOnly input,
+.v2InspectorLibraryReadOnly textarea,
+.v2InspectorLibraryReadOnly select,
+.v2InspectorLibraryReadOnly button {
+  cursor: default;
+}
+
+.v2InspectorLibraryReadOnly input,
+.v2InspectorLibraryReadOnly textarea,
+.v2InspectorLibraryReadOnly select {
+  opacity: 1;
+  background: #f8fafc;
+  color: #475467;
+}
+
+.v2InspectorLibraryReadOnly .v2InspectorDataDeleteButton,
+.v2InspectorLibraryReadOnly .v2InspectorDataFooter {
+  display: none;
+}
