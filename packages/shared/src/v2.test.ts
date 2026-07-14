@@ -6,6 +6,8 @@ import {
   v2BootstrapSessionResponseSchema,
   v2CardAttachmentSchema,
   v2CardFileSchema,
+  v2CardLibraryEntryListResponseSchema,
+  v2CardLibraryEntrySchema,
   v2CardTypeDefinitionSchema,
   v2CardTypeSchema as v2CardTypeEntitySchema,
   v2CardSchema,
@@ -18,17 +20,22 @@ import {
   v2ConnectionVisualStyleSchema,
   v2CreateCardBodySchema,
   v2CreateBoardBodySchema,
+  v2CreateCardLibraryEntryBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
   v2CreateLinkedFieldBindingBodySchema,
+  v2DeleteCardLibraryEntryQuerySchema,
   v2DryRunResultSchema,
   v2FileProcessingStatusSchema,
   v2FileSchema,
   v2LinkedFieldBindingSchema,
   v2LinkedFieldBindingListResponseSchema,
+  v2ListCardLibraryEntriesQuerySchema,
   v2RunDryRunBodySchema,
+  v2SetCardLibraryEntryBodySchema,
   v2UpdateBoardLayoutBodySchema,
+  v2UpdateCardLibraryEntryBodySchema,
   v2UpdateCardTypeBodySchema,
   v2UpdateConnectionTypeBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
@@ -51,6 +58,7 @@ const fileId = "77777777-7777-4777-8777-777777777777";
 const cardFileId = "88888888-8888-4888-8888-888888888888";
 const connectionFileId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const bindingId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const libraryEntryId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 describe("v2 API contracts", () => {
   const baseCardType = {
@@ -415,6 +423,24 @@ describe("v2 API contracts", () => {
     });
   });
 
+  it("accepts linked card creation without duplicated semantic content", () => {
+    expect(
+      v2CreateCardBodySchema.parse({
+        cardTypeId,
+        libraryEntryId,
+        position: { x: 20, y: 40 }
+      })
+    ).toEqual({ cardTypeId, libraryEntryId, position: { x: 20, y: 40 } });
+
+    expect(() =>
+      v2CreateCardBodySchema.parse({
+        cardTypeId,
+        libraryEntryId,
+        data: { taxId: "7701001001" }
+      })
+    ).toThrow();
+  });
+
   it("applies defaults for connection creation requests", () => {
     expect(
       v2CreateConnectionBodySchema.parse({
@@ -605,6 +631,17 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.createCardType.body).toBe(v2CreateCardTypeBodySchema);
     expect(v2ApiContracts.updateCardType.body).toBe(v2UpdateCardTypeBodySchema);
     expect(v2ApiContracts.updateCardTypeSchema.body).toBe(v2UpdateCardTypeSchemaBodySchema);
+    expect(v2ApiContracts.listCardLibraryEntries).toMatchObject({
+      method: "GET",
+      path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries"
+    });
+    expect(v2ApiContracts.createCardLibraryEntry.body).toBe(
+      v2CreateCardLibraryEntryBodySchema
+    );
+    expect(v2ApiContracts.updateCardLibraryEntry.body).toBe(
+      v2UpdateCardLibraryEntryBodySchema
+    );
+    expect(v2ApiContracts.setCardLibraryEntry.body).toBe(v2SetCardLibraryEntryBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
     expect(v2ApiContracts.updateLinkedFieldBinding.body).toBe(v2UpdateLinkedFieldBindingBodySchema);
@@ -711,6 +748,117 @@ describe("v2 API contracts", () => {
           ]
         }
       })
+    ).toThrow();
+  });
+
+  it("parses card library entries and derives whether they can be selected", () => {
+    const activeEntry = v2CardLibraryEntrySchema.parse({
+      id: libraryEntryId,
+      workspaceId,
+      cardTypeId,
+      title: "Northwind",
+      description: "Primary supplier",
+      data: { taxId: "7701001001", rating: 5 },
+      version: 3,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    });
+
+    expect(activeEntry).toMatchObject({
+      archivedAt: null,
+      validationIssues: [],
+      selectable: true,
+      usageCount: 0
+    });
+
+    expect(
+      v2CardLibraryEntrySchema.parse({
+        ...activeEntry,
+        archivedAt: timestamp,
+        selectable: undefined
+      })
+    ).toMatchObject({ selectable: false });
+
+    expect(
+      v2CardLibraryEntrySchema.parse({
+        ...activeEntry,
+        validationIssues: [
+          { code: "required", fieldKey: "taxId", message: "Tax ID is required" }
+        ],
+        selectable: undefined
+      })
+    ).toMatchObject({ selectable: false });
+  });
+
+  it("parses card library list queries and response pages", () => {
+    expect(v2ListCardLibraryEntriesQuerySchema.parse({ limit: "25" })).toEqual({
+      status: "active",
+      limit: 25,
+      sort: "title",
+      direction: "asc"
+    });
+    expect(() => v2ListCardLibraryEntriesQuerySchema.parse({ limit: 101 })).toThrow();
+
+    expect(
+      v2CardLibraryEntryListResponseSchema.parse({
+        entries: [
+          {
+            id: libraryEntryId,
+            workspaceId,
+            cardTypeId,
+            title: "Northwind",
+            description: "",
+            data: {},
+            version: 1,
+            createdAt: timestamp,
+            updatedAt: timestamp
+          }
+        ],
+        nextCursor: null
+      })
+    ).toMatchObject({ entries: [{ id: libraryEntryId, selectable: true }], nextCursor: null });
+  });
+
+  it("validates card library create, update, delete, and binding requests", () => {
+    expect(v2CreateCardLibraryEntryBodySchema.parse({ title: "  Northwind  " })).toEqual({
+      title: "Northwind",
+      description: "",
+      data: {}
+    });
+    expect(() =>
+      v2CreateCardLibraryEntryBodySchema.parse({
+        title: "Unsafe",
+        data: { _yadraw: { libraryEntryId } }
+      })
+    ).toThrow();
+
+    expect(
+      v2UpdateCardLibraryEntryBodySchema.parse({
+        archived: true,
+        expectedVersion: 3
+      })
+    ).toEqual({ archived: true, expectedVersion: 3 });
+    expect(() =>
+      v2UpdateCardLibraryEntryBodySchema.parse({ expectedVersion: 3 })
+    ).toThrow();
+    expect(v2DeleteCardLibraryEntryQuerySchema.parse({ expectedVersion: "3" })).toEqual({
+      expectedVersion: 3
+    });
+
+    expect(
+      v2SetCardLibraryEntryBodySchema.parse({
+        libraryEntryId,
+        expectedLibraryEntryId: null
+      })
+    ).toEqual({ libraryEntryId, expectedLibraryEntryId: null });
+    expect(
+      v2SetCardLibraryEntryBodySchema.parse({
+        libraryEntryId: null,
+        expectedLibraryEntryId: libraryEntryId
+      })
+    ).toEqual({ libraryEntryId: null, expectedLibraryEntryId: libraryEntryId });
+    expect(() =>
+      v2SetCardLibraryEntryBodySchema.parse({ libraryEntryId })
     ).toThrow();
   });
 
@@ -1082,6 +1230,18 @@ describe("v2CardSchema with visualStyle", () => {
       fontStyle: "italic",
       textDecoration: "underline"
     });
+  });
+
+  it("accepts a library entry reference outside card data", () => {
+    const card = v2CardSchema.parse({
+      ...baseCard,
+      libraryEntryId
+    });
+    expect(card.libraryEntryId).toBe(libraryEntryId);
+    expect(card.data).toEqual({ key: "value" });
+    expect(() =>
+      v2CardSchema.parse({ ...baseCard, libraryEntryId: "not-a-uuid" })
+    ).toThrow();
   });
 });
 

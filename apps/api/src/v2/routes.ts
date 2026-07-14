@@ -210,6 +210,112 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries",
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+        };
+        return await service.listCardLibraryEntries(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          request.query as any
+        );
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
+  server.get(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/:libraryEntryId",
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId, libraryEntryId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+          libraryEntryId: string;
+        };
+        return await service.getCardLibraryEntry(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          libraryEntryId
+        );
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
+  server.post(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries",
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+        };
+        const entry = await service.createCardLibraryEntry(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          request.body as any
+        );
+        return reply.code(201).send(entry);
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
+  server.patch(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/:libraryEntryId",
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId, libraryEntryId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+          libraryEntryId: string;
+        };
+        return await service.updateCardLibraryEntry(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          libraryEntryId,
+          request.body as any
+        );
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
+  server.delete(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/:libraryEntryId",
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId, libraryEntryId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+          libraryEntryId: string;
+        };
+        return await service.deleteCardLibraryEntry(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          libraryEntryId,
+          request.query
+        );
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
   server.get("/v2/boards/:boardId/connection-types", async (request, reply) => {
     try {
       const { boardId } = request.params as { boardId: string };
@@ -329,6 +435,19 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     try {
       const { cardId } = request.params as { cardId: string };
       return await service.updateCard(request.requestContext, cardId, request.body as any);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.patch("/v2/cards/:cardId/library-entry", async (request, reply) => {
+    try {
+      const { cardId } = request.params as { cardId: string };
+      return await service.setCardLibraryEntry(
+        request.requestContext,
+        cardId,
+        request.body as any
+      );
     } catch (error) {
       return handleV2ServiceError(reply, error);
     }

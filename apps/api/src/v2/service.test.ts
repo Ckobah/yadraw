@@ -1174,5 +1174,291 @@ describe("v2 board service", () => {
     expect(board.connections.map((item) => item.id)).not.toContain(connection.id);
     await expect(repository.getConnection(connection.id)).resolves.toBeNull();
   });
+
+  it("keeps linked card content live and snapshots it when unlinked", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    sourceType.schema = {
+      fields: [{ key: "code", label: "Code", type: "text" }]
+    };
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const first = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { title: "Northwind", data: { code: "NW" } }
+    );
+    const second = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { title: "Contoso", data: { code: "CT" } }
+    );
+    const linkedCard = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: sourceType.id,
+      libraryEntryId: first.id,
+      position: { x: 120, y: 240 }
+    });
+    const target = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id
+    });
+    const connection = await service.createConnection(ownerContext, seed.board.id, {
+      sourceCardId: linkedCard.id,
+      targetCardId: target.id,
+      sourcePortKey: "payload",
+      targetPortKey: "input"
+    });
+
+    const switched = await service.setCardLibraryEntry(ownerContext, linkedCard.id, {
+      libraryEntryId: second.id,
+      expectedLibraryEntryId: first.id
+    });
+    expect(switched).toMatchObject({
+      id: linkedCard.id,
+      libraryEntryId: second.id,
+      title: "Contoso",
+      data: { code: "CT" },
+      position: { x: 120, y: 240 }
+    });
+    await expect(
+      service.setCardLibraryEntry(ownerContext, linkedCard.id, {
+        libraryEntryId: first.id,
+        expectedLibraryEntryId: null
+      })
+    ).rejects.toMatchObject({ code: "conflict" });
+    await expect(service.duplicateCard(ownerContext, linkedCard.id)).resolves.toMatchObject({
+      libraryEntryId: second.id,
+      title: "Contoso",
+      data: { code: "CT" }
+    });
+
+    await service.updateCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      second.id,
+      { title: "Contoso Ltd", data: { code: "CTL" }, expectedVersion: 1 }
+    );
+    await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
+      cards: expect.arrayContaining([
+        expect.objectContaining({
+          id: linkedCard.id,
+          title: "Contoso Ltd",
+          data: { code: "CTL" }
+        })
+      ]),
+      connections: expect.arrayContaining([expect.objectContaining({ id: connection.id })])
+    });
+    await expect(
+      service.updateCard(ownerContext, linkedCard.id, { title: "Local override" })
+    ).rejects.toMatchObject({ code: "conflict" });
+    await expect(
+      service.updateCard(ownerContext, linkedCard.id, { position: { x: 300, y: 400 } })
+    ).resolves.toMatchObject({ title: "Contoso Ltd", position: { x: 300, y: 400 } });
+
+    const unlinked = await service.setCardLibraryEntry(ownerContext, linkedCard.id, {
+      libraryEntryId: null,
+      expectedLibraryEntryId: second.id
+    });
+    expect(unlinked).toMatchObject({
+      libraryEntryId: null,
+      title: "Contoso Ltd",
+      data: { code: "CTL" }
+    });
+    await service.updateCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      second.id,
+      { title: "Contoso Global", expectedVersion: 2 }
+    );
+    await expect(repository.getCard(linkedCard.id)).resolves.toMatchObject({
+      libraryEntryId: null,
+      title: "Contoso Ltd",
+      data: { code: "CTL" }
+    });
+  });
+
+  it("validates library rows, permissions, archival state, and optimistic versions", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    sourceType.schema = {
+      fields: [
+        { key: "taxId", label: "Tax ID", type: "text", required: true },
+        {
+          key: "tier",
+          label: "Tier",
+          type: "select",
+          options: [
+            { value: "primary", label: "Primary" },
+            { value: "backup", label: "Backup" }
+          ]
+        }
+      ]
+    };
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const incomplete = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { title: "Draft supplier" }
+    );
+    expect(incomplete).toMatchObject({ selectable: false });
+    expect(incomplete.validationIssues).toEqual([
+      expect.objectContaining({ code: "required", fieldKey: "taxId" })
+    ]);
+    await expect(
+      service.createCard(ownerContext, seed.board.id, {
+        cardTypeId: sourceType.id,
+        libraryEntryId: incomplete.id
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(
+      service.createCardLibraryEntry(ownerContext, seed.workspace.id, sourceType.id, {
+        title: "Invalid supplier",
+        data: { taxId: "7701", tier: "unknown" }
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+
+    const valid = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { title: "Valid supplier", data: { taxId: "7701", tier: "primary" } }
+    );
+    const taskCard = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: taskType.id
+    });
+    await expect(
+      service.setCardLibraryEntry(ownerContext, taskCard.id, {
+        libraryEntryId: valid.id,
+        expectedLibraryEntryId: null
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(
+      service.listCardLibraryEntries(viewerContext, seed.workspace.id, sourceType.id, {})
+    ).resolves.toMatchObject({ entries: expect.arrayContaining([expect.objectContaining({ id: valid.id })]) });
+    await expect(
+      service.createCardLibraryEntry(viewerContext, seed.workspace.id, sourceType.id, {
+        title: "Denied"
+      })
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      service.updateCardLibraryEntry(
+        ownerContext,
+        seed.workspace.id,
+        sourceType.id,
+        valid.id,
+        { title: "Stale update", expectedVersion: 99 }
+      )
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    const archived = await service.updateCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      valid.id,
+      { archived: true, expectedVersion: 1 }
+    );
+    expect(archived).toMatchObject({ selectable: false });
+    await expect(
+      service.createCard(ownerContext, seed.board.id, {
+        cardTypeId: sourceType.id,
+        libraryEntryId: valid.id
+      })
+    ).rejects.toMatchObject({ code: "validation_failed" });
+  });
+
+  it("paginates and searches each card type library independently", async () => {
+    const { seed, sourceType, taskType } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    for (const title of ["Alpha Supply", "Beta Supply", "Gamma Supply"]) {
+      await service.createCardLibraryEntry(ownerContext, seed.workspace.id, sourceType.id, {
+        title
+      });
+    }
+    await service.createCardLibraryEntry(ownerContext, seed.workspace.id, taskType.id, {
+      title: "Alpha task"
+    });
+
+    const firstPage = await service.listCardLibraryEntries(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { limit: 2 }
+    );
+    expect(firstPage.entries.map((entry) => entry.title)).toEqual([
+      "Alpha Supply",
+      "Beta Supply"
+    ]);
+    expect(firstPage.nextCursor).toBeTruthy();
+    const secondPage = await service.listCardLibraryEntries(
+      ownerContext,
+      seed.workspace.id,
+      sourceType.id,
+      { limit: 2, cursor: firstPage.nextCursor! }
+    );
+    expect(secondPage.entries.map((entry) => entry.title)).toEqual(["Gamma Supply"]);
+    await expect(
+      service.listCardLibraryEntries(ownerContext, seed.workspace.id, sourceType.id, {
+        query: "beta"
+      })
+    ).resolves.toMatchObject({ entries: [expect.objectContaining({ title: "Beta Supply" })] });
+  });
+
+  it("blocks deleting used entries and card types that still own library rows", async () => {
+    const { seed } = getSeedParts();
+    const service = createV2BoardService(createV2MemoryRepository(seed));
+    const supplierType = await service.createCardType(ownerContext, seed.board.id, {
+      key: "supplier_library_test",
+      name: "Supplier",
+      schema: { fields: [] },
+      ports: []
+    });
+    const entry = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      supplierType.id,
+      { title: "Northwind" }
+    );
+    const card = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: supplierType.id,
+      libraryEntryId: entry.id
+    });
+
+    await expect(
+      service.deleteCardLibraryEntry(
+        ownerContext,
+        seed.workspace.id,
+        supplierType.id,
+        entry.id,
+        { expectedVersion: 1 }
+      )
+    ).rejects.toMatchObject({ code: "conflict" });
+    await service.setCardLibraryEntry(ownerContext, card.id, {
+      libraryEntryId: null,
+      expectedLibraryEntryId: entry.id
+    });
+    await expect(
+      service.deleteCardType(ownerContext, seed.board.id, supplierType.id)
+    ).rejects.toMatchObject({ code: "conflict" });
+    await expect(
+      service.deleteCardLibraryEntry(
+        viewerContext,
+        seed.workspace.id,
+        supplierType.id,
+        entry.id,
+        { expectedVersion: 1 }
+      )
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      service.deleteCardLibraryEntry(
+        ownerContext,
+        seed.workspace.id,
+        supplierType.id,
+        entry.id,
+        { expectedVersion: 1 }
+      )
+    ).resolves.toEqual({ deleted: true, id: entry.id });
+  });
 });
 

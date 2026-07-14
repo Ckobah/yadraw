@@ -31,6 +31,21 @@ function unauthorizedResponse(): Response {
   );
 }
 
+export function appendForwardedQuery(
+  path: string,
+  request: Request,
+  allowedKeys: readonly string[]
+): string {
+  const incoming = new URL(request.url).searchParams;
+  const forwarded = new URLSearchParams();
+  for (const key of allowedKeys) {
+    const value = incoming.get(key);
+    if (value !== null) forwarded.set(key, value);
+  }
+  const query = forwarded.toString();
+  return query ? `${path}?${query}` : path;
+}
+
 export async function proxyPatch(
   path: string,
   body: unknown

@@ -36,6 +36,9 @@ export const v2LinkedFieldDirectionSchema = z.enum(["incoming", "outgoing"]);
 export const v2LinkedFieldOnMissingSchema = z.enum(["empty"]);
 export const v2LinkedFieldOnMultipleSchema = z.enum(["warning"]);
 export const v2LinkedFieldStatusSchema = z.enum(["active", "deleted"]);
+export const v2CardLibraryEntryStatusFilterSchema = z.enum(["active", "archived", "all"]);
+export const v2CardLibraryEntrySortSchema = z.enum(["title", "updatedAt"]);
+export const v2SortDirectionSchema = z.enum(["asc", "desc"]);
 export const v2FileProcessingStatusSchema = z.enum([
   "pending",
   "processing",
@@ -349,11 +352,43 @@ export const v2ConnectionTypeSchema = z.object({
   updatedAt: v2TimestampSchema
 });
 
+export const v2CardLibraryEntryValidationIssueSchema = z
+  .object({
+    code: z.enum(["required", "invalid_type", "invalid_option", "unknown_field"]),
+    fieldKey: z.string().trim().min(1).nullable(),
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+export const v2CardLibraryEntrySchema = z
+  .object({
+    id: v2UuidSchema,
+    workspaceId: v2UuidSchema,
+    cardTypeId: v2UuidSchema,
+    title: z.string().trim().min(1).max(240),
+    description: z.string().max(10000),
+    data: v2JsonObjectSchema,
+    version: z.number().int().positive(),
+    archivedAt: v2TimestampSchema.nullable().default(null),
+    validationIssues: z.array(v2CardLibraryEntryValidationIssueSchema).default([]),
+    selectable: z.boolean().optional(),
+    usageCount: z.number().int().nonnegative().default(0),
+    createdAt: v2TimestampSchema,
+    updatedAt: v2TimestampSchema
+  })
+  .strict()
+  .transform((entry) => ({
+    ...entry,
+    selectable:
+      entry.selectable ?? (entry.archivedAt === null && entry.validationIssues.length === 0)
+  }));
+
 export const v2CardSchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
   boardId: v2UuidSchema,
   cardTypeId: v2UuidSchema,
+  libraryEntryId: v2UuidSchema.nullable().optional(),
   title: z.string().min(1),
   description: z.string(),
   data: v2JsonObjectSchema,
@@ -644,6 +679,65 @@ export const v2UpdateCardTypeSchemaBodySchema = z
   })
   .strict();
 
+export const v2ListCardLibraryEntriesParamsSchema = z.object({
+  workspaceId: v2UuidSchema,
+  cardTypeId: v2UuidSchema
+});
+
+export const v2ListCardLibraryEntriesQuerySchema = z
+  .object({
+    query: z.string().trim().max(200).optional(),
+    status: v2CardLibraryEntryStatusFilterSchema.default("active"),
+    cursor: v2UuidSchema.optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    sort: v2CardLibraryEntrySortSchema.default("title"),
+    direction: v2SortDirectionSchema.default("asc")
+  })
+  .strict();
+
+export const v2CardLibraryEntryParamsSchema = z.object({
+  workspaceId: v2UuidSchema,
+  cardTypeId: v2UuidSchema,
+  libraryEntryId: v2UuidSchema
+});
+
+export const v2CreateCardLibraryEntryBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(240),
+    description: z.string().max(10000).default(""),
+    data: v2JsonObjectSchema.default({})
+  })
+  .strict();
+
+export const v2UpdateCardLibraryEntryBodySchema = z
+  .object({
+    title: z.string().trim().min(1).max(240).optional(),
+    description: z.string().max(10000).optional(),
+    data: v2JsonObjectSchema.optional(),
+    archived: z.boolean().optional(),
+    expectedVersion: z.number().int().positive()
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.title !== undefined ||
+      input.description !== undefined ||
+      input.data !== undefined ||
+      input.archived !== undefined,
+    { message: "At least one library entry change is required" }
+  );
+
+export const v2DeleteCardLibraryEntryQuerySchema = z
+  .object({
+    expectedVersion: z.coerce.number().int().positive()
+  })
+  .strict();
+
+export const v2CardLibraryEntryListResponseSchema = z.object({
+  entries: z.array(v2CardLibraryEntrySchema),
+  nextCursor: v2UuidSchema.nullable()
+});
+
 export const v2ListConnectionTypesParamsSchema = z.object({
   boardId: v2UuidSchema
 });
@@ -681,20 +775,42 @@ export const v2CreateCardParamsSchema = z.object({
   boardId: v2UuidSchema
 });
 
-export const v2CreateCardBodySchema = z.object({
-  cardTypeId: v2UuidSchema,
-  title: z.string().trim().min(1).optional(),
-  description: z.string().optional(),
-  data: v2JsonObjectSchema.optional(),
-  position: v2PositionSchema.optional(),
-  size: v2SizeSchema.optional(),
-  visualStyle: v2CardVisualStyleSchema.optional(),
-  status: v2CardStatusSchema.optional()
-});
+export const v2CreateCardBodySchema = z
+  .object({
+    cardTypeId: v2UuidSchema,
+    libraryEntryId: v2UuidSchema.optional(),
+    title: z.string().trim().min(1).optional(),
+    description: z.string().optional(),
+    data: v2JsonObjectSchema.optional(),
+    position: v2PositionSchema.optional(),
+    size: v2SizeSchema.optional(),
+    visualStyle: v2CardVisualStyleSchema.optional(),
+    status: v2CardStatusSchema.optional()
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      input.libraryEntryId !== undefined &&
+      (input.title !== undefined || input.description !== undefined || input.data !== undefined)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["libraryEntryId"],
+        message: "Linked cards derive title, description, and data from the library entry"
+      });
+    }
+  });
 
 export const v2UpdateCardParamsSchema = z.object({
   cardId: v2UuidSchema
 });
+
+export const v2SetCardLibraryEntryBodySchema = z
+  .object({
+    libraryEntryId: v2UuidSchema.nullable(),
+    expectedLibraryEntryId: v2UuidSchema.nullable()
+  })
+  .strict();
 
 export const v2UpdateCardBodySchema = z
   .object({
@@ -1045,6 +1161,40 @@ export const v2ApiContracts = {
     params: v2DeleteCardTypeParamsSchema,
     response: z.object({ deleted: z.literal(true), id: v2UuidSchema })
   },
+  listCardLibraryEntries: {
+    method: "GET",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries",
+    params: v2ListCardLibraryEntriesParamsSchema,
+    query: v2ListCardLibraryEntriesQuerySchema,
+    response: v2CardLibraryEntryListResponseSchema
+  },
+  getCardLibraryEntry: {
+    method: "GET",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/{libraryEntryId}",
+    params: v2CardLibraryEntryParamsSchema,
+    response: v2CardLibraryEntrySchema
+  },
+  createCardLibraryEntry: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries",
+    params: v2ListCardLibraryEntriesParamsSchema,
+    body: v2CreateCardLibraryEntryBodySchema,
+    response: v2CardLibraryEntrySchema
+  },
+  updateCardLibraryEntry: {
+    method: "PATCH",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/{libraryEntryId}",
+    params: v2CardLibraryEntryParamsSchema,
+    body: v2UpdateCardLibraryEntryBodySchema,
+    response: v2CardLibraryEntrySchema
+  },
+  deleteCardLibraryEntry: {
+    method: "DELETE",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/{libraryEntryId}",
+    params: v2CardLibraryEntryParamsSchema,
+    query: v2DeleteCardLibraryEntryQuerySchema,
+    response: v2DeleteResultSchema
+  },
   listConnectionTypes: {
     method: "GET",
     path: "/v2/boards/{boardId}/connection-types",
@@ -1077,6 +1227,13 @@ export const v2ApiContracts = {
     path: "/v2/cards/{cardId}",
     params: v2UpdateCardParamsSchema,
     body: v2UpdateCardBodySchema,
+    response: v2CardSchema
+  },
+  setCardLibraryEntry: {
+    method: "PATCH",
+    path: "/v2/cards/{cardId}/library-entry",
+    params: v2UpdateCardParamsSchema,
+    body: v2SetCardLibraryEntryBodySchema,
     response: v2CardSchema
   },
   deleteCard: {
@@ -1177,6 +1334,9 @@ export const V2CalculationEvaluationSchema = v2CalculationEvaluationSchema;
 export const V2SemanticGraphSchema = v2SemanticGraphSchema;
 export const V2LinkedFieldBindingSchema = v2LinkedFieldBindingSchema;
 export const V2CardTypeDefinitionSchema = v2CardTypeDefinitionSchema;
+export const V2CardLibraryEntrySchema = v2CardLibraryEntrySchema;
+export const V2CardLibraryEntryValidationIssueSchema =
+  v2CardLibraryEntryValidationIssueSchema;
 export const V2ConnectionTypeDefinitionSchema = v2ConnectionTypeDefinitionSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
@@ -1208,6 +1368,14 @@ export type V2ConnectionTypeSemantics = z.infer<typeof v2ConnectionTypeSemantics
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardTypePortInput = z.infer<typeof v2CardTypePortInputSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;
+export type V2CardLibraryEntryStatusFilter = z.infer<
+  typeof v2CardLibraryEntryStatusFilterSchema
+>;
+export type V2CardLibraryEntrySort = z.infer<typeof v2CardLibraryEntrySortSchema>;
+export type V2CardLibraryEntryValidationIssue = z.infer<
+  typeof v2CardLibraryEntryValidationIssueSchema
+>;
+export type V2CardLibraryEntry = z.infer<typeof v2CardLibraryEntrySchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
 export type V2ConnectionType = z.infer<typeof v2ConnectionTypeSchema>;
@@ -1237,6 +1405,19 @@ export type V2BootstrapSessionRequest = z.input<typeof v2BootstrapSessionBodySch
 export type V2BootstrapSessionResponse = z.infer<typeof v2BootstrapSessionResponseSchema>;
 export type V2CreateCardTypeInput = z.infer<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeInput = z.infer<typeof v2UpdateCardTypeBodySchema>;
+export type V2ListCardLibraryEntriesQuery = z.infer<
+  typeof v2ListCardLibraryEntriesQuerySchema
+>;
+export type V2CardLibraryEntryListResponse = z.infer<
+  typeof v2CardLibraryEntryListResponseSchema
+>;
+export type V2CreateCardLibraryEntryInput = z.infer<
+  typeof v2CreateCardLibraryEntryBodySchema
+>;
+export type V2UpdateCardLibraryEntryInput = z.infer<
+  typeof v2UpdateCardLibraryEntryBodySchema
+>;
+export type V2SetCardLibraryEntryInput = z.infer<typeof v2SetCardLibraryEntryBodySchema>;
 export type V2CreateConnectionTypeInput = z.infer<typeof v2CreateConnectionTypeBodySchema>;
 export type V2UpdateConnectionTypeInput = z.infer<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
@@ -1270,6 +1451,16 @@ export type V2EvaluateCalculationsInput = z.infer<typeof v2EvaluateCalculationsB
 export type V2EvaluateCalculationsRequest = z.input<typeof v2EvaluateCalculationsBodySchema>;
 export type V2CreateCardTypeRequest = z.input<typeof v2CreateCardTypeBodySchema>;
 export type V2UpdateCardTypeRequest = z.input<typeof v2UpdateCardTypeBodySchema>;
+export type V2ListCardLibraryEntriesQueryRequest = z.input<
+  typeof v2ListCardLibraryEntriesQuerySchema
+>;
+export type V2CreateCardLibraryEntryRequest = z.input<
+  typeof v2CreateCardLibraryEntryBodySchema
+>;
+export type V2UpdateCardLibraryEntryRequest = z.input<
+  typeof v2UpdateCardLibraryEntryBodySchema
+>;
+export type V2SetCardLibraryEntryRequest = z.input<typeof v2SetCardLibraryEntryBodySchema>;
 export type V2CreateConnectionTypeRequest = z.input<typeof v2CreateConnectionTypeBodySchema>;
 export type V2UpdateConnectionTypeRequest = z.input<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;

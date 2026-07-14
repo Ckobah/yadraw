@@ -460,4 +460,57 @@ describePostgres("v2 Postgres repository", () => {
 
     await service.deleteCard(ownerContext, source.id);
   });
+
+  it("persists live card library links and atomic unlink snapshots", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const entry = await service.createCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      { title: `Library source ${Date.now()}` }
+    );
+    const card = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.sourceType,
+      libraryEntryId: entry.id,
+      position: { x: 75, y: 125 }
+    });
+    expect(card).toMatchObject({
+      libraryEntryId: entry.id,
+      title: entry.title,
+      position: { x: 75, y: 125 }
+    });
+
+    const changed = await service.updateCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      entry.id,
+      { title: `${entry.title} updated`, expectedVersion: 1 }
+    );
+    await expect(repository.getCard(card.id)).resolves.toMatchObject({
+      libraryEntryId: entry.id,
+      title: changed.title
+    });
+    await expect(
+      service.updateCard(ownerContext, card.id, { position: { x: 175, y: 225 } })
+    ).resolves.toMatchObject({ title: changed.title, position: { x: 175, y: 225 } });
+
+    const unlinked = await service.setCardLibraryEntry(ownerContext, card.id, {
+      libraryEntryId: null,
+      expectedLibraryEntryId: entry.id
+    });
+    expect(unlinked).toMatchObject({ libraryEntryId: null, title: changed.title });
+    await service.updateCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      entry.id,
+      { title: `${entry.title} changed again`, expectedVersion: 2 }
+    );
+    await expect(repository.getCard(card.id)).resolves.toMatchObject({
+      libraryEntryId: null,
+      title: changed.title
+    });
+  });
 });

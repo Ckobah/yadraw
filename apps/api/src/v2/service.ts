@@ -13,43 +13,57 @@ import {
   type V2CreateConnectionTypeRequest,
   type V2CreateLinkedFieldBindingRequest,
   v2CreateCardBodySchema,
+  v2CreateCardLibraryEntryBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2CreateConnectionTypeBodySchema,
   v2CreateLinkedFieldBindingBodySchema,
+  v2CardLibraryEntrySchema,
   v2ConnectorSlotSchema,
   v2DemoIds,
+  v2DeleteCardLibraryEntryQuerySchema,
   v2EvaluateCalculationsBodySchema,
   v2RunDryRunBodySchema,
+  v2ListCardLibraryEntriesQuerySchema,
+  v2SetCardLibraryEntryBodySchema,
   v2UpdateBoardLayoutBodySchema,
   v2UpdateBoardBodySchema,
   v2UpdateCardTypeSchemaBodySchema,
   v2UpdateCardBodySchema,
+  v2UpdateCardLibraryEntryBodySchema,
   v2UpdateConnectionBodySchema,
   v2UpdateLinkedFieldBindingBodySchema,
+  v2UuidSchema,
   type V2BoardDetail,
   type V2BoardExport,
   type V2BoardSummary,
   type V2BootstrapSessionRequest,
   type V2BootstrapSessionResponse,
   type V2Card,
+  type V2CardLibraryEntry,
+  type V2CardLibraryEntryListResponse,
+  type V2CardLibraryEntryValidationIssue,
   type V2CardType,
   type V2ConnectionType,
   type V2CardTypePortInput,
   type V2Connection,
   type V2CalculationEvaluation,
   type V2CreateCardRequest,
+  type V2CreateCardLibraryEntryRequest,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
   type V2EvaluateCalculationsRequest,
   type V2LinkedFieldBinding,
+  type V2ListCardLibraryEntriesQueryRequest,
   type V2RunDryRunRequest,
   type V2SemanticGraph,
+  type V2SetCardLibraryEntryRequest,
   type V2UpdateCardTypeRequest,
   type V2UpdateBoardLayoutRequest,
   type V2UpdateBoardLayoutResponse,
   type V2UpdateConnectionTypeRequest,
   type V2UpdateCardRequest,
+  type V2UpdateCardLibraryEntryRequest,
   v2UpdateCardTypeBodySchema,
   type V2UpdateCardTypeSchemaRequest,
   type V2UpdateConnectionRequest,
@@ -142,6 +156,38 @@ export type V2BoardService = {
     boardId: string,
     cardTypeId: string
   ): Promise<{ deleted: true; id: string }>;
+  listCardLibraryEntries(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    query: V2ListCardLibraryEntriesQueryRequest
+  ): Promise<V2CardLibraryEntryListResponse>;
+  getCardLibraryEntry(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    libraryEntryId: string
+  ): Promise<V2CardLibraryEntry>;
+  createCardLibraryEntry(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2CreateCardLibraryEntryRequest
+  ): Promise<V2CardLibraryEntry>;
+  updateCardLibraryEntry(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    libraryEntryId: string,
+    input: V2UpdateCardLibraryEntryRequest
+  ): Promise<V2CardLibraryEntry>;
+  deleteCardLibraryEntry(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    libraryEntryId: string,
+    query: unknown
+  ): Promise<{ deleted: true; id: string }>;
   listConnectionTypes(context: RequestContext, boardId: string): Promise<{ connectionTypes: V2ConnectionType[] }>;
   createConnectionType(
     context: RequestContext,
@@ -175,6 +221,11 @@ export type V2BoardService = {
   createCard(context: RequestContext, boardId: string, input: V2CreateCardRequest): Promise<V2Card>;
   duplicateCard(context: RequestContext, cardId: string): Promise<V2Card>;
   updateCard(context: RequestContext, cardId: string, input: V2UpdateCardRequest): Promise<V2Card>;
+  setCardLibraryEntry(
+    context: RequestContext,
+    cardId: string,
+    input: V2SetCardLibraryEntryRequest
+  ): Promise<V2Card>;
   deleteCard(context: RequestContext, cardId: string): Promise<{ deleted: true; id: string }>;
   createConnection(context: RequestContext, boardId: string, input: V2CreateConnectionRequest): Promise<V2Connection>;
   updateConnection(context: RequestContext, connectionId: string, input: V2UpdateConnectionRequest): Promise<V2Connection>;
@@ -228,6 +279,102 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function requireV2Uuid(value: string, label: string): void {
+  if (!v2UuidSchema.safeParse(value).success) validationFailed(`Invalid ${label}`);
+}
+
+function validateCardLibraryEntryData(
+  cardType: V2CardType,
+  data: Record<string, unknown>
+): V2CardLibraryEntryValidationIssue[] {
+  const issues: V2CardLibraryEntryValidationIssue[] = [];
+  const fieldsByKey = new Map(cardType.schema.fields.map((field) => [field.key, field]));
+
+  for (const key of Object.keys(data)) {
+    if (!fieldsByKey.has(key)) {
+      issues.push({
+        code: "unknown_field",
+        fieldKey: key,
+        message: `Unknown field: ${key}`
+      });
+    }
+  }
+
+  for (const field of cardType.schema.fields) {
+    const value = data[field.key];
+    const missing =
+      value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+    if (missing) {
+      if (field.required) {
+        issues.push({
+          code: "required",
+          fieldKey: field.key,
+          message: `${field.label} is required`
+        });
+      }
+      continue;
+    }
+
+    const validType =
+      (field.type === "text" && typeof value === "string") ||
+      (field.type === "number" && typeof value === "number" && Number.isFinite(value)) ||
+      (field.type === "boolean" && typeof value === "boolean") ||
+      (field.type === "select" && typeof value === "string") ||
+      (field.type === "date" && typeof value === "string") ||
+      field.type === "json";
+    if (!validType) {
+      issues.push({
+        code: "invalid_type",
+        fieldKey: field.key,
+        message: `${field.label} has an invalid value type`
+      });
+      continue;
+    }
+
+    if (
+      field.type === "select" &&
+      !field.options?.some((option) => option.value === value)
+    ) {
+      issues.push({
+        code: "invalid_option",
+        fieldKey: field.key,
+        message: `${field.label} must use one of the configured options`
+      });
+    }
+
+    if (field.type === "date" && typeof value === "string") {
+      const match = /^\d{4}-\d{2}-\d{2}$/.test(value);
+      const parsedDate = match ? new Date(`${value}T00:00:00.000Z`) : null;
+      if (!parsedDate || Number.isNaN(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== value) {
+        issues.push({
+          code: "invalid_type",
+          fieldKey: field.key,
+          message: `${field.label} must be a valid date in YYYY-MM-DD format`
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+function decorateCardLibraryEntry(
+  entry: V2CardLibraryEntry,
+  cardType: V2CardType
+): V2CardLibraryEntry {
+  const validationIssues = validateCardLibraryEntryData(cardType, entry.data);
+  return v2CardLibraryEntrySchema.parse({
+    ...entry,
+    validationIssues,
+    selectable: undefined
+  });
+}
+
+function rejectInvalidCardLibraryEntryData(issues: V2CardLibraryEntryValidationIssue[]): void {
+  const invalid = issues.find((issue) => issue.code !== "required");
+  if (invalid) validationFailed(invalid.message);
+}
+
 function notFound(message: string): never {
   throw new V2ServiceError("not_found", message);
 }
@@ -246,6 +393,15 @@ function isUniqueViolation(error: unknown): boolean {
     typeof error === "object" &&
     "code" in error &&
     (error as { code?: unknown }).code === "23505"
+  );
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23503"
   );
 }
 
@@ -522,6 +678,28 @@ export function createV2BoardService(
       updateCardType: repository.updateCardType.bind(repository),
       updateCardTypeSchema: repository.updateCardTypeSchema.bind(repository),
       deleteCardType: repository.deleteCardType.bind(repository)
+    };
+  }
+
+  function requireCardLibraryRepository() {
+    if (
+      !repository.listCardLibraryEntries ||
+      !repository.getCardLibraryEntry ||
+      !repository.createCardLibraryEntry ||
+      !repository.updateCardLibraryEntry ||
+      !repository.deleteCardLibraryEntry ||
+      !repository.setCardLibraryEntry
+    ) {
+      throw new V2ServiceError("conflict", "V2 card library repository is not available");
+    }
+
+    return {
+      listCardLibraryEntries: repository.listCardLibraryEntries.bind(repository),
+      getCardLibraryEntry: repository.getCardLibraryEntry.bind(repository),
+      createCardLibraryEntry: repository.createCardLibraryEntry.bind(repository),
+      updateCardLibraryEntry: repository.updateCardLibraryEntry.bind(repository),
+      deleteCardLibraryEntry: repository.deleteCardLibraryEntry.bind(repository),
+      setCardLibraryEntry: repository.setCardLibraryEntry.bind(repository)
     };
   }
 
@@ -942,14 +1120,176 @@ export function createV2BoardService(
         notFound("Card type not found");
       }
       if (result.status === "in_use") {
+        const reasons = [
+          result.cardCount > 0
+            ? `${result.cardCount} ${result.cardCount === 1 ? "card" : "cards"}`
+            : null,
+          result.libraryEntryCount > 0
+            ? `${result.libraryEntryCount} library ${
+                result.libraryEntryCount === 1 ? "entry" : "entries"
+              }`
+            : null
+        ].filter(Boolean);
         conflict(
-          `Cannot delete this type because it is used by ${result.cardCount} ${
-            result.cardCount === 1 ? "card" : "cards"
-          }. Delete or retype those cards first.`
+          `Cannot delete this type because it is used by ${reasons.join(" and ")}. ` +
+            "Delete or retype the cards and remove the library entries first."
         );
       }
 
       return { deleted: true, id: cardType.id };
+    },
+
+    async listCardLibraryEntries(context, workspaceId, cardTypeId, rawQuery) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedQuery = v2ListCardLibraryEntriesQuerySchema.safeParse(rawQuery);
+      if (!parsedQuery.success) validationFailed("Invalid card library query");
+      await authorizeWorkspace(context, workspaceId, "read");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      const page = await requireCardLibraryRepository().listCardLibraryEntries(
+        workspaceId,
+        cardTypeId,
+        parsedQuery.data
+      );
+      if (!page) validationFailed("Invalid card library pagination cursor");
+      return {
+        entries: page.entries.map((entry) => decorateCardLibraryEntry(entry, cardType)),
+        nextCursor: page.nextCursor
+      };
+    },
+
+    async getCardLibraryEntry(context, workspaceId, cardTypeId, libraryEntryId) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      requireV2Uuid(libraryEntryId, "card library entry ID");
+      await authorizeWorkspace(context, workspaceId, "read");
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      const entry = await requireCardLibraryRepository().getCardLibraryEntry(libraryEntryId);
+      if (
+        !entry ||
+        entry.workspaceId !== workspaceId ||
+        entry.cardTypeId !== cardTypeId
+      ) {
+        notFound("Card library entry not found");
+      }
+      return decorateCardLibraryEntry(entry, cardType);
+    },
+
+    async createCardLibraryEntry(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2CreateCardLibraryEntryBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid card library entry payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      const issues = validateCardLibraryEntryData(cardType, parsedInput.data.data);
+      rejectInvalidCardLibraryEntryData(issues);
+      const entry = await requireCardLibraryRepository().createCardLibraryEntry({
+        workspaceId,
+        cardTypeId,
+        ...parsedInput.data
+      });
+      return decorateCardLibraryEntry(entry, cardType);
+    },
+
+    async updateCardLibraryEntry(
+      context,
+      workspaceId,
+      cardTypeId,
+      libraryEntryId,
+      rawInput
+    ) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      requireV2Uuid(libraryEntryId, "card library entry ID");
+      const parsedInput = v2UpdateCardLibraryEntryBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid card library entry payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      const cardLibraryRepository = requireCardLibraryRepository();
+      const existing = await cardLibraryRepository.getCardLibraryEntry(libraryEntryId);
+      if (
+        !existing ||
+        existing.workspaceId !== workspaceId ||
+        existing.cardTypeId !== cardTypeId
+      ) {
+        notFound("Card library entry not found");
+      }
+      const issues = validateCardLibraryEntryData(
+        cardType,
+        parsedInput.data.data ?? existing.data
+      );
+      rejectInvalidCardLibraryEntryData(issues);
+
+      const result = await cardLibraryRepository.updateCardLibraryEntry(
+        libraryEntryId,
+        parsedInput.data
+      );
+      if (result.status === "not_found") notFound("Card library entry not found");
+      if (result.status === "version_conflict") {
+        conflict("Card library entry was changed elsewhere. Reload it and try again.");
+      }
+      return decorateCardLibraryEntry(result.entry, cardType);
+    },
+
+    async deleteCardLibraryEntry(
+      context,
+      workspaceId,
+      cardTypeId,
+      libraryEntryId,
+      rawQuery
+    ) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      requireV2Uuid(libraryEntryId, "card library entry ID");
+      const parsedQuery = v2DeleteCardLibraryEntryQuerySchema.safeParse(rawQuery);
+      if (!parsedQuery.success) validationFailed("Invalid card library delete request");
+      await authorizeWorkspace(context, workspaceId, "manage");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      const cardLibraryRepository = requireCardLibraryRepository();
+      const existing = await cardLibraryRepository.getCardLibraryEntry(libraryEntryId);
+      if (
+        !existing ||
+        existing.workspaceId !== workspaceId ||
+        existing.cardTypeId !== cardTypeId
+      ) {
+        notFound("Card library entry not found");
+      }
+      const result = await cardLibraryRepository.deleteCardLibraryEntry(
+        libraryEntryId,
+        parsedQuery.data.expectedVersion
+      );
+      if (result.status === "not_found") notFound("Card library entry not found");
+      if (result.status === "version_conflict") {
+        conflict("Card library entry was changed elsewhere. Reload it and try again.");
+      }
+      if (result.status === "in_use") {
+        conflict(
+          `Cannot delete this library entry because it is used by ${result.usageCount} ${
+            result.usageCount === 1 ? "card" : "cards"
+          }. Replace or unlink those cards first.`
+        );
+      }
+      return { deleted: true, id: libraryEntryId };
     },
 
     async listConnectionTypes(context, boardId) {
@@ -1196,18 +1536,44 @@ export function createV2BoardService(
         validationFailed("Card type does not belong to the board workspace");
       }
 
-      return repository.createCard({
-        workspaceId: board.workspaceId,
-        boardId: board.id,
-        cardTypeId: cardType.id,
-        title: input.title ?? cardType.name,
-        description: input.description ?? "",
-        data: cloneJson(input.data ?? {}),
-        position: input.position ?? { x: 0, y: 0 },
-        size: input.size ?? cardType.defaultSize,
-        visualStyle: cloneJson(input.visualStyle ?? {}),
-        status: input.status ?? "active"
-      });
+      let libraryEntry: V2CardLibraryEntry | null = null;
+      if (input.libraryEntryId) {
+        const entry = await requireCardLibraryRepository().getCardLibraryEntry(
+          input.libraryEntryId
+        );
+        if (
+          !entry ||
+          entry.workspaceId !== board.workspaceId ||
+          entry.cardTypeId !== cardType.id
+        ) {
+          validationFailed("Card library entry does not belong to this card type");
+        }
+        libraryEntry = decorateCardLibraryEntry(entry, cardType);
+        if (!libraryEntry.selectable) {
+          validationFailed("Card library entry is archived or incomplete");
+        }
+      }
+
+      try {
+        return await repository.createCard({
+          workspaceId: board.workspaceId,
+          boardId: board.id,
+          cardTypeId: cardType.id,
+          libraryEntryId: libraryEntry?.id ?? null,
+          title: libraryEntry?.title ?? input.title ?? cardType.name,
+          description: libraryEntry?.description ?? input.description ?? "",
+          data: cloneJson(libraryEntry?.data ?? input.data ?? {}),
+          position: input.position ?? { x: 0, y: 0 },
+          size: input.size ?? cardType.defaultSize,
+          visualStyle: cloneJson(input.visualStyle ?? {}),
+          status: input.status ?? "active"
+        });
+      } catch (error) {
+        if (libraryEntry && isForeignKeyViolation(error)) {
+          validationFailed("Card library entry is unavailable for this card");
+        }
+        throw error;
+      }
     },
 
     async duplicateCard(context, cardId) {
@@ -1236,12 +1602,62 @@ export function createV2BoardService(
         notFound("Card not found");
       }
       await authorizeWorkspace(context, existing.workspaceId, "write");
+      if (
+        existing.libraryEntryId &&
+        (input.title !== undefined || input.description !== undefined || input.data !== undefined)
+      ) {
+        conflict(
+          "Linked card content is managed by its library entry. Replace or unlink the entry first."
+        );
+      }
       const card = await repository.updateCard(cardId, input);
       if (!card) {
         notFound("Card not found");
       }
 
       return card;
+    },
+
+    async setCardLibraryEntry(context, cardId, rawInput) {
+      requireV2Uuid(cardId, "card ID");
+      const parsedInput = v2SetCardLibraryEntryBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid card library selection payload");
+
+      const existing = await repository.getCard(cardId);
+      if (!existing) notFound("Card not found");
+      await authorizeWorkspace(context, existing.workspaceId, "write");
+
+      if (parsedInput.data.libraryEntryId !== null) {
+        const entry = await requireCardLibraryRepository().getCardLibraryEntry(
+          parsedInput.data.libraryEntryId
+        );
+        if (
+          !entry ||
+          entry.workspaceId !== existing.workspaceId ||
+          entry.cardTypeId !== existing.cardTypeId
+        ) {
+          validationFailed("Card library entry does not belong to this card type");
+        }
+        const cardType = await repository.getCardType(existing.cardTypeId);
+        if (!cardType) notFound("Card type not found");
+        if (!decorateCardLibraryEntry(entry, cardType).selectable) {
+          validationFailed("Card library entry is archived or incomplete");
+        }
+      }
+
+      const result = await requireCardLibraryRepository().setCardLibraryEntry(
+        cardId,
+        parsedInput.data.libraryEntryId,
+        parsedInput.data.expectedLibraryEntryId
+      );
+      if (result.status === "card_not_found") notFound("Card not found");
+      if (result.status === "entry_not_found") {
+        validationFailed("Card library entry is unavailable for this card");
+      }
+      if (result.status === "conflict") {
+        conflict("Card library selection was changed elsewhere. Reload the card and try again.");
+      }
+      return result.card;
     },
 
     async deleteCard(context, cardId) {

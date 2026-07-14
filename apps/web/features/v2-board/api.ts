@@ -22,17 +22,9 @@ import type {
   V2UpdateConnectionTypeRequest,
   V2UpdateLinkedFieldBindingRequest,
 } from "@yadraw/shared";
+import { V2ApiError } from "../../lib/api/v2-api-error";
 
-export class V2ApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly body?: unknown
-  ) {
-    super(message);
-    this.name = "V2ApiError";
-  }
-}
+export { V2ApiError };
 
 // ── Client-side API helpers ───────────────────────────────────────
 // These call Next.js route handlers (/v2/actions/...) which proxy to

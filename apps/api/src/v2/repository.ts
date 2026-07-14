@@ -3,6 +3,7 @@ import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import {
   v2BoardDetailSchema,
   v2CardAttachmentSchema,
+  v2CardLibraryEntrySchema,
   v2CardSchema,
   v2CardTypePortSchema,
   v2CardTypeSchema,
@@ -17,6 +18,8 @@ import {
   type V2BoardDetail,
   type V2CardAttachment,
   type V2Card,
+  type V2CardLibraryEntry,
+  type V2CardLibraryEntryListResponse,
   type V2CardStatus,
   type V2CardType,
   type V2CardTypePortInput,
@@ -28,15 +31,18 @@ import {
   type V2ConnectionStatus,
   type V2ConnectionType,
   type V2CreateConnectionInput,
+  type V2CreateCardLibraryEntryInput,
   type V2CreateLinkedFieldBindingInput,
   type V2JsonObject,
   type V2LinkedFieldBinding,
+  type V2ListCardLibraryEntriesQuery,
   type V2Project,
   type V2Size,
   type V2UpdateCardTypeInput,
   type V2UpdateBoardLayoutInput,
   type V2UpdateBoardLayoutResponse,
   type V2UpdateCardInput,
+  type V2UpdateCardLibraryEntryInput,
   type V2UpdateConnectionInput,
   type V2UpdateLinkedFieldBindingInput,
   type V2Viewport,
@@ -49,6 +55,7 @@ export type V2CreateCardRecordInput = {
   workspaceId: string;
   boardId: string;
   cardTypeId: string;
+  libraryEntryId?: string | null;
   title: string;
   description: string;
   data: V2JsonObject;
@@ -79,9 +86,31 @@ export type V2CreateConnectionTypeRecordInput = {
 };
 
 export type V2DeleteCardTypeResult =
-  | { status: "deleted"; cardCount: 0 }
-  | { status: "in_use"; cardCount: number }
-  | { status: "not_found"; cardCount: 0 };
+  | { status: "deleted"; cardCount: 0; libraryEntryCount: 0 }
+  | { status: "in_use"; cardCount: number; libraryEntryCount: number }
+  | { status: "not_found"; cardCount: 0; libraryEntryCount: 0 };
+
+export type V2CreateCardLibraryEntryRecordInput = V2CreateCardLibraryEntryInput & {
+  workspaceId: string;
+  cardTypeId: string;
+};
+
+export type V2UpdateCardLibraryEntryResult =
+  | { status: "updated"; entry: V2CardLibraryEntry }
+  | { status: "version_conflict"; entry: V2CardLibraryEntry }
+  | { status: "not_found" };
+
+export type V2DeleteCardLibraryEntryResult =
+  | { status: "deleted" }
+  | { status: "in_use"; usageCount: number }
+  | { status: "version_conflict"; entry: V2CardLibraryEntry }
+  | { status: "not_found" };
+
+export type V2SetCardLibraryEntryResult =
+  | { status: "updated"; card: V2Card }
+  | { status: "conflict"; card: V2Card }
+  | { status: "entry_not_found" }
+  | { status: "card_not_found" };
 
 export type V2UpdateConnectionTypeInput = {
   key?: string;
@@ -187,10 +216,32 @@ export type V2Repository = {
   updateCardType?(cardTypeId: string, input: V2UpdateCardTypeInput): Promise<V2CardType | null>;
   updateCardTypeSchema?(cardTypeId: string, schema: V2CardTypeSchema): Promise<V2CardType | null>;
   deleteCardType?(cardTypeId: string): Promise<V2DeleteCardTypeResult>;
+  listCardLibraryEntries?(
+    workspaceId: string,
+    cardTypeId: string,
+    query: V2ListCardLibraryEntriesQuery
+  ): Promise<V2CardLibraryEntryListResponse | null>;
+  getCardLibraryEntry?(libraryEntryId: string): Promise<V2CardLibraryEntry | null>;
+  createCardLibraryEntry?(
+    input: V2CreateCardLibraryEntryRecordInput
+  ): Promise<V2CardLibraryEntry>;
+  updateCardLibraryEntry?(
+    libraryEntryId: string,
+    input: V2UpdateCardLibraryEntryInput
+  ): Promise<V2UpdateCardLibraryEntryResult>;
+  deleteCardLibraryEntry?(
+    libraryEntryId: string,
+    expectedVersion: number
+  ): Promise<V2DeleteCardLibraryEntryResult>;
   getCard(cardId: string): Promise<V2Card | null>;
   createCard(input: V2CreateCardRecordInput): Promise<V2Card>;
   duplicateCard?(cardId: string): Promise<V2Card | null>;
   updateCard(cardId: string, input: V2UpdateCardInput): Promise<V2Card | null>;
+  setCardLibraryEntry?(
+    cardId: string,
+    libraryEntryId: string | null,
+    expectedLibraryEntryId: string | null
+  ): Promise<V2SetCardLibraryEntryResult>;
   deleteCard(cardId: string): Promise<boolean>;
   getConnection(connectionId: string): Promise<V2Connection | null>;
   createConnection(input: V2CreateConnectionRecordInput): Promise<V2Connection>;
@@ -221,6 +272,8 @@ type V2MemorySeed = {
   }>;
   cardTypes: V2CardType[];
   deletedCardTypeIds?: string[];
+  libraryEntries?: V2CardLibraryEntry[];
+  deletedLibraryEntryIds?: string[];
   connectionTypes?: V2ConnectionType[];
   deletedConnectionTypeIds?: string[];
   cards: V2Card[];
@@ -396,6 +449,22 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
   });
 }
 
+function cardLibraryEntryFromRow(row: QueryResultRow): V2CardLibraryEntry {
+  return v2CardLibraryEntrySchema.parse({
+    id: String(row.id),
+    workspaceId: String(row.workspace_id),
+    cardTypeId: String(row.card_type_id),
+    title: String(row.title),
+    description: String(row.description ?? ""),
+    data: asObject(row.data),
+    version: Number(row.version),
+    archivedAt: row.archived_at ? toIso(row.archived_at) : null,
+    usageCount: Number(row.usage_count ?? 0),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at)
+  });
+}
+
 function connectionTypeFromRow(row: QueryResultRow): V2ConnectionType {
   return v2ConnectionTypeSchema.parse({
     id: String(row.id),
@@ -416,9 +485,13 @@ function cardFromRow(row: QueryResultRow): V2Card {
     workspaceId: String(row.workspace_id),
     boardId: String(row.board_id),
     cardTypeId: String(row.card_type_id),
-    title: String(row.title),
-    description: String(row.description ?? ""),
-    data: asObject(row.data),
+    libraryEntryId:
+      row.library_entry_id === null || row.library_entry_id === undefined
+        ? null
+        : String(row.library_entry_id),
+    title: String(row.resolved_title ?? row.title),
+    description: String(row.resolved_description ?? row.description ?? ""),
+    data: asObject(row.resolved_data ?? row.data),
     position: {
       x: Number(row.position_x),
       y: Number(row.position_y)
@@ -430,9 +503,25 @@ function cardFromRow(row: QueryResultRow): V2Card {
     visualStyle: asObject(row.visual_style),
     status: row.status,
     createdAt: toIso(row.created_at),
-    updatedAt: toIso(row.updated_at)
+    updatedAt: toIso(row.resolved_updated_at ?? row.updated_at)
   });
 }
+
+const resolvedCardColumns = `
+  c.*,
+  coalesce(library_entry.title, c.title) as resolved_title,
+  coalesce(library_entry.description, c.description) as resolved_description,
+  coalesce(library_entry.data, c.data) as resolved_data,
+  greatest(c.updated_at, coalesce(library_entry.updated_at, c.updated_at)) as resolved_updated_at
+`;
+
+const resolvedCardJoin = `
+  left join card_library_entries library_entry
+    on library_entry.id = c.library_entry_id
+   and library_entry.workspace_id = c.workspace_id
+   and library_entry.card_type_id = c.card_type_id
+   and library_entry.deleted_at is null
+`;
 
 function connectionFromRow(row: QueryResultRow): V2Connection {
   return v2ConnectionSchema.parse({
@@ -822,6 +911,7 @@ function connectionAttachmentFromRow(row: QueryResultRow): V2ConnectionAttachmen
 export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2MemorySeed()): V2Repository {
   const state = {
     ...cloneJson(seed),
+    libraryEntries: cloneJson(seed.libraryEntries ?? []),
     connectionTypes: cloneJson(seed.connectionTypes ?? []),
     fieldBindings: cloneJson((seed.fieldBindings ?? []) as V2MemoryLinkedFieldBinding[]),
     files: cloneJson(seed.files ?? []),
@@ -831,6 +921,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
   const deletedCardIds = new Set<string>();
   const deletedConnectionIds = new Set<string>();
   const deletedCardTypeIds = new Set<string>(state.deletedCardTypeIds ?? []);
+  const deletedLibraryEntryIds = new Set<string>(state.deletedLibraryEntryIds ?? []);
   const deletedConnectionTypeIds = new Set<string>(state.deletedConnectionTypeIds ?? []);
   const deletedCardFileIds = new Set<string>(
     state.cardFiles
@@ -853,8 +944,31 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       .map((binding) => binding.id)
   );
 
-  function activeCards(): V2Card[] {
+  function resolveMemoryCard(card: V2Card): V2Card {
+    const libraryEntry = card.libraryEntryId
+      ? state.libraryEntries.find(
+          (entry) =>
+            entry.id === card.libraryEntryId && !deletedLibraryEntryIds.has(entry.id)
+        )
+      : null;
+    if (!libraryEntry) return cloneJson(card);
+
+    return v2CardSchema.parse({
+      ...cloneJson(card),
+      title: libraryEntry.title,
+      description: libraryEntry.description,
+      data: cloneJson(libraryEntry.data),
+      updatedAt:
+        libraryEntry.updatedAt > card.updatedAt ? libraryEntry.updatedAt : card.updatedAt
+    });
+  }
+
+  function activeStoredCards(): V2Card[] {
     return state.cards.filter((card) => !deletedCardIds.has(card.id));
+  }
+
+  function activeCards(): V2Card[] {
+    return activeStoredCards().map(resolveMemoryCard);
   }
 
   function activeConnections(): V2Connection[] {
@@ -1140,21 +1254,155 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async deleteCardType(cardTypeId) {
       if (deletedCardTypeIds.has(cardTypeId)) {
-        return { status: "not_found", cardCount: 0 };
+        return { status: "not_found", cardCount: 0, libraryEntryCount: 0 };
       }
       const existing = state.cardTypes.find((cardType) => cardType.id === cardTypeId);
-      if (!existing) return { status: "not_found", cardCount: 0 };
+      if (!existing) return { status: "not_found", cardCount: 0, libraryEntryCount: 0 };
 
       const cardCount = activeCards().filter((card) => card.cardTypeId === cardTypeId).length;
-      if (cardCount > 0) return { status: "in_use", cardCount };
+      const libraryEntryCount = state.libraryEntries.filter(
+        (entry) => entry.cardTypeId === cardTypeId && !deletedLibraryEntryIds.has(entry.id)
+      ).length;
+      if (cardCount > 0 || libraryEntryCount > 0) {
+        return { status: "in_use", cardCount, libraryEntryCount };
+      }
 
       deletedCardTypeIds.add(cardTypeId);
-      return { status: "deleted", cardCount: 0 };
+      return { status: "deleted", cardCount: 0, libraryEntryCount: 0 };
+    },
+
+    async listCardLibraryEntries(workspaceId, cardTypeId, query) {
+      const search = query.query?.trim().toLocaleLowerCase() ?? "";
+      const entries = state.libraryEntries
+        .filter(
+          (entry) =>
+            entry.workspaceId === workspaceId &&
+            entry.cardTypeId === cardTypeId &&
+            !deletedLibraryEntryIds.has(entry.id) &&
+            (query.status === "all" ||
+              (query.status === "archived" ? entry.archivedAt !== null : entry.archivedAt === null)) &&
+            (!search ||
+              entry.title.toLocaleLowerCase().includes(search) ||
+              entry.description.toLocaleLowerCase().includes(search) ||
+              JSON.stringify(entry.data).toLocaleLowerCase().includes(search))
+        )
+        .map((entry) =>
+          v2CardLibraryEntrySchema.parse({
+            ...cloneJson(entry),
+            usageCount: activeStoredCards().filter(
+              (card) => card.libraryEntryId === entry.id
+            ).length
+          })
+        )
+        .sort((left, right) => {
+          const leftValue = query.sort === "updatedAt" ? left.updatedAt : left.title.toLocaleLowerCase();
+          const rightValue = query.sort === "updatedAt" ? right.updatedAt : right.title.toLocaleLowerCase();
+          const compared = leftValue.localeCompare(rightValue) || left.id.localeCompare(right.id);
+          return query.direction === "desc" ? -compared : compared;
+        });
+
+      const cursorIndex = query.cursor
+        ? entries.findIndex((entry) => entry.id === query.cursor)
+        : -1;
+      if (query.cursor && cursorIndex === -1) return null;
+      const startIndex = cursorIndex + 1;
+      const page = entries.slice(startIndex, startIndex + query.limit);
+      const hasMore = startIndex + page.length < entries.length;
+      return {
+        entries: cloneJson(page),
+        nextCursor: hasMore ? page.at(-1)?.id ?? null : null
+      };
+    },
+
+    async getCardLibraryEntry(libraryEntryId) {
+      if (deletedLibraryEntryIds.has(libraryEntryId)) return null;
+      const entry = state.libraryEntries.find((item) => item.id === libraryEntryId);
+      if (!entry) return null;
+      return v2CardLibraryEntrySchema.parse({
+        ...cloneJson(entry),
+        usageCount: activeStoredCards().filter(
+          (card) => card.libraryEntryId === libraryEntryId
+        ).length
+      });
+    },
+
+    async createCardLibraryEntry(input) {
+      const timestamp = nowIso();
+      const entry = v2CardLibraryEntrySchema.parse({
+        id: randomUUID(),
+        workspaceId: input.workspaceId,
+        cardTypeId: input.cardTypeId,
+        title: input.title,
+        description: input.description,
+        data: cloneJson(input.data),
+        version: 1,
+        archivedAt: null,
+        usageCount: 0,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+      state.libraryEntries.push(entry);
+      return cloneJson(entry);
+    },
+
+    async updateCardLibraryEntry(libraryEntryId, input) {
+      if (deletedLibraryEntryIds.has(libraryEntryId)) return { status: "not_found" };
+      const index = state.libraryEntries.findIndex((entry) => entry.id === libraryEntryId);
+      const existing = state.libraryEntries[index];
+      if (index === -1 || !existing) return { status: "not_found" };
+      if (existing.version !== input.expectedVersion) {
+        return {
+          status: "version_conflict",
+          entry: v2CardLibraryEntrySchema.parse({
+            ...cloneJson(existing),
+            usageCount: activeStoredCards().filter(
+              (card) => card.libraryEntryId === libraryEntryId
+            ).length
+          })
+        };
+      }
+
+      const updated = v2CardLibraryEntrySchema.parse({
+        ...existing,
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.data !== undefined ? { data: cloneJson(input.data) } : {}),
+        ...(input.archived !== undefined
+          ? { archivedAt: input.archived ? nowIso() : null }
+          : {}),
+        version: existing.version + 1,
+        updatedAt: nowIso(),
+        selectable: undefined,
+        usageCount: activeStoredCards().filter(
+          (card) => card.libraryEntryId === libraryEntryId
+        ).length
+      });
+      state.libraryEntries[index] = updated;
+      return { status: "updated", entry: cloneJson(updated) };
+    },
+
+    async deleteCardLibraryEntry(libraryEntryId, expectedVersion) {
+      if (deletedLibraryEntryIds.has(libraryEntryId)) return { status: "not_found" };
+      const entry = state.libraryEntries.find((item) => item.id === libraryEntryId);
+      if (!entry) return { status: "not_found" };
+      const usageCount = activeStoredCards().filter(
+        (card) => card.libraryEntryId === libraryEntryId
+      ).length;
+      if (entry.version !== expectedVersion) {
+        return {
+          status: "version_conflict",
+          entry: v2CardLibraryEntrySchema.parse({ ...cloneJson(entry), usageCount })
+        };
+      }
+      if (usageCount > 0) return { status: "in_use", usageCount };
+      deletedLibraryEntryIds.add(libraryEntryId);
+      return { status: "deleted" };
     },
 
     async getCard(cardId) {
       if (deletedCardIds.has(cardId)) return null;
-      return cloneJson(state.cards.find((card) => card.id === cardId) ?? null);
+      const card = state.cards.find((item) => item.id === cardId);
+      return card ? resolveMemoryCard(card) : null;
     },
 
     async createCard(input) {
@@ -1164,6 +1412,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         workspaceId: input.workspaceId,
         boardId: input.boardId,
         cardTypeId: input.cardTypeId,
+        libraryEntryId: input.libraryEntryId ?? null,
         title: input.title,
         description: input.description,
         data: cloneJson(input.data),
@@ -1176,7 +1425,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       });
 
       state.cards.push(card);
-      return cloneJson(card);
+      return resolveMemoryCard(card);
     },
 
     async duplicateCard(cardId) {
@@ -1200,7 +1449,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       });
 
       state.cards.push(card);
-      return cloneJson(card);
+      return resolveMemoryCard(card);
     },
 
     async updateCard(cardId, input) {
@@ -1214,7 +1463,48 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         updatedAt: nowIso()
       });
       state.cards[index] = updated;
-      return cloneJson(updated);
+      return resolveMemoryCard(updated);
+    },
+
+    async setCardLibraryEntry(cardId, libraryEntryId, expectedLibraryEntryId) {
+      const index = state.cards.findIndex(
+        (card) => card.id === cardId && !deletedCardIds.has(card.id)
+      );
+      const existing = state.cards[index];
+      if (index === -1 || !existing) return { status: "card_not_found" };
+      if ((existing.libraryEntryId ?? null) !== expectedLibraryEntryId) {
+        return { status: "conflict", card: resolveMemoryCard(existing) };
+      }
+
+      if (libraryEntryId !== null) {
+        const entry = state.libraryEntries.find(
+          (item) => item.id === libraryEntryId && !deletedLibraryEntryIds.has(item.id)
+        );
+        if (
+          !entry ||
+          entry.workspaceId !== existing.workspaceId ||
+          entry.cardTypeId !== existing.cardTypeId ||
+          entry.archivedAt !== null
+        ) {
+          return { status: "entry_not_found" };
+        }
+      }
+
+      const resolved = resolveMemoryCard(existing);
+      const updated = v2CardSchema.parse({
+        ...existing,
+        ...(libraryEntryId === null && existing.libraryEntryId
+          ? {
+              title: resolved.title,
+              description: resolved.description,
+              data: cloneJson(resolved.data)
+            }
+          : {}),
+        libraryEntryId,
+        updatedAt: nowIso()
+      });
+      state.cards[index] = updated;
+      return { status: "updated", card: resolveMemoryCard(updated) };
     },
 
     async deleteCard(cardId) {
@@ -2129,14 +2419,16 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           const copied = await client.query(
             `
               insert into cards (
-                workspace_id, board_id, card_type_id, title, description, data,
-                position_x, position_y, width, height, visual_style, status
-              ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                workspace_id, board_id, card_type_id, library_entry_id,
+                title, description, data, position_x, position_y, width, height,
+                visual_style, status
+              ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
               returning id
             `,
-            [card.workspace_id, created.board_id, card.card_type_id, card.title,
-             card.description, card.data, card.position_x, card.position_y,
-             card.width, card.height, card.visual_style, card.status]
+            [card.workspace_id, created.board_id, card.card_type_id,
+             card.library_entry_id, card.title, card.description, card.data,
+             card.position_x, card.position_y, card.width, card.height,
+             card.visual_style, card.status]
           );
           cardIds.set(String(card.id), String(copied.rows[0].id));
         }
@@ -2340,7 +2632,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       const cardsResult = await pool.query(
         `
           select
-            c.*,
+            ${resolvedCardColumns},
             (
               select count(*)::int
               from card_files cf
@@ -2349,6 +2641,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
                 and cf.deleted_at is null
             ) as attachment_count
           from cards c
+          ${resolvedCardJoin}
           where c.board_id = $1
             and c.deleted_at is null
           order by c.created_at asc, c.id asc
@@ -2723,22 +3016,26 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         );
         if (!typeResult.rows[0]) {
           await client.query("rollback");
-          return { status: "not_found", cardCount: 0 };
+          return { status: "not_found", cardCount: 0, libraryEntryCount: 0 };
         }
 
         const countResult = await client.query(
           `
-            select count(*)::int as card_count
-            from cards
-            where card_type_id = $1
-              and deleted_at is null
+            select
+              (select count(*)::int
+                 from cards
+                where card_type_id = $1 and deleted_at is null) as card_count,
+              (select count(*)::int
+                 from card_library_entries
+                where card_type_id = $1 and deleted_at is null) as library_entry_count
           `,
           [cardTypeId]
         );
         const cardCount = Number(countResult.rows[0]?.card_count ?? 0);
-        if (cardCount > 0) {
+        const libraryEntryCount = Number(countResult.rows[0]?.library_entry_count ?? 0);
+        if (cardCount > 0 || libraryEntryCount > 0) {
           await client.query("rollback");
-          return { status: "in_use", cardCount };
+          return { status: "in_use", cardCount, libraryEntryCount };
         }
 
         await client.query(
@@ -2752,7 +3049,206 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           [cardTypeId]
         );
         await client.query("commit");
-        return { status: "deleted", cardCount: 0 };
+        return { status: "deleted", cardCount: 0, libraryEntryCount: 0 };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async listCardLibraryEntries(workspaceId, cardTypeId, query) {
+      const values: unknown[] = [workspaceId, cardTypeId];
+      const filters = [
+        "e.workspace_id = $1",
+        "e.card_type_id = $2",
+        "e.deleted_at is null"
+      ];
+
+      if (query.status === "active") filters.push("e.archived_at is null");
+      if (query.status === "archived") filters.push("e.archived_at is not null");
+      if (query.query) {
+        values.push(`%${query.query}%`);
+        const parameter = `$${values.length}`;
+        filters.push(
+          `(e.title ilike ${parameter} or e.description ilike ${parameter} or e.data::text ilike ${parameter})`
+        );
+      }
+
+      const sortExpression = query.sort === "updatedAt" ? "e.updated_at" : "lower(e.title)";
+      const direction = query.direction === "desc" ? "desc" : "asc";
+      const comparator = direction === "desc" ? "<" : ">";
+      if (query.cursor) {
+        const cursorValues = [...values, query.cursor];
+        const cursorResult = await pool.query(
+          `
+            select lower(e.title) as title_sort, e.updated_at
+            from card_library_entries e
+            where ${filters.join("\n              and ")}
+              and e.id = $${cursorValues.length}::uuid
+            limit 1
+          `,
+          cursorValues
+        );
+        const cursor = cursorResult.rows[0];
+        if (!cursor) return null;
+
+        values.push(query.sort === "updatedAt" ? cursor.updated_at : cursor.title_sort);
+        const sortParameter = `$${values.length}`;
+        values.push(query.cursor);
+        const idParameter = `$${values.length}`;
+        filters.push(
+          `(${sortExpression} ${comparator} ${sortParameter} or (${sortExpression} = ${sortParameter} and e.id ${comparator} ${idParameter}::uuid))`
+        );
+      }
+
+      values.push(query.limit + 1);
+      const result = await pool.query(
+        `
+          select e.*,
+                 (select count(*)::int
+                    from cards c
+                   where c.library_entry_id = e.id
+                     and c.deleted_at is null) as usage_count
+          from card_library_entries e
+          where ${filters.join("\n            and ")}
+          order by ${sortExpression} ${direction}, e.id ${direction}
+          limit $${values.length}
+        `,
+        values
+      );
+      const hasMore = result.rows.length > query.limit;
+      const rows = hasMore ? result.rows.slice(0, query.limit) : result.rows;
+      const entries = rows.map(cardLibraryEntryFromRow);
+      return {
+        entries,
+        nextCursor: hasMore ? entries.at(-1)?.id ?? null : null
+      };
+    },
+
+    async getCardLibraryEntry(libraryEntryId) {
+      const result = await pool.query(
+        `
+          select e.*,
+                 (select count(*)::int
+                    from cards c
+                   where c.library_entry_id = e.id
+                     and c.deleted_at is null) as usage_count
+          from card_library_entries e
+          where e.id = $1
+            and e.deleted_at is null
+          limit 1
+        `,
+        [libraryEntryId]
+      );
+      return result.rows[0] ? cardLibraryEntryFromRow(result.rows[0]) : null;
+    },
+
+    async createCardLibraryEntry(input) {
+      const result = await pool.query(
+        `
+          insert into card_library_entries (
+            workspace_id, card_type_id, title, description, data
+          ) values ($1, $2, $3, $4, $5::jsonb)
+          returning *
+        `,
+        [
+          input.workspaceId,
+          input.cardTypeId,
+          input.title,
+          input.description,
+          JSON.stringify(input.data)
+        ]
+      );
+      return cardLibraryEntryFromRow({ ...result.rows[0], usage_count: 0 });
+    },
+
+    async updateCardLibraryEntry(libraryEntryId, input) {
+      const result = await pool.query(
+        `
+          update card_library_entries
+          set title = case when $2::boolean then $3 else title end,
+              description = case when $4::boolean then $5 else description end,
+              data = case when $6::boolean then $7::jsonb else data end,
+              archived_at = case
+                when $8::boolean then case when $9::boolean then now() else null end
+                else archived_at
+              end
+          where id = $1
+            and version = $10
+            and deleted_at is null
+          returning *
+        `,
+        [
+          libraryEntryId,
+          input.title !== undefined,
+          input.title ?? null,
+          input.description !== undefined,
+          input.description ?? null,
+          input.data !== undefined,
+          input.data === undefined ? null : JSON.stringify(input.data),
+          input.archived !== undefined,
+          input.archived ?? false,
+          input.expectedVersion
+        ]
+      );
+      const row = result.rows[0];
+      if (row) {
+        const usageResult = await pool.query(
+          `select count(*)::int as usage_count from cards where library_entry_id = $1 and deleted_at is null`,
+          [libraryEntryId]
+        );
+        return {
+          status: "updated",
+          entry: cardLibraryEntryFromRow({
+            ...row,
+            usage_count: usageResult.rows[0]?.usage_count ?? 0
+          })
+        };
+      }
+
+      const current = await this.getCardLibraryEntry?.(libraryEntryId);
+      return current
+        ? { status: "version_conflict", entry: current }
+        : { status: "not_found" };
+    },
+
+    async deleteCardLibraryEntry(libraryEntryId, expectedVersion) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const entryResult = await client.query(
+          `select * from card_library_entries where id = $1 and deleted_at is null for update`,
+          [libraryEntryId]
+        );
+        const entry = entryResult.rows[0];
+        if (!entry) {
+          await client.query("rollback");
+          return { status: "not_found" };
+        }
+        const usageResult = await client.query(
+          `select count(*)::int as usage_count from cards where library_entry_id = $1 and deleted_at is null`,
+          [libraryEntryId]
+        );
+        const usageCount = Number(usageResult.rows[0]?.usage_count ?? 0);
+        if (Number(entry.version) !== expectedVersion) {
+          await client.query("rollback");
+          return {
+            status: "version_conflict",
+            entry: cardLibraryEntryFromRow({ ...entry, usage_count: usageCount })
+          };
+        }
+        if (usageCount > 0) {
+          await client.query("rollback");
+          return { status: "in_use", usageCount };
+        }
+        await client.query(
+          `update card_library_entries set deleted_at = now() where id = $1`,
+          [libraryEntryId]
+        );
+        await client.query("commit");
+        return { status: "deleted" };
       } catch (error) {
         await client.query("rollback");
         throw error;
@@ -2764,10 +3260,11 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     async getCard(cardId) {
       const result = await pool.query(
         `
-          select *
-          from cards
-          where id = $1
-            and deleted_at is null
+          select ${resolvedCardColumns}
+          from cards c
+          ${resolvedCardJoin}
+          where c.id = $1
+            and c.deleted_at is null
           limit 1
         `,
         [cardId]
@@ -2777,42 +3274,74 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
     },
 
     async createCard(input) {
-      const result = await pool.query(
-        `
-          insert into cards (
-            workspace_id,
-            board_id,
-            card_type_id,
-            title,
-            description,
-            data,
-            position_x,
-            position_y,
-            width,
-            height,
-            visual_style,
-            status
-          )
-          values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11::jsonb, $12)
-          returning *
-        `,
-        [
-          input.workspaceId,
-          input.boardId,
-          input.cardTypeId,
-          input.title,
-          input.description,
-          JSON.stringify(input.data),
-          input.position.x,
-          input.position.y,
-          input.size.width,
-          input.size.height,
-          JSON.stringify(input.visualStyle ?? {}),
-          input.status
-        ]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        if (input.libraryEntryId) {
+          const entryResult = await client.query(
+            `
+              select id
+              from card_library_entries
+              where id = $1
+                and workspace_id = $2
+                and card_type_id = $3
+                and archived_at is null
+                and deleted_at is null
+              for share
+            `,
+            [input.libraryEntryId, input.workspaceId, input.cardTypeId]
+          );
+          if (!entryResult.rows[0]) {
+            throw Object.assign(new Error("Card library entry is unavailable"), {
+              code: "23503"
+            });
+          }
+        }
 
-      return cardFromRow(result.rows[0] as QueryResultRow);
+        const result = await client.query(
+          `
+            insert into cards (
+              workspace_id, board_id, card_type_id, library_entry_id,
+              title, description, data, position_x, position_y, width, height,
+              visual_style, status
+            ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13)
+            returning id
+          `,
+          [
+            input.workspaceId,
+            input.boardId,
+            input.cardTypeId,
+            input.libraryEntryId ?? null,
+            input.title,
+            input.description,
+            JSON.stringify(input.data),
+            input.position.x,
+            input.position.y,
+            input.size.width,
+            input.size.height,
+            JSON.stringify(input.visualStyle ?? {}),
+            input.status
+          ]
+        );
+        const cardResult = await client.query(
+          `
+            select ${resolvedCardColumns}
+            from cards c
+            ${resolvedCardJoin}
+            where c.id = $1
+              and c.deleted_at is null
+            limit 1
+          `,
+          [result.rows[0].id]
+        );
+        await client.query("commit");
+        return cardFromRow(cardResult.rows[0]);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async duplicateCard(cardId) {
@@ -2822,6 +3351,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             workspace_id,
             board_id,
             card_type_id,
+            library_entry_id,
             title,
             description,
             data,
@@ -2836,6 +3366,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             workspace_id,
             board_id,
             card_type_id,
+            library_entry_id,
             title,
             description,
             data,
@@ -2848,61 +3379,138 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           from cards
           where id = $1
             and deleted_at is null
-          returning *
+          returning id
         `,
         [cardId]
       );
 
       const row = result.rows[0];
-      return row ? cardFromRow(row) : null;
+      return row ? this.getCard(String(row.id)) : null;
     },
 
     async updateCard(cardId, input) {
-      const existing = await this.getCard(cardId);
-      if (!existing) return null;
-
-      const next = {
-        title: input.title ?? existing.title,
-        description: input.description ?? existing.description,
-        data: input.data ?? existing.data,
-        position: input.position ?? existing.position,
-        size: input.size ?? existing.size,
-        visualStyle: input.visualStyle ?? existing.visualStyle,
-        status: input.status ?? existing.status
-      };
-
       const result = await pool.query(
         `
           update cards
-          set title = $2,
-              description = $3,
-              data = $4::jsonb,
-              position_x = $5,
-              position_y = $6,
-              width = $7,
-              height = $8,
-              visual_style = $9::jsonb,
-              status = $10
+          set title = coalesce($2, title),
+              description = coalesce($3, description),
+              data = coalesce($4::jsonb, data),
+              position_x = coalesce($5, position_x),
+              position_y = coalesce($6, position_y),
+              width = coalesce($7, width),
+              height = coalesce($8, height),
+              visual_style = coalesce($9::jsonb, visual_style),
+              status = coalesce($10, status),
+              updated_at = now()
           where id = $1
             and deleted_at is null
-          returning *
+          returning id
         `,
         [
           cardId,
-          next.title,
-          next.description,
-          JSON.stringify(next.data),
-          next.position.x,
-          next.position.y,
-          next.size.width,
-          next.size.height,
-          JSON.stringify(next.visualStyle),
-          next.status
+          input.title ?? null,
+          input.description ?? null,
+          input.data === undefined ? null : JSON.stringify(input.data),
+          input.position?.x ?? null,
+          input.position?.y ?? null,
+          input.size?.width ?? null,
+          input.size?.height ?? null,
+          input.visualStyle === undefined ? null : JSON.stringify(input.visualStyle),
+          input.status ?? null
         ]
       );
 
       const row = result.rows[0];
-      return row ? cardFromRow(row) : null;
+      return row ? this.getCard(String(row.id)) : null;
+    },
+
+    async setCardLibraryEntry(cardId, libraryEntryId, expectedLibraryEntryId) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const cardResult = await client.query(
+          `
+            select ${resolvedCardColumns}
+            from cards c
+            ${resolvedCardJoin}
+            where c.id = $1
+              and c.deleted_at is null
+            for update of c
+          `,
+          [cardId]
+        );
+        const cardRow = cardResult.rows[0];
+        if (!cardRow) {
+          await client.query("rollback");
+          return { status: "card_not_found" };
+        }
+        const currentLibraryEntryId = cardRow.library_entry_id
+          ? String(cardRow.library_entry_id)
+          : null;
+        if (currentLibraryEntryId !== expectedLibraryEntryId) {
+          await client.query("rollback");
+          return { status: "conflict", card: cardFromRow(cardRow) };
+        }
+
+        if (libraryEntryId !== null) {
+          const entryResult = await client.query(
+            `
+              select id
+              from card_library_entries
+              where id = $1
+                and workspace_id = $2
+                and card_type_id = $3
+                and archived_at is null
+                and deleted_at is null
+              for share
+            `,
+            [libraryEntryId, cardRow.workspace_id, cardRow.card_type_id]
+          );
+          if (!entryResult.rows[0]) {
+            await client.query("rollback");
+            return { status: "entry_not_found" };
+          }
+        }
+
+        const snapshotOnUnlink = libraryEntryId === null && currentLibraryEntryId !== null;
+        await client.query(
+          `
+            update cards
+            set library_entry_id = $2,
+                title = case when $3 then $4 else title end,
+                description = case when $3 then $5 else description end,
+                data = case when $3 then $6::jsonb else data end,
+                updated_at = now()
+            where id = $1
+          `,
+          [
+            cardId,
+            libraryEntryId,
+            snapshotOnUnlink,
+            cardRow.resolved_title,
+            cardRow.resolved_description,
+            JSON.stringify(asObject(cardRow.resolved_data))
+          ]
+        );
+        const updatedResult = await client.query(
+          `
+            select ${resolvedCardColumns}
+            from cards c
+            ${resolvedCardJoin}
+            where c.id = $1
+              and c.deleted_at is null
+            limit 1
+          `,
+          [cardId]
+        );
+        await client.query("commit");
+        return { status: "updated", card: cardFromRow(updatedResult.rows[0]) };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async deleteCard(cardId) {
