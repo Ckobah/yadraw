@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, TableProperties, Trash2, X } from "lucide-react";
 import type {
   V2CardType,
   V2CreateCardTypeRequest,
@@ -17,6 +17,7 @@ import { useDialogFocus } from "./use-dialog-focus";
 import { getV2CardTypeIcon, V2_CARD_TYPE_ICON_OPTIONS } from "./v2-card-type-icons";
 import { V2CardTypePreview } from "./v2-card-type-preview";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
+import { V2CardLibraryManager } from "../v2-card-library/v2-card-library-manager";
 
 type CardTypeManagerMode = "existing" | "new";
 
@@ -171,7 +172,8 @@ export function V2CardTypeManager({
   onClose,
 }: V2CardTypeManagerProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus(dialogRef, () => { void closeManager(); });
+  const [libraryCardTypeId, setLibraryCardTypeId] = useState<string | null>(null);
+  useDialogFocus(dialogRef, () => { void closeManager(); }, libraryCardTypeId === null);
   const sortedCardTypes = useMemo(
     () => [...cardTypes].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
     [cardTypes]
@@ -371,6 +373,35 @@ export function V2CardTypeManager({
     onClose();
   }
 
+  async function openLibrary() {
+    if (mode !== "existing" || !draft.id || isSaving || isDeleting) return;
+    if (hasDraftChanges && !(await saveDraft())) return;
+    setLibraryCardTypeId(draft.id);
+  }
+
+  function returnFromLibrary(cardTypeId: string) {
+    const cardType = cardTypes.find((item) => item.id === cardTypeId);
+    if (cardType) {
+      setMode("existing");
+      setSelectedCardTypeId(cardType.id);
+      setDraft(draftFromCardType(cardType));
+      setError(null);
+      setMessage(null);
+    }
+    setLibraryCardTypeId(null);
+  }
+
+  if (libraryCardTypeId) {
+    return (
+      <V2CardLibraryManager
+        cardTypes={cardTypes}
+        initialCardTypeId={libraryCardTypeId}
+        onBack={returnFromLibrary}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <div
       ref={dialogRef}
@@ -525,15 +556,26 @@ export function V2CardTypeManager({
             {error ? <p className="v2InspectorDataError">{error}</p> : null}
             <div className="v2InspectorEditActions v2CardTypeManagerActions">
               {mode === "existing" ? (
-                <button
-                  type="button"
-                  className="v2CardTypeManagerDeleteAction"
-                  onClick={() => void deleteDraft()}
-                  disabled={isSaving || isDeleting}
-                >
-                  <Trash2 size={13} strokeWidth={2.2} />
-                  <span>{isDeleting ? "Deleting..." : "Delete type"}</span>
-                </button>
+                <div className="v2CardTypeManagerLeftActions">
+                  <button
+                    type="button"
+                    className="v2SchemaEditButton"
+                    onClick={() => void openLibrary()}
+                    disabled={isSaving || isDeleting}
+                  >
+                    <TableProperties size={13} strokeWidth={2.2} />
+                    <span>Open library</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="v2CardTypeManagerDeleteAction"
+                    onClick={() => void deleteDraft()}
+                    disabled={isSaving || isDeleting}
+                  >
+                    <Trash2 size={13} strokeWidth={2.2} />
+                    <span>{isDeleting ? "Deleting..." : "Delete type"}</span>
+                  </button>
+                </div>
               ) : <span />}
               <div className="v2CardTypeManagerSaveActions">
                 {mode === "existing" ? (

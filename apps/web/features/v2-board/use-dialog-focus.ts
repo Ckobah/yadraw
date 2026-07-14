@@ -3,9 +3,14 @@ import { RefObject, useEffect, useRef } from "react";
 
 const selector = 'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-export function useDialogFocus(ref: RefObject<HTMLElement | null>, onClose: () => void) {
+export function useDialogFocus(
+  ref: RefObject<HTMLElement | null>,
+  onClose: () => void,
+  active = true
+) {
   const closeRef = useRef(onClose); closeRef.current = onClose;
   useEffect(() => {
+    if (!active) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const element = ref.current; element?.querySelector<HTMLElement>(selector)?.focus();
     function keydown(event: KeyboardEvent) {
@@ -19,5 +24,5 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, onClose: () =
     }
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); previous?.focus(); };
-  }, [ref]);
+  }, [active, ref]);
 }
