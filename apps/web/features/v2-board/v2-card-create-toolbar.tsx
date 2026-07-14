@@ -2,23 +2,38 @@
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Plus, Search } from "lucide-react";
+import { ArrowLeft, ChevronDown, Database, LoaderCircle, Plus, Search } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
-import type { V2CardType, V2CardTypePort, V2Position } from "@yadraw/shared";
+import type {
+  V2CardLibraryEntry,
+  V2CardType,
+  V2CardTypePort,
+  V2Position,
+} from "@yadraw/shared";
+import { listV2CardLibraryEntries } from "../v2-card-library/api";
 import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
 
+type PendingCardPlacement = {
+  cardType: V2CardType;
+  libraryEntryId: string | null;
+  title: string;
+};
+
 type V2CardCreateToolbarProps = {
+  workspaceId: string;
   cardTypes: V2CardType[];
   onCreateCard: (
     cardType: V2CardType,
-    position: V2Position
+    position: V2Position,
+    libraryEntryId: string | null
   ) => Promise<void>;
   onManageCardTypes: (cardTypeId?: string | null) => void;
   connectorControl?: ReactNode;
 };
 
 export function V2CardCreateToolbar({
+  workspaceId,
   cardTypes,
   onCreateCard,
   onManageCardTypes,
@@ -29,10 +44,17 @@ export function V2CardCreateToolbar({
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [creationCardType, setCreationCardType] = useState<V2CardType | null>(null);
+  const [libraryQueryInput, setLibraryQueryInput] = useState("");
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryEntries, setLibraryEntries] = useState<V2CardLibraryEntry[]>([]);
+  const [libraryNextCursor, setLibraryNextCursor] = useState<string | null>(null);
+  const [isLibraryLoading, setIsLibraryLoading] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [activeCardTypeId, setActiveCardTypeId] = useState<string | null>(
     cardTypes[0]?.id ?? null
   );
-  const [pendingCardType, setPendingCardType] = useState<V2CardType | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<PendingCardPlacement | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const filteredCardTypes = cardTypes.filter((cardType) =>
@@ -61,16 +83,63 @@ export function V2CardCreateToolbar({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || creationCardType) return;
     setActiveCardTypeId((current) =>
       current && filteredCardTypes.some((cardType) => cardType.id === current)
         ? current
         : filteredCardTypes[0]?.id ?? null
     );
-  }, [filteredCardTypes, isOpen]);
+  }, [creationCardType, filteredCardTypes, isOpen]);
 
   useEffect(() => {
-    if (!pendingCardType) return;
+    if (!isOpen || !creationCardType) return;
+    const timer = window.setTimeout(() => {
+      setLibraryQuery(libraryQueryInput.trim());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [creationCardType, isOpen, libraryQueryInput]);
+
+  useEffect(() => {
+    if (!isOpen || !creationCardType) return;
+
+    const controller = new AbortController();
+    setIsLibraryLoading(true);
+    setLibraryError(null);
+    void listV2CardLibraryEntries(
+      workspaceId,
+      creationCardType.id,
+      {
+        query: libraryQuery || undefined,
+        status: "active",
+        limit: 100,
+        sort: "title",
+        direction: "asc",
+      },
+      { signal: controller.signal }
+    )
+      .then((response) => {
+        setLibraryEntries(
+          response.entries.filter(
+            (entry) => entry.archivedAt === null && entry.selectable !== false
+          )
+        );
+        setLibraryNextCursor(response.nextCursor);
+      })
+      .catch((requestError: unknown) => {
+        if (controller.signal.aborted) return;
+        setLibraryEntries([]);
+        setLibraryNextCursor(null);
+        setLibraryError("Could not load library records.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLibraryLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [creationCardType, isOpen, libraryQuery, workspaceId]);
+
+  useEffect(() => {
+    if (!pendingPlacement) return;
     document.body.classList.add("v2CardPlacementActive");
 
     const handlePointerMove = (event: PointerEvent) => {
@@ -84,19 +153,23 @@ export function V2CardCreateToolbar({
       event.stopPropagation();
       const center = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const position: V2Position = {
-        x: center.x - pendingCardType.defaultSize.width / 2,
-        y: center.y - pendingCardType.defaultSize.height / 2,
+        x: center.x - pendingPlacement.cardType.defaultSize.width / 2,
+        y: center.y - pendingPlacement.cardType.defaultSize.height / 2,
       };
       setIsCreating(true);
       setError(null);
-      void onCreateCard(pendingCardType, position)
-        .then(() => setPendingCardType(null))
+      void onCreateCard(
+        pendingPlacement.cardType,
+        position,
+        pendingPlacement.libraryEntryId
+      )
+        .then(() => setPendingPlacement(null))
         .catch(() => setError("Could not create card"))
         .finally(() => setIsCreating(false));
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setPendingCardType(null);
+        setPendingPlacement(null);
         setError(null);
       }
     };
@@ -110,18 +183,45 @@ export function V2CardCreateToolbar({
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isCreating, onCreateCard, pendingCardType, screenToFlowPosition]);
+  }, [isCreating, onCreateCard, pendingPlacement, screenToFlowPosition]);
 
-  function beginPlacement(cardType: V2CardType, event: ReactMouseEvent<HTMLButtonElement>) {
+  function chooseCardType(cardType: V2CardType) {
+    setCreationCardType(cardType);
+    setLibraryQueryInput("");
+    setLibraryQuery("");
+    setLibraryEntries([]);
+    setLibraryNextCursor(null);
+    setLibraryError(null);
+  }
+
+  function beginPlacement(
+    cardType: V2CardType,
+    libraryEntry: V2CardLibraryEntry | null,
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) {
     setCursorPosition({ x: event.clientX, y: event.clientY });
-    setPendingCardType(cardType);
+    setPendingPlacement({
+      cardType,
+      libraryEntryId: libraryEntry?.id ?? null,
+      title: libraryEntry?.title ?? "New card",
+    });
     setIsOpen(false);
     setError(null);
   }
 
   function handleManageCardTypes() {
     setIsOpen(false);
-    onManageCardTypes(activeCardType?.id ?? null);
+    onManageCardTypes(creationCardType?.id ?? activeCardType?.id ?? null);
+  }
+
+  function resetPicker() {
+    setCreationCardType(null);
+    setQuery("");
+    setLibraryQueryInput("");
+    setLibraryQuery("");
+    setLibraryEntries([]);
+    setLibraryNextCursor(null);
+    setLibraryError(null);
   }
 
   return (
@@ -135,11 +235,11 @@ export function V2CardCreateToolbar({
         <button
           type="button"
           className="v2CreateToolbarButton"
-          aria-haspopup="menu"
+          aria-haspopup="dialog"
           aria-expanded={isOpen}
           onClick={() => {
             setError(null);
-            setQuery("");
+            if (!isOpen) resetPicker();
             setIsOpen((current) => !current);
           }}
           disabled={isCreating}
@@ -152,76 +252,164 @@ export function V2CardCreateToolbar({
       </div>
 
       {isOpen ? (
-        <div className="v2CreateToolbarPopover v2CardTypePicker" role="menu">
-          <div className="v2CardTypePickerHeader">
-            <span className="v2CreateToolbarTitle">Card type</span>
-            <label className="v2CardTypeSearch">
-              <Search size={13} strokeWidth={2.2} aria-hidden="true" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search types"
-                aria-label="Search card types"
-              />
-            </label>
-          </div>
-          {cardTypes.length === 0 ? (
-            <p className="v2CardTypeEmptyState">No card types available.</p>
-          ) : filteredCardTypes.length === 0 ? (
-            <p className="v2CardTypeEmptyState">No matching card types.</p>
-          ) : (
-            <div className="v2CardTypePickerBody">
-              <div className="v2CardTypeList">
-                {filteredCardTypes.map((cardType) => {
-                  const accentColor = getV2CardTypeAccentColor(cardType);
-                  const summary = summarizePorts(cardType.ports);
-                  const isActive = activeCardType?.id === cardType.id;
-                  return (
-                    <button
-                      key={cardType.id}
-                      type="button"
-                      role="menuitem"
-                      className={`v2CardTypeRow${isActive ? " v2CardTypeRowActive" : ""}`}
-                      onMouseEnter={() => setActiveCardTypeId(cardType.id)}
-                      onFocus={() => setActiveCardTypeId(cardType.id)}
-                      onClick={(event) => beginPlacement(cardType, event)}
-                      disabled={isCreating}
-                      style={{ ["--v2-create-accent" as string]: accentColor }}
-                    >
-                      <span className="v2CardTypeColorDot" aria-hidden="true" />
-                      <span className="v2CardTypeMeta">
-                        <strong>{cardType.name}</strong>
-                        <em>key: {cardType.key}</em>
-                        {cardType.description ? <small>{cardType.description}</small> : null}
-                        <span className="v2CardTypePortsSummary">
-                          ports: {summary.inputs} {pluralize("input", summary.inputs)} ·{" "}
-                          {summary.outputs} {pluralize("output", summary.outputs)} ·{" "}
-                          {summary.receivers} {pluralize("receiver", summary.receivers)}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
+        <div
+          className="v2CreateToolbarPopover v2CardTypePicker"
+          role="dialog"
+          aria-label={creationCardType ? `Create ${creationCardType.name} card` : "Create card"}
+        >
+          {creationCardType ? (
+            <>
+              <div className="v2CardLibraryCreateHeader">
+                <button
+                  type="button"
+                  className="v2CardLibraryCreateBack"
+                  onClick={() => setCreationCardType(null)}
+                  aria-label="Back to card types"
+                >
+                  <ArrowLeft size={15} strokeWidth={2.2} />
+                </button>
+                <div>
+                  <span className="v2CreateToolbarTitle">Library record</span>
+                  <strong>{creationCardType.name}</strong>
+                </div>
               </div>
-              <CardTypePreview cardType={activeCardType} />
-            </div>
+              <label className="v2CardTypeSearch">
+                <Search size={13} strokeWidth={2.2} aria-hidden="true" />
+                <input
+                  value={libraryQueryInput}
+                  onChange={(event) => setLibraryQueryInput(event.target.value)}
+                  placeholder="Search library"
+                  aria-label={`Search ${creationCardType.name} library`}
+                />
+              </label>
+              <div className="v2CardLibraryCreateList">
+                <button
+                  type="button"
+                  className="v2CardLibraryCreateRow v2CardLibraryCreateRowLocal"
+                  onClick={(event) => beginPlacement(creationCardType, null, event)}
+                  disabled={isCreating}
+                >
+                  <span className="v2CardLibraryCreateIcon" aria-hidden="true">
+                    <Plus size={16} strokeWidth={2.2} />
+                  </span>
+                  <span className="v2CardLibraryCreateMeta">
+                    <strong>Local card</strong>
+                    <small>Create an independent card without a library link.</small>
+                  </span>
+                </button>
+                {libraryEntries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="v2CardLibraryCreateRow"
+                    onClick={(event) => beginPlacement(creationCardType, entry, event)}
+                    disabled={isCreating}
+                  >
+                    <span className="v2CardLibraryCreateIcon" aria-hidden="true">
+                      <Database size={15} strokeWidth={2} />
+                    </span>
+                    <span className="v2CardLibraryCreateMeta">
+                      <strong>{entry.title}</strong>
+                      <small>{summarizeLibraryEntry(entry)}</small>
+                    </span>
+                  </button>
+                ))}
+                {isLibraryLoading ? (
+                  <p className="v2CardLibraryCreateStatus">
+                    <LoaderCircle size={14} className="v2CardLibraryCreateSpinner" />
+                    Loading library…
+                  </p>
+                ) : null}
+                {!isLibraryLoading && libraryEntries.length === 0 && !libraryError ? (
+                  <p className="v2CardLibraryCreateStatus">
+                    {libraryQuery ? "No matching library records." : "No library records yet."}
+                  </p>
+                ) : null}
+                {libraryError ? (
+                  <p className="v2CardLibraryCreateStatus v2CardLibraryCreateStatusError">
+                    {libraryError}
+                  </p>
+                ) : null}
+                {libraryNextCursor ? (
+                  <p className="v2CardLibraryCreateStatus">
+                    More records match. Refine the search to find them.
+                  </p>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="v2CardTypePickerHeader">
+                <span className="v2CreateToolbarTitle">Card type</span>
+                <label className="v2CardTypeSearch">
+                  <Search size={13} strokeWidth={2.2} aria-hidden="true" />
+                  <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search types"
+                    aria-label="Search card types"
+                  />
+                </label>
+              </div>
+              {cardTypes.length === 0 ? (
+                <p className="v2CardTypeEmptyState">No card types available.</p>
+              ) : filteredCardTypes.length === 0 ? (
+                <p className="v2CardTypeEmptyState">No matching card types.</p>
+              ) : (
+                <div className="v2CardTypePickerBody">
+                  <div className="v2CardTypeList">
+                    {filteredCardTypes.map((cardType) => {
+                      const accentColor = getV2CardTypeAccentColor(cardType);
+                      const summary = summarizePorts(cardType.ports);
+                      const isActive = activeCardType?.id === cardType.id;
+                      return (
+                        <button
+                          key={cardType.id}
+                          type="button"
+                          className={`v2CardTypeRow${isActive ? " v2CardTypeRowActive" : ""}`}
+                          onMouseEnter={() => setActiveCardTypeId(cardType.id)}
+                          onFocus={() => setActiveCardTypeId(cardType.id)}
+                          onClick={() => chooseCardType(cardType)}
+                          disabled={isCreating}
+                          style={{ ["--v2-create-accent" as string]: accentColor }}
+                        >
+                          <span className="v2CardTypeColorDot" aria-hidden="true" />
+                          <span className="v2CardTypeMeta">
+                            <strong>{cardType.name}</strong>
+                            <em>key: {cardType.key}</em>
+                            {cardType.description ? <small>{cardType.description}</small> : null}
+                            <span className="v2CardTypePortsSummary">
+                              ports: {summary.inputs} {pluralize("input", summary.inputs)} ·{" "}
+                              {summary.outputs} {pluralize("output", summary.outputs)} ·{" "}
+                              {summary.receivers} {pluralize("receiver", summary.receivers)}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <CardTypePreview cardType={activeCardType} />
+                </div>
+              )}
+            </>
           )}
           <div className="v2CardTypePickerFooter">
             <button
               type="button"
               onClick={handleManageCardTypes}
             >
-              Manage card types
+              {creationCardType ? "Manage type and library" : "Manage card types"}
             </button>
           </div>
         </div>
       ) : null}
 
       {error ? <p className="v2CreateToolbarError">{error}</p> : null}
-      {pendingCardType && typeof document !== "undefined"
+      {pendingPlacement && typeof document !== "undefined"
         ? createPortal(
             <CardPlacementPreview
-              cardType={pendingCardType}
+              cardType={pendingPlacement.cardType}
+              title={pendingPlacement.title}
               x={cursorPosition.x}
               y={cursorPosition.y}
               saving={isCreating}
@@ -235,11 +423,13 @@ export function V2CardCreateToolbar({
 
 function CardPlacementPreview({
   cardType,
+  title,
   x,
   y,
   saving,
 }: {
   cardType: V2CardType;
+  title: string;
   x: number;
   y: number;
   saving: boolean;
@@ -258,9 +448,24 @@ function CardPlacementPreview({
       aria-hidden="true"
     >
       <div><Icon size={16} /><strong>{cardType.name}</strong></div>
-      <span>New card</span>
+      <span>{title}</span>
     </div>
   );
+}
+
+function summarizeLibraryEntry(entry: V2CardLibraryEntry): string {
+  const description = entry.description.trim();
+  if (description) return description;
+
+  const values = Object.values(entry.data)
+    .filter(
+      (value): value is string | number | boolean =>
+        typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    )
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  return values.length > 0 ? values.join(" · ") : "Reusable library record";
 }
 
 function CardTypePreview({ cardType }: { cardType: V2CardType | null }) {

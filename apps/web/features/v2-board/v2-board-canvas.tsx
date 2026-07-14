@@ -1522,19 +1522,30 @@ export function V2BoardCanvas({
   const handleCreateCard = useCallback(
     async (
       cardType: V2CardType,
-      position: { x: number; y: number }
+      position: { x: number; y: number },
+      libraryEntryId: string | null
     ) => {
       setSaveStatus("saving");
       setConnectionCreateError(null);
       try {
-        const created = await createV2Card(board.id, {
-          cardTypeId: cardType.id,
-          title: "New card",
-          description: "",
-          data: {},
-          position,
-          size: clampCardSize(cardType.defaultSize),
-        });
+        const created = await createV2Card(
+          board.id,
+          libraryEntryId
+            ? {
+                cardTypeId: cardType.id,
+                libraryEntryId,
+                position,
+                size: clampCardSize(cardType.defaultSize),
+              }
+            : {
+                cardTypeId: cardType.id,
+                title: "New card",
+                description: "",
+                data: {},
+                position,
+                size: clampCardSize(cardType.defaultSize),
+              }
+        );
 
         setNodes((current) => [
           ...current,
@@ -2962,6 +2973,7 @@ export function V2BoardCanvas({
           </defs>
         </svg>
         <V2CardCreateToolbar
+          workspaceId={board.workspaceId}
           cardTypes={cardTypes}
           onCreateCard={handleCreateCard}
           onManageCardTypes={handleOpenCardTypeManager}
