@@ -57,6 +57,10 @@ export const v2ConnectorSlotSchema = z.object({
   showLabel: z.boolean().optional()
 });
 
+export const v2CardTypeKindSchema = z.enum(["entity", "container"]);
+export const v2ContainerVariantSchema = z.enum(["sticky", "frame"]);
+export const v2ContainerThemeSchema = z.enum(["yellow", "blue", "green", "pink", "gray"]);
+
 export const v2CardVisualStyleSchema = z.object({
   accentKey: z.string().trim().min(1).max(40).optional(),
   accentColor: z.string().min(1).max(32).optional(),
@@ -72,6 +76,8 @@ export const v2CardVisualStyleSchema = z.object({
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
   locked: z.boolean().optional(),
   zIndex: z.number().int().min(0).max(10000).optional(),
+  containerVariant: v2ContainerVariantSchema.optional(),
+  containerTheme: v2ContainerThemeSchema.optional(),
   connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
 
@@ -332,6 +338,7 @@ export const v2CardTypeSchema = z.object({
   id: v2UuidSchema,
   workspaceId: v2UuidSchema,
   key: z.string().regex(/^[a-z][a-z0-9_]*$/),
+  kind: v2CardTypeKindSchema.optional(),
   name: z.string().min(1),
   description: z.string(),
   defaultData: v2JsonObjectSchema,
@@ -391,6 +398,7 @@ export const v2CardSchema = z.object({
   workspaceId: v2UuidSchema,
   boardId: v2UuidSchema,
   cardTypeId: v2UuidSchema,
+  containerId: v2UuidSchema.nullable().optional(),
   libraryEntryId: v2UuidSchema.nullable().optional(),
   title: z.string().min(1),
   description: z.string(),
@@ -780,7 +788,14 @@ export const v2CreateCardParamsSchema = z.object({
 
 export const v2CreateCardBodySchema = z
   .object({
-    cardTypeId: v2UuidSchema,
+    cardTypeId: v2UuidSchema.optional(),
+    container: z
+      .object({
+        variant: v2ContainerVariantSchema,
+        theme: v2ContainerThemeSchema.optional()
+      })
+      .strict()
+      .optional(),
     libraryEntryId: v2UuidSchema.optional(),
     title: z.string().trim().min(1).optional(),
     description: z.string().optional(),
@@ -792,6 +807,20 @@ export const v2CreateCardBodySchema = z
   })
   .strict()
   .superRefine((input, context) => {
+    if ((input.cardTypeId === undefined) === (input.container === undefined)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cardTypeId"],
+        message: "Provide either cardTypeId or container"
+      });
+    }
+    if (input.container !== undefined && input.libraryEntryId !== undefined) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["libraryEntryId"],
+        message: "Container cards cannot use library entries"
+      });
+    }
     if (
       input.libraryEntryId !== undefined &&
       (input.title !== undefined || input.description !== undefined || input.data !== undefined)
@@ -853,12 +882,19 @@ export const v2UpdateBoardLayoutBodySchema = z
           .object({
             id: v2UuidSchema,
             position: v2PositionSchema.optional(),
-            zIndex: z.number().int().min(0).max(10000).optional()
+            zIndex: z.number().int().min(0).max(10000).optional(),
+            containerId: v2UuidSchema.nullable().optional()
           })
           .strict()
-          .refine((card) => card.position !== undefined || card.zIndex !== undefined, {
+          .refine(
+            (card) =>
+              card.position !== undefined ||
+              card.zIndex !== undefined ||
+              Object.prototype.hasOwnProperty.call(card, "containerId"),
+            {
             message: "At least one card layout change is required"
-          })
+            }
+          )
       )
       .max(500)
       .default([]),
@@ -1395,6 +1431,9 @@ export type V2CardLibraryEntryValidationIssue = z.infer<
 export type V2CardLibraryEntry = z.infer<typeof v2CardLibraryEntrySchema>;
 export type V2Card = z.infer<typeof v2CardSchema>;
 export type V2CardVisualStyle = z.infer<typeof v2CardVisualStyleSchema>;
+export type V2CardTypeKind = z.infer<typeof v2CardTypeKindSchema>;
+export type V2ContainerVariant = z.infer<typeof v2ContainerVariantSchema>;
+export type V2ContainerTheme = z.infer<typeof v2ContainerThemeSchema>;
 export type V2ConnectionType = z.infer<typeof v2ConnectionTypeSchema>;
 export type V2Connection = z.infer<typeof v2ConnectionSchema>;
 export type V2ConnectionMarker = z.infer<typeof v2ConnectionMarkerSchema>;

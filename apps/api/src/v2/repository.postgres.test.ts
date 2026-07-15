@@ -424,6 +424,36 @@ describePostgres("v2 Postgres repository", () => {
     await expect(repository.getConnection(connection.id)).resolves.toMatchObject({ visualStyle });
   });
 
+  it("persists same-board container membership and detaches children on delete", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const container = await service.createCard(ownerContext, seedIds.board, {
+      container: { variant: "frame", theme: "green" },
+      title: "Postgres frame"
+    });
+    const child = await service.createCard(ownerContext, seedIds.board, {
+      cardTypeId: seedIds.sourceType,
+      title: "Contained source"
+    });
+
+    await expect(
+      service.updateBoardLayout(ownerContext, seedIds.board, {
+        cards: [{ id: child.id, containerId: container.id }]
+      })
+    ).resolves.toEqual({ updatedCards: 1, updatedConnections: 0 });
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({
+      containerId: container.id
+    });
+
+    const detail = await repository.getBoardDetail(seedIds.board);
+    expect(detail?.cardTypes.find((cardType) => cardType.id === container.cardTypeId))
+      .toMatchObject({ kind: "container", key: "yadraw_system_container" });
+
+    await service.deleteCard(ownerContext, container.id);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({ containerId: null });
+    await service.deleteCard(ownerContext, child.id);
+  });
+
   it("filters orphan connections when a card is soft-deleted outside the normal delete path", async () => {
     if (!repository) throw new Error("Repository was not initialized");
     const service = createV2BoardService(repository);

@@ -685,6 +685,43 @@ describe("v2 API contracts", () => {
     ).toThrow();
   });
 
+  it("validates container creation and explicit membership changes", () => {
+    expect(
+      v2CreateCardBodySchema.parse({
+        container: { variant: "frame", theme: "blue" },
+        title: "Planning frame",
+        position: { x: 120, y: 80 }
+      })
+    ).toMatchObject({
+      container: { variant: "frame", theme: "blue" },
+      title: "Planning frame"
+    });
+    expect(
+      v2UpdateBoardLayoutBodySchema.parse({
+        cards: [{ id: cardId, containerId: targetCardId }]
+      })
+    ).toMatchObject({ cards: [{ id: cardId, containerId: targetCardId }] });
+    expect(
+      v2UpdateBoardLayoutBodySchema.parse({
+        cards: [{ id: cardId, containerId: null }]
+      })
+    ).toMatchObject({ cards: [{ id: cardId, containerId: null }] });
+
+    expect(() =>
+      v2CreateCardBodySchema.parse({
+        cardTypeId,
+        container: { variant: "sticky" }
+      })
+    ).toThrow();
+    expect(() => v2CreateCardBodySchema.parse({ title: "Missing type" })).toThrow();
+    expect(() =>
+      v2CreateCardBodySchema.parse({
+        container: { variant: "sticky" },
+        libraryEntryId
+      })
+    ).toThrow();
+  });
+
   it("parses card type create and update requests", () => {
     expect(
       v2CreateCardTypeBodySchema.parse({

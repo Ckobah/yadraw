@@ -2,21 +2,28 @@
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ChevronDown, Database, LoaderCircle, Plus, Search } from "lucide-react";
+import { ArrowLeft, ChevronDown, Database, Frame, LoaderCircle, Plus, Search, StickyNote } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import type {
   V2CardLibraryEntry,
   V2CardType,
   V2CardTypePort,
+  V2ContainerVariant,
   V2Position,
 } from "@yadraw/shared";
 import { listV2CardLibraryEntries } from "../v2-card-library/api";
 import { getV2CardTypeAccentColor } from "./v2-card-node";
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
+import { V2_CONTAINER_SIZES } from "./v2-containers";
 
-type PendingCardPlacement = {
+type PendingPlacement = {
+  kind: "card";
   cardType: V2CardType;
   libraryEntryId: string | null;
+  title: string;
+} | {
+  kind: "container";
+  variant: V2ContainerVariant;
   title: string;
 };
 
@@ -29,6 +36,7 @@ type V2CardCreateToolbarProps = {
     libraryEntryId: string | null
   ) => Promise<void>;
   onManageCardTypes: (cardTypeId?: string | null) => void;
+  onCreateContainer: (variant: V2ContainerVariant, position: V2Position) => Promise<void>;
   connectorControl?: ReactNode;
 };
 
@@ -37,6 +45,7 @@ export function V2CardCreateToolbar({
   cardTypes,
   onCreateCard,
   onManageCardTypes,
+  onCreateContainer,
   connectorControl,
 }: V2CardCreateToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
@@ -54,7 +63,7 @@ export function V2CardCreateToolbar({
   const [activeCardTypeId, setActiveCardTypeId] = useState<string | null>(
     cardTypes[0]?.id ?? null
   );
-  const [pendingPlacement, setPendingPlacement] = useState<PendingCardPlacement | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<PendingPlacement | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const filteredCardTypes = cardTypes.filter((cardType) =>
@@ -148,23 +157,38 @@ export function V2CardCreateToolbar({
     const handlePointerDown = (event: PointerEvent) => {
       if (event.button !== 0 || isCreating) return;
       const target = event.target;
-      if (!(target instanceof Element) || !target.closest(".react-flow__pane")) return;
+      if (
+        !(target instanceof Element) ||
+        !target.closest(".react-flow__pane, .v2ContainerNode .v2CardBody")
+      ) return;
       event.preventDefault();
       event.stopPropagation();
       const center = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const size = pendingPlacement.kind === "card"
+        ? pendingPlacement.cardType.defaultSize
+        : V2_CONTAINER_SIZES[pendingPlacement.variant];
       const position: V2Position = {
-        x: center.x - pendingPlacement.cardType.defaultSize.width / 2,
-        y: center.y - pendingPlacement.cardType.defaultSize.height / 2,
+        x: center.x - size.width / 2,
+        y: center.y - size.height / 2,
       };
       setIsCreating(true);
       setError(null);
-      void onCreateCard(
-        pendingPlacement.cardType,
-        position,
-        pendingPlacement.libraryEntryId
-      )
+      const createPromise = pendingPlacement.kind === "card"
+        ? onCreateCard(
+            pendingPlacement.cardType,
+            position,
+            pendingPlacement.libraryEntryId
+          )
+        : onCreateContainer(pendingPlacement.variant, position);
+      void createPromise
         .then(() => setPendingPlacement(null))
-        .catch(() => setError("Could not create card"))
+        .catch(() =>
+          setError(
+            pendingPlacement.kind === "container"
+              ? "Could not create container"
+              : "Could not create card"
+          )
+        )
         .finally(() => setIsCreating(false));
     };
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -183,7 +207,7 @@ export function V2CardCreateToolbar({
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isCreating, onCreateCard, pendingPlacement, screenToFlowPosition]);
+  }, [isCreating, onCreateCard, onCreateContainer, pendingPlacement, screenToFlowPosition]);
 
   function chooseCardType(cardType: V2CardType) {
     setCreationCardType(cardType);
@@ -201,9 +225,24 @@ export function V2CardCreateToolbar({
   ) {
     setCursorPosition({ x: event.clientX, y: event.clientY });
     setPendingPlacement({
+      kind: "card",
       cardType,
       libraryEntryId: libraryEntry?.id ?? null,
       title: libraryEntry?.title ?? "New card",
+    });
+    setIsOpen(false);
+    setError(null);
+  }
+
+  function beginContainerPlacement(
+    variant: V2ContainerVariant,
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) {
+    setCursorPosition({ x: event.clientX, y: event.clientY });
+    setPendingPlacement({
+      kind: "container",
+      variant,
+      title: variant === "frame" ? "Frame" : "Sticky note",
     });
     setIsOpen(false);
     setError(null);
@@ -247,6 +286,24 @@ export function V2CardCreateToolbar({
           <Plus size={15} strokeWidth={2.4} />
           <span>Card</span>
           <ChevronDown size={14} strokeWidth={2.2} />
+        </button>
+        <button
+          type="button"
+          className="v2CreateToolbarButton v2CreateToolbarUtilityButton"
+          onClick={(event) => beginContainerPlacement("sticky", event)}
+          disabled={isCreating}
+        >
+          <StickyNote size={15} strokeWidth={2.2} />
+          <span>Sticky</span>
+        </button>
+        <button
+          type="button"
+          className="v2CreateToolbarButton v2CreateToolbarUtilityButton"
+          onClick={(event) => beginContainerPlacement("frame", event)}
+          disabled={isCreating}
+        >
+          <Frame size={15} strokeWidth={2.2} />
+          <span>Frame</span>
         </button>
         {connectorControl}
       </div>
@@ -407,16 +464,50 @@ export function V2CardCreateToolbar({
       {error ? <p className="v2CreateToolbarError">{error}</p> : null}
       {pendingPlacement && typeof document !== "undefined"
         ? createPortal(
-            <CardPlacementPreview
-              cardType={pendingPlacement.cardType}
-              title={pendingPlacement.title}
-              x={cursorPosition.x}
-              y={cursorPosition.y}
-              saving={isCreating}
-            />,
+            pendingPlacement.kind === "card" ? (
+              <CardPlacementPreview
+                cardType={pendingPlacement.cardType}
+                title={pendingPlacement.title}
+                x={cursorPosition.x}
+                y={cursorPosition.y}
+                saving={isCreating}
+              />
+            ) : (
+              <ContainerPlacementPreview
+                variant={pendingPlacement.variant}
+                x={cursorPosition.x}
+                y={cursorPosition.y}
+                saving={isCreating}
+              />
+            ),
             document.body
           )
         : null}
+    </div>
+  );
+}
+
+function ContainerPlacementPreview({
+  variant,
+  x,
+  y,
+  saving,
+}: {
+  variant: V2ContainerVariant;
+  x: number;
+  y: number;
+  saving: boolean;
+}) {
+  const Icon = variant === "frame" ? Frame : StickyNote;
+  const size = V2_CONTAINER_SIZES[variant];
+  return (
+    <div
+      className={`v2CardPlacementPreview v2ContainerPlacementPreview v2ContainerPlacementPreview${variant === "frame" ? "Frame" : "Sticky"}${saving ? " v2CardPlacementPreviewSaving" : ""}`}
+      style={{ left: x, top: y, width: size.width, height: size.height }}
+      aria-hidden="true"
+    >
+      <div><Icon size={16} /><strong>{variant === "frame" ? "Frame" : "Sticky note"}</strong></div>
+      <span>Click the canvas to place</span>
     </div>
   );
 }

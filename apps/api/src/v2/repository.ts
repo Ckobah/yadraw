@@ -55,6 +55,7 @@ export type V2CreateCardRecordInput = {
   workspaceId: string;
   boardId: string;
   cardTypeId: string;
+  containerId?: string | null;
   libraryEntryId?: string | null;
   title: string;
   description: string;
@@ -207,6 +208,7 @@ export type V2Repository = {
   deleteBoard?(boardId: string): Promise<boolean>;
   deleteUserData?(userId: string): Promise<boolean>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
+  ensureContainerCardType?(workspaceId: string): Promise<V2CardType>;
   listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
   getConnectionType?(connectionTypeId: string): Promise<V2ConnectionType | null>;
@@ -434,6 +436,7 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     key: String(row.key),
+    kind: row.kind === "container" ? "container" : "entity",
     name: String(row.name),
     description: String(row.description ?? ""),
     defaultData: asObject(row.default_data),
@@ -485,6 +488,10 @@ function cardFromRow(row: QueryResultRow): V2Card {
     workspaceId: String(row.workspace_id),
     boardId: String(row.board_id),
     cardTypeId: String(row.card_type_id),
+    containerId:
+      row.container_id === null || row.container_id === undefined
+        ? null
+        : String(row.container_id),
     libraryEntryId:
       row.library_entry_id === null || row.library_entry_id === undefined
         ? null
@@ -1121,6 +1128,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         if (update.zIndex !== undefined) {
           card.visualStyle = { ...card.visualStyle, zIndex: update.zIndex };
         }
+        if (Object.prototype.hasOwnProperty.call(update, "containerId")) {
+          card.containerId = update.containerId ?? null;
+        }
         card.updatedAt = timestamp;
       });
       input.connections.forEach((update, index) => {
@@ -1134,6 +1144,65 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     async listCardTypes(workspaceId) {
       if (workspaceId !== state.workspace.id) return [];
       return cloneJson(state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)));
+    },
+
+    async ensureContainerCardType(workspaceId) {
+      const existing = state.cardTypes.find(
+        (cardType) =>
+          cardType.workspaceId === workspaceId &&
+          cardType.key === "yadraw_system_container" &&
+          !deletedCardTypeIds.has(cardType.id)
+      );
+      if (existing) {
+        if (existing.kind === "container") return cloneJson(existing);
+        const timestamp = nowIso();
+        existing.kind = "container";
+        existing.name = "Container";
+        existing.description = "Sticky notes and frames";
+        existing.defaultData = {};
+        existing.schema = { fields: [] };
+        existing.defaultVisualStyle = {};
+        existing.defaultSize = { width: 320, height: 220 };
+        existing.ports = buildMemoryCardTypePorts(
+          workspaceId,
+          existing.id,
+          [
+            { key: "in", label: "In", direction: "input", dataType: "json", required: false, sortOrder: 0 },
+            { key: "out", label: "Out", direction: "output", dataType: "json", required: false, sortOrder: 1 }
+          ],
+          timestamp
+        );
+        existing.updatedAt = timestamp;
+        return cloneJson(existing);
+      }
+
+      const timestamp = nowIso();
+      const cardTypeId = randomUUID();
+      const cardType = v2CardTypeSchema.parse({
+        id: cardTypeId,
+        workspaceId,
+        key: "yadraw_system_container",
+        kind: "container",
+        name: "Container",
+        description: "Sticky notes and frames",
+        defaultData: {},
+        schema: { fields: [] },
+        defaultVisualStyle: {},
+        defaultSize: { width: 320, height: 220 },
+        ports: buildMemoryCardTypePorts(
+          workspaceId,
+          cardTypeId,
+          [
+            { key: "in", label: "In", direction: "input", dataType: "json", required: false, sortOrder: 0 },
+            { key: "out", label: "Out", direction: "output", dataType: "json", required: false, sortOrder: 1 }
+          ],
+          timestamp
+        ),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      });
+      state.cardTypes.push(cardType);
+      return cloneJson(cardType);
     },
 
     async getCardType(cardTypeId) {
@@ -1415,6 +1484,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         workspaceId: input.workspaceId,
         boardId: input.boardId,
         cardTypeId: input.cardTypeId,
+        containerId: input.containerId ?? null,
         libraryEntryId: input.libraryEntryId ?? null,
         title: input.title,
         description: input.description,
@@ -1439,6 +1509,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       const card = v2CardSchema.parse({
         ...source,
         id: randomUUID(),
+        containerId: null,
         data: cloneJson(source.data),
         position: {
           x: source.position.x + 40,
@@ -1515,6 +1586,12 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       if (!exists) return false;
 
       deletedCardIds.add(cardId);
+      for (const card of state.cards) {
+        if (card.containerId === cardId) {
+          card.containerId = null;
+          card.updatedAt = nowIso();
+        }
+      }
       for (const connection of state.connections) {
         if (connection.sourceCardId === cardId || connection.targetCardId === cardId) {
           deletedConnectionIds.add(connection.id);
@@ -2435,6 +2512,16 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           );
           cardIds.set(String(card.id), String(copied.rows[0].id));
         }
+        for (const card of cards.rows) {
+          if (!card.container_id) continue;
+          const copiedCardId = cardIds.get(String(card.id));
+          const copiedContainerId = cardIds.get(String(card.container_id));
+          if (!copiedCardId || !copiedContainerId) continue;
+          await client.query(
+            `update cards set container_id = $2 where id = $1`,
+            [copiedCardId, copiedContainerId]
+          );
+        }
         const connections = await client.query(
           `select * from connections where board_id = $1 and deleted_at is null order by created_at, id`,
           [boardId]
@@ -2739,6 +2826,10 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
                     when $5::integer is null then visual_style
                     else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
                   end,
+                  container_id = case
+                    when $6::boolean then $7::uuid
+                    else container_id
+                  end,
                   updated_at = now()
               where id = $1 and board_id = $2 and deleted_at is null
             `,
@@ -2747,7 +2838,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               boardId,
               update.position?.x ?? null,
               update.position?.y ?? null,
-              update.zIndex ?? null
+              update.zIndex ?? null,
+              Object.prototype.hasOwnProperty.call(update, "containerId"),
+              update.containerId ?? null
             ]
           );
           if ((result.rowCount ?? 0) !== 1) {
@@ -2795,6 +2888,77 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       );
 
       return cardTypesFromRows(result.rows);
+    },
+
+    async ensureContainerCardType(workspaceId) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        const result = await client.query(
+          `
+            insert into card_types (
+              workspace_id, key, kind, name, description, default_data,
+              schema, default_visual_style, default_width, default_height
+            ) values (
+              $1, 'yadraw_system_container', 'container', 'Container',
+              'Sticky notes and frames', '{}'::jsonb, '{"fields":[]}'::jsonb,
+              '{}'::jsonb, 320, 220
+            )
+            on conflict (workspace_id, key) where deleted_at is null
+            do update set
+              kind = 'container',
+              name = excluded.name,
+              description = excluded.description,
+              default_data = excluded.default_data,
+              schema = excluded.schema,
+              default_visual_style = excluded.default_visual_style,
+              default_width = excluded.default_width,
+              default_height = excluded.default_height,
+              updated_at = now()
+            returning *
+          `,
+          [workspaceId]
+        );
+        const row = result.rows[0];
+        const cardTypeId = String(row.id);
+        await client.query(
+          `
+            insert into card_type_ports (
+              workspace_id, card_type_id, key, label, direction,
+              data_type, required, sort_order
+            ) values
+              ($1, $2, 'in', 'In', 'input', 'json', false, 0),
+              ($1, $2, 'out', 'Out', 'output', 'json', false, 1)
+            on conflict (card_type_id, direction, key) where deleted_at is null
+            do update set label = excluded.label, updated_at = now()
+          `,
+          [workspaceId, cardTypeId]
+        );
+        await client.query(
+          `
+            update card_type_ports
+            set deleted_at = now(), updated_at = now()
+            where card_type_id = $1
+              and deleted_at is null
+              and not (
+                (direction = 'input' and key = 'in') or
+                (direction = 'output' and key = 'out')
+              )
+          `,
+          [cardTypeId]
+        );
+        const ports = await client.query(
+          `select * from card_type_ports where card_type_id = $1 and deleted_at is null order by sort_order, id`,
+          [cardTypeId]
+        );
+        await client.query("commit");
+        return cardTypeFromRow(row, ports.rows.map(cardTypePortFromRow));
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async getCardType(cardTypeId) {
@@ -3316,16 +3480,17 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         const result = await client.query(
           `
             insert into cards (
-              workspace_id, board_id, card_type_id, library_entry_id,
+              workspace_id, board_id, card_type_id, container_id, library_entry_id,
               title, description, data, position_x, position_y, width, height,
               visual_style, status
-            ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13)
+            ) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12, $13::jsonb, $14)
             returning id
           `,
           [
             input.workspaceId,
             input.boardId,
             input.cardTypeId,
+            input.containerId ?? null,
             input.libraryEntryId ?? null,
             input.title,
             input.description,
@@ -3366,6 +3531,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             workspace_id,
             board_id,
             card_type_id,
+            container_id,
             library_entry_id,
             title,
             description,
@@ -3381,6 +3547,7 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
             workspace_id,
             board_id,
             card_type_id,
+            null,
             library_entry_id,
             title,
             description,
@@ -3547,6 +3714,17 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           await client.query("rollback");
           return false;
         }
+
+        await client.query(
+          `
+            update cards
+            set container_id = null,
+                updated_at = now()
+            where container_id = $1
+              and deleted_at is null
+          `,
+          [cardId]
+        );
 
         await client.query(
           `

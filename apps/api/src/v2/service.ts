@@ -83,6 +83,15 @@ import type {
 import type { GetObjectResult, V2ObjectStorage } from "./storage.js";
 
 export const V2_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const CONTAINER_CARD_TYPE_KEY = "yadraw_system_container";
+
+const CONTAINER_THEMES = {
+  yellow: { fillColor: "#fff7c2", borderColor: "#e4c94f" },
+  blue: { fillColor: "#e7f1ff", borderColor: "#78a9e6" },
+  green: { fillColor: "#e7f7ea", borderColor: "#78b987" },
+  pink: { fillColor: "#fdebf3", borderColor: "#d98cac" },
+  gray: { fillColor: "#f1f3f5", borderColor: "#9aa4b2" }
+} as const;
 
 export type V2ServiceErrorCode =
   | "not_found"
@@ -1017,6 +1026,32 @@ export function createV2BoardService(
       const input = v2UpdateBoardLayoutBodySchema.safeParse(rawInput);
       if (!input.success) validationFailed("Invalid board layout payload");
       await requireBoardForAccess(context, boardId, "write");
+      if (
+        input.data.cards.some((card) =>
+          Object.prototype.hasOwnProperty.call(card, "containerId")
+        )
+      ) {
+        const detail = await repository.getBoardDetail(boardId);
+        if (!detail) notFound("Board not found");
+        const cardById = new Map(detail.cards.map((card) => [card.id, card]));
+        const typeById = new Map(detail.cardTypes.map((cardType) => [cardType.id, cardType]));
+        for (const update of input.data.cards) {
+          if (!Object.prototype.hasOwnProperty.call(update, "containerId")) continue;
+          const child = cardById.get(update.id);
+          if (!child) validationFailed("Container membership references a card outside the board");
+          const containerId = update.containerId ?? null;
+          if (containerId === null) continue;
+          if (containerId === update.id) validationFailed("A card cannot contain itself");
+          const container = cardById.get(containerId);
+          if (!container) validationFailed("Container card is not on this board");
+          if (typeById.get(container.cardTypeId)?.kind !== "container") {
+            validationFailed("Container membership must reference a frame or sticky note");
+          }
+          if (typeById.get(child.cardTypeId)?.kind === "container") {
+            validationFailed("Nested containers are not supported");
+          }
+        }
+      }
       if (!repository.updateBoardLayout) {
         throw new V2ServiceError("conflict", "Board layout updates are unavailable");
       }
@@ -1037,6 +1072,9 @@ export function createV2BoardService(
       }
 
       const board = await requireBoardForAccess(context, boardId, "write");
+      if (parsedInput.data.key === CONTAINER_CARD_TYPE_KEY) {
+        validationFailed("This card type key is reserved");
+      }
       await ensureCardTypeKeyUnique(board.workspaceId, parsedInput.data.key);
 
       return requireCardTypeSchemaRepository().createCardType({
@@ -1065,7 +1103,13 @@ export function createV2BoardService(
       if (cardType.workspaceId !== board.workspaceId) {
         validationFailed("Card type does not belong to the board workspace");
       }
+      if (cardType.kind === "container") {
+        conflict("System container types cannot be edited");
+      }
       if (parsedInput.data.key !== undefined) {
+        if (parsedInput.data.key === CONTAINER_CARD_TYPE_KEY) {
+          validationFailed("This card type key is reserved");
+        }
         await ensureCardTypeKeyUnique(board.workspaceId, parsedInput.data.key, cardType.id);
       }
 
@@ -1093,6 +1137,9 @@ export function createV2BoardService(
       if (cardType.workspaceId !== board.workspaceId) {
         validationFailed("Card type does not belong to the board workspace");
       }
+      if (cardType.kind === "container") {
+        conflict("System container types cannot be edited");
+      }
 
       const updated = await requireCardTypeSchemaRepository().updateCardTypeSchema(
         cardType.id,
@@ -1113,6 +1160,9 @@ export function createV2BoardService(
       }
       if (cardType.workspaceId !== board.workspaceId) {
         validationFailed("Card type does not belong to the board workspace");
+      }
+      if (cardType.kind === "container") {
+        conflict("System container types cannot be deleted");
       }
 
       const result = await requireCardTypeSchemaRepository().deleteCardType(cardType.id);
@@ -1192,6 +1242,9 @@ export function createV2BoardService(
       const cardType = await repository.getCardType(cardTypeId);
       if (!cardType || cardType.workspaceId !== workspaceId) {
         notFound("Card type not found");
+      }
+      if (cardType.kind === "container") {
+        conflict("Container cards do not use library entries");
       }
       const issues = validateCardLibraryEntryData(cardType, parsedInput.data.data);
       rejectInvalidCardLibraryEntryData(issues);
@@ -1527,13 +1580,26 @@ export function createV2BoardService(
       }
       await authorizeWorkspace(context, board.workspaceId, "write");
 
-      const cardType = await repository.getCardType(input.cardTypeId);
-      if (!cardType) {
-        notFound("Card type not found");
+      if (input.container && !repository.ensureContainerCardType) {
+        conflict("Container cards are unavailable");
       }
+      const cardType = input.container
+        ? await repository.ensureContainerCardType!(board.workspaceId)
+        : await repository.getCardType(input.cardTypeId!);
+      if (!cardType) notFound("Card type not found");
 
       if (cardType.workspaceId !== board.workspaceId) {
         validationFailed("Card type does not belong to the board workspace");
+      }
+      if (!input.container && cardType.kind === "container") {
+        conflict("Use the container creation mode for frames and sticky notes");
+      }
+      if (
+        !input.container &&
+        (input.visualStyle?.containerVariant !== undefined ||
+          input.visualStyle?.containerTheme !== undefined)
+      ) {
+        validationFailed("Container appearance is reserved for frames and sticky notes");
       }
 
       let libraryEntry: V2CardLibraryEntry | null = null;
@@ -1555,17 +1621,43 @@ export function createV2BoardService(
       }
 
       try {
+        const containerTheme = input.container?.theme ?? "yellow";
+        const containerAppearance = CONTAINER_THEMES[containerTheme];
         return await repository.createCard({
           workspaceId: board.workspaceId,
           boardId: board.id,
           cardTypeId: cardType.id,
+          containerId: null,
           libraryEntryId: libraryEntry?.id ?? null,
-          title: libraryEntry?.title ?? input.title ?? cardType.name,
+          title:
+            libraryEntry?.title ??
+            input.title ??
+            (input.container?.variant === "frame"
+              ? "Frame"
+              : input.container
+                ? "Sticky note"
+                : cardType.name),
           description: libraryEntry?.description ?? input.description ?? "",
           data: cloneJson(libraryEntry?.data ?? input.data ?? {}),
           position: input.position ?? { x: 0, y: 0 },
-          size: input.size ?? cardType.defaultSize,
-          visualStyle: cloneJson(input.visualStyle ?? {}),
+          size:
+            input.size ??
+            (input.container?.variant === "frame"
+              ? { width: 720, height: 480 }
+              : input.container
+                ? { width: 320, height: 220 }
+                : cardType.defaultSize),
+          visualStyle: cloneJson(
+            input.container
+              ? {
+                  ...containerAppearance,
+                  ...(input.visualStyle ?? {}),
+                  containerVariant: input.container.variant,
+                  containerTheme,
+                  zIndex: input.visualStyle?.zIndex ?? 0
+                }
+              : input.visualStyle ?? {}
+          ),
           status: input.status ?? "active"
         });
       } catch (error) {
@@ -1603,6 +1695,16 @@ export function createV2BoardService(
       }
       await authorizeWorkspace(context, existing.workspaceId, "write");
       if (
+        input.visualStyle &&
+        (input.visualStyle.containerVariant !== undefined ||
+          input.visualStyle.containerTheme !== undefined)
+      ) {
+        const cardType = await repository.getCardType(existing.cardTypeId);
+        if (cardType?.kind !== "container") {
+          validationFailed("Container appearance is reserved for frames and sticky notes");
+        }
+      }
+      if (
         existing.libraryEntryId &&
         (input.title !== undefined || input.description !== undefined || input.data !== undefined)
       ) {
@@ -1626,6 +1728,10 @@ export function createV2BoardService(
       const existing = await repository.getCard(cardId);
       if (!existing) notFound("Card not found");
       await authorizeWorkspace(context, existing.workspaceId, "write");
+      const existingType = await repository.getCardType(existing.cardTypeId);
+      if (existingType?.kind === "container") {
+        conflict("Container cards do not use library entries");
+      }
 
       if (parsedInput.data.libraryEntryId !== null) {
         const entry = await requireCardLibraryRepository().getCardLibraryEntry(

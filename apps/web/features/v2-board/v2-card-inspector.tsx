@@ -1,11 +1,12 @@
 "use client";
 
-import { Database, X } from "lucide-react";
+import { Database, Frame, StickyNote, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
   V2CalculationEvaluation,
   V2CardType,
+  V2CardVisualStyle,
   V2Connection,
   V2CreateLinkedFieldBindingRequest,
   V2LinkedFieldBinding,
@@ -21,6 +22,8 @@ import { V2LinkedFieldsPreview } from "./v2-linked-fields-preview";
 import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
 import { V2CardCalculatedSection } from "./v2-card-calculated-section";
 import { V2CardLibrarySelector } from "../v2-card-library/v2-card-library-selector";
+import { V2ContainerSettings } from "./v2-container-settings";
+import { getV2ContainerVariant, isV2ContainerCard } from "./v2-containers";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -50,6 +53,7 @@ type V2CardInspectorProps = {
     cardId: string,
     data: Record<string, unknown>
   ) => Promise<void>;
+  onUpdateVisualStyle: (cardId: string, patch: V2CardVisualStyle) => Promise<void>;
   onSetLibraryEntry: (
     cardId: string,
     libraryEntryId: string | null,
@@ -92,6 +96,7 @@ export function V2CardInspector({
   attachmentsLoading,
   onUpdateCardBasics,
   onUpdateCardData,
+  onUpdateVisualStyle,
   onSetLibraryEntry,
   onManageCardType,
   onCreateLinkedFieldBinding,
@@ -106,6 +111,13 @@ export function V2CardInspector({
 }: V2CardInspectorProps) {
   const accentColor = getV2CardTypeAccentColor(cardType);
   const actionsDisabled = pendingAction !== null;
+  const isContainer = isV2ContainerCard(card, cardType);
+  const containerVariant = getV2ContainerVariant(card);
+  const HeaderIcon = isContainer
+    ? containerVariant === "frame"
+      ? Frame
+      : StickyNote
+    : Database;
 
   function handleDuplicateClick() {
     if (actionsDisabled) return;
@@ -127,15 +139,17 @@ export function V2CardInspector({
     >
       <header className="v2InspectorHeader">
         <span className="v2InspectorTypeIcon" aria-hidden="true">
-          <Database size={18} strokeWidth={2.1} />
+          <HeaderIcon size={18} strokeWidth={2.1} />
         </span>
         <div className="v2InspectorHeaderText">
-          <span>Card</span>
-          <strong title={cardType?.name}>{cardType?.name ?? "Unknown type"}</strong>
+          <span>{isContainer ? "Container" : "Card"}</span>
+          <strong title={isContainer ? containerVariant : cardType?.name}>
+            {isContainer ? (containerVariant === "frame" ? "Frame" : "Sticky note") : cardType?.name ?? "Unknown type"}
+          </strong>
         </div>
         <V2InspectorActionMenu
           disabled={actionsDisabled}
-          onManage={() => onManageCardType(cardType?.id ?? null)}
+          onManage={isContainer ? undefined : () => onManageCardType(cardType?.id ?? null)}
           onDuplicate={handleDuplicateClick}
           onDelete={handleDeleteClick}
         />
@@ -151,7 +165,7 @@ export function V2CardInspector({
 
       <div className="v2InspectorContent">
         {actionError ? <p className="v2InspectorActionError" role="alert">{actionError}</p> : null}
-        {cardType ? (
+        {cardType && !isContainer ? (
           <V2CardLibrarySelector
             card={card}
             cardType={cardType}
@@ -164,14 +178,22 @@ export function V2CardInspector({
           readOnly={Boolean(card.libraryEntryId)}
           onUpdateCardBasics={onUpdateCardBasics}
         />
-        <V2CardDataSection
-          card={card}
-          cardType={cardType}
-          saveStatus={saveStatus}
-          readOnly={Boolean(card.libraryEntryId)}
-          onUpdateCardData={onUpdateCardData}
-        />
-        {(linkedFieldBindings.length > 0 || incomingConnections.length > 0 || outgoingConnections.length > 0) ? <V2LinkedFieldsPreview
+        {isContainer ? (
+          <V2ContainerSettings
+            card={card}
+            saveStatus={saveStatus}
+            onUpdateVisualStyle={onUpdateVisualStyle}
+          />
+        ) : (
+          <V2CardDataSection
+            card={card}
+            cardType={cardType}
+            saveStatus={saveStatus}
+            readOnly={Boolean(card.libraryEntryId)}
+            onUpdateCardData={onUpdateCardData}
+          />
+        )}
+        {!isContainer && (linkedFieldBindings.length > 0 || incomingConnections.length > 0 || outgoingConnections.length > 0) ? <V2LinkedFieldsPreview
           card={card}
           cardTypes={cardTypes}
           incomingConnections={incomingConnections}
@@ -195,7 +217,7 @@ export function V2CardInspector({
           onAttachmentsChange={onAttachmentsChange}
           onPreview={onOpenAttachment}
         />
-        <V2CardCalculatedSection
+        {!isContainer ? <V2CardCalculatedSection
           card={card}
           cardById={cardById}
           evaluation={calculationEvaluation}
@@ -205,7 +227,7 @@ export function V2CardInspector({
           ]}
           isLoading={calculationLoading}
           error={calculationError}
-        />
+        /> : null}
         {(incomingConnections.length + outgoingConnections.length) > 0 ? <V2CardConnectionsSection
           incomingConnections={incomingConnections}
           outgoingConnections={outgoingConnections}

@@ -2231,6 +2231,10 @@ button:disabled {
   cursor: crosshair;
 }
 
+.v2CardPlacementActive .v2ContainerNode .v2CardBody {
+  cursor: crosshair;
+}
+
 .v2CardPlacementPreview {
   position: fixed;
   z-index: 1000;
@@ -2269,6 +2273,17 @@ button:disabled {
 }
 
 .v2CardPlacementPreviewSaving { opacity: 0.5; }
+
+.v2ContainerPlacementPreview {
+  --v2-create-accent: #b79620;
+  background: rgba(255, 247, 194, 0.76);
+}
+
+.v2ContainerPlacementPreviewFrame {
+  border-width: 2px;
+  border-style: dashed;
+  background: rgba(255, 247, 194, 0.34);
+}
 
 /* V2 authentication and personal dashboard */
 .v2AuthPage {
@@ -3086,6 +3101,36 @@ button:disabled {
 
 .v2CreateToolbarButton:disabled {
   opacity: 0.54;
+}
+
+.v2CreateToolbarUtilityButton {
+  padding: 0 10px;
+  border-color: #e3ce72;
+  background: #fffbea;
+  color: #735f11;
+}
+
+.v2CreateToolbarUtilityButton:hover:not(:disabled),
+.v2CreateToolbarUtilityButton:focus-visible:not(:disabled) {
+  border-color: #c2a938;
+  background: #fff6c7;
+  color: #5e4c08;
+}
+
+@media (max-width: 560px) {
+  .v2CreateToolbarPrimaryRow {
+    flex-wrap: wrap;
+  }
+
+  .v2CreateToolbarUtilityButton {
+    width: 36px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .v2CreateToolbarUtilityButton span {
+    display: none;
+  }
 }
 
 .v2ConnectionTypeToolbar {
@@ -3944,6 +3989,59 @@ button:disabled {
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
   cursor: default;
   user-select: none;
+}
+
+.v2ContainerNode {
+  --v2-card-shadow: 0 10px 26px rgba(62, 53, 18, 0.12);
+  border-width: 2px;
+}
+
+.v2ContainerNode .v2CardHeader {
+  background: color-mix(in srgb, var(--v2-card-accent-soft) 18%, rgba(255, 255, 255, 0.48));
+}
+
+.v2ContainerNode .v2CardBody {
+  align-content: start;
+  background: transparent;
+}
+
+.v2ContainerNode .v2CardSubtitle {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--yd-text-primary, #182230) 68%, transparent);
+  line-height: 1.42;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.v2ContainerNodeFrame {
+  --v2-card-shadow: 0 8px 22px rgba(62, 53, 18, 0.08);
+  border-style: solid;
+  background: color-mix(in srgb, var(--yd-surface-card, #fff) 34%, transparent);
+}
+
+.v2ContainerPinnedIndicator,
+.v2ContainerCountIndicator {
+  flex: 0 0 auto;
+  display: inline-flex;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, #fff 68%, transparent);
+  color: var(--v2-card-accent-text);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.v2ContainerPinnedIndicator {
+  width: 22px;
+}
+
+.v2ContainerCountIndicator {
+  min-width: 30px;
+  padding: 0 7px;
 }
 
 .react-flow__node.draggable .v2CardNode {
@@ -5074,6 +5172,113 @@ button:disabled {
   font-size: 11px;
   font-weight: 680;
   line-height: 1.25;
+}
+
+.v2ContainerSaveState {
+  color: #8a93a5;
+  font-size: 10.5px;
+  font-weight: 680;
+}
+
+.v2ContainerVariantChoice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.v2ContainerVariantChoice button {
+  display: flex;
+  min-width: 0;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d9e0ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 730;
+  cursor: pointer;
+}
+
+.v2ContainerVariantChoice button > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+  text-align: left;
+}
+
+.v2ContainerVariantChoice button strong,
+.v2ContainerVariantChoice button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ContainerVariantChoice button strong {
+  font-size: 11.5px;
+}
+
+.v2ContainerVariantChoice button small {
+  color: #7b8495;
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.v2ContainerSettings .v2InspectorSectionHeader p {
+  margin: 3px 0 0;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.v2ContainerVariantChoice button:hover:not(:disabled),
+.v2ContainerVariantChoice button:focus-visible:not(:disabled) {
+  border-color: #c2a938;
+  background: #fffbea;
+  outline: 0;
+}
+
+.v2ContainerVariantChoice button[aria-pressed="true"] {
+  border-color: #b79a28;
+  background: #fff4b3;
+  color: #5f4e0c;
+  box-shadow: 0 0 0 2px rgba(183, 154, 40, 0.12);
+}
+
+.v2ContainerVariantChoice button:disabled,
+.v2ContainerThemeChoice button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.v2ContainerThemeChoice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.v2ContainerThemeChoice button {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--v2-container-theme);
+  box-shadow: 0 0 0 1px var(--v2-container-theme-border);
+  cursor: pointer;
+}
+
+.v2ContainerThemeChoice button:hover:not(:disabled),
+.v2ContainerThemeChoice button:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--v2-container-theme-border);
+}
+
+.v2ContainerThemeChoice button[aria-pressed="true"] {
+  box-shadow: 0 0 0 3px var(--v2-container-theme-border);
 }
 
 .v2CalculatedSection h3 {

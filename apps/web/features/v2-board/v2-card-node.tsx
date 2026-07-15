@@ -17,7 +17,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Lock, MoreHorizontal, Paperclip, Plus, X } from "lucide-react";
+import { Frame, Lock, MoreHorizontal, Paperclip, Pin, Plus, StickyNote, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -45,6 +45,7 @@ import {
 } from "./v2-linked-fields";
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
+import { getV2ContainerVariant, isV2ContainerCard } from "./v2-containers";
 
 export type V2CardLayerAction =
   | "bringForward"
@@ -64,10 +65,13 @@ export type V2CardNodeData = {
   attachmentsLoading?: boolean;
   connectedPortKeys?: string[];
   isCardActionPending?: boolean;
-  pendingCardAction?: "duplicate" | "delete" | "layer" | null;
+  pendingCardAction?: "duplicate" | "delete" | "layer" | "membership" | null;
   cardActionError?: string | null;
   canMoveForward?: boolean;
   canMoveBackward?: boolean;
+  insideCardCount?: number;
+  attachedCardCount?: number;
+  attachedContainerTitle?: string | null;
   isVisualEditing?: boolean;
   onStartVisualEditor?: (cardId: string) => void;
   onDuplicateCard?: (cardId: string) => Promise<void> | void;
@@ -76,6 +80,9 @@ export type V2CardNodeData = {
     cardId: string,
     action: V2CardLayerAction
   ) => Promise<void> | void;
+  onAttachCardsInside?: (containerId: string) => Promise<void> | void;
+  onDetachAllCards?: (containerId: string) => Promise<void> | void;
+  onDetachFromContainer?: (cardId: string) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
   onCloseVisualEditor?: () => void;
@@ -584,7 +591,13 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
-  const CardTypeIcon = getV2CardTypeIcon(cardType);
+  const isContainer = isV2ContainerCard(card, cardType);
+  const containerVariant = getV2ContainerVariant(card);
+  const CardTypeIcon = isContainer
+    ? containerVariant === "frame"
+      ? Frame
+      : StickyNote
+    : getV2CardTypeIcon(cardType);
   const storedDataPreviewRows = useMemo(
     () => buildCardDataPreviewRows(card, cardType),
     [card, cardType]
@@ -615,7 +628,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     dataPreviewRows.length
   );
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
-  const cardSummary = getCardSummary(card);
+  const cardSummary = isContainer ? card.description.trim() : getCardSummary(card);
   const visualStyle = card.visualStyle ?? {};
   const isLocked = visualStyle.locked === true;
   const connectorSlots = buildV2ConnectorSlots({
@@ -679,7 +692,11 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     fontStyle: visualStyle.fontStyle,
     textDecoration: visualStyle.textDecoration,
   };
-  const cardBorderColor = selected ? "var(--v2-card-accent)" : "var(--yd-border-default)";
+  const cardBorderColor = selected
+    ? "var(--v2-card-accent)"
+    : isContainer
+      ? visualStyle.borderColor ?? "var(--yd-border-default)"
+      : "var(--yd-border-default)";
 
   useLayoutEffect(() => {
     function updateVisibleRows() {
@@ -1017,12 +1034,21 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   return (
     <article
       ref={articleRef}
-      className={`v2CardNode${isLocked ? " v2CardNodeLocked nopan" : ""}`}
+      className={`v2CardNode${
+        isContainer
+          ? ` v2ContainerNode v2ContainerNode${containerVariant === "frame" ? "Frame" : "Sticky"}`
+          : ""
+      }${isLocked ? " v2CardNodeLocked nopan" : ""}`}
       onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",
         flexDirection: "column",
         borderColor: cardBorderColor,
+        backgroundColor: isContainer
+          ? containerVariant === "frame"
+            ? `color-mix(in srgb, ${visualStyle.fillColor ?? "#fff7c2"} 32%, transparent)`
+            : visualStyle.fillColor
+          : undefined,
         boxShadow: selected
           ? "0 0 0 3px var(--v2-card-accent-soft), var(--v2-card-shadow)"
           : "var(--v2-card-shadow)",
@@ -1213,7 +1239,27 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         <span className="v2CardTypeIcon" aria-hidden="true">
           <CardTypeIcon size={17} strokeWidth={2.1} />
         </span>
-        <span className="v2CardTypeLabel">{cardType.name}</span>
+        <span className="v2CardTypeLabel">
+          {isContainer ? (containerVariant === "frame" ? "Frame" : "Sticky note") : cardType.name}
+        </span>
+        {card.containerId ? (
+          <span
+            className="v2ContainerPinnedIndicator nodrag nopan"
+            title={`Attached to ${data.attachedContainerTitle ?? "container"}`}
+            aria-label={`Attached to ${data.attachedContainerTitle ?? "container"}`}
+          >
+            <Pin size={12} strokeWidth={2.4} />
+          </span>
+        ) : null}
+        {isContainer ? (
+          <span
+            className="v2ContainerCountIndicator nodrag nopan"
+            title={`${data.attachedCardCount ?? 0} attached · ${data.insideCardCount ?? 0} available inside`}
+          >
+            <Pin size={11} strokeWidth={2.3} />
+            {data.attachedCardCount ?? 0}
+          </span>
+        ) : null}
         {isLocked ? (
           <span
             className="v2CardLockIndicator nodrag nopan"
@@ -1329,6 +1375,41 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                 Edit
               </button>
               <div className="v2CardActionMenuSeparator" role="separator" />
+              {isContainer ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={data.isCardActionPending || (data.insideCardCount ?? 0) === 0}
+                    onClick={() => runMenuAction(() => data.onAttachCardsInside?.(card.id))}
+                  >
+                    {data.pendingCardAction === "membership"
+                      ? "Updating…"
+                      : `Attach cards inside (${data.insideCardCount ?? 0})`}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={data.isCardActionPending || (data.attachedCardCount ?? 0) === 0}
+                    onClick={() => runMenuAction(() => data.onDetachAllCards?.(card.id))}
+                  >
+                    Detach all cards
+                  </button>
+                  <div className="v2CardActionMenuSeparator" role="separator" />
+                </>
+              ) : card.containerId ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={data.isCardActionPending}
+                    onClick={() => runMenuAction(() => data.onDetachFromContainer?.(card.id))}
+                  >
+                    {data.pendingCardAction === "membership" ? "Detaching…" : "Detach from container"}
+                  </button>
+                  <div className="v2CardActionMenuSeparator" role="separator" />
+                </>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"
@@ -1425,7 +1506,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
             {cardSummary}
           </span>
         ) : null}
-        {visibleDataPreviewRows.length > 0 ? (
+        {!isContainer && visibleDataPreviewRows.length > 0 ? (
           <dl className="v2CardDataPreview" aria-label="Card data preview">
             {visibleDataPreviewRows.map((row) => (
               <div

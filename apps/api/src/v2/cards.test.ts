@@ -130,6 +130,74 @@ describe("v2 card API", () => {
     await server.close();
   });
 
+  it("creates containers and persists validated card membership", async () => {
+    const { server, seed, repository } = createCardServer();
+
+    const createResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/cards`,
+      payload: {
+        container: { variant: "frame", theme: "blue" },
+        title: "Supplier group",
+        position: { x: 80, y: 120 }
+      }
+    });
+    expect(createResponse.statusCode).toBe(201);
+    const container = createResponse.json();
+    expect(container).toMatchObject({
+      title: "Supplier group",
+      containerId: null,
+      size: { width: 720, height: 480 },
+      visualStyle: {
+        containerVariant: "frame",
+        containerTheme: "blue",
+        fillColor: "#e7f1ff",
+        borderColor: "#78a9e6"
+      }
+    });
+
+    const detailAfterCreate = await repository.getBoardDetail(seed.board.id);
+    expect(detailAfterCreate?.cardTypes.find((cardType) => cardType.id === container.cardTypeId))
+      .toMatchObject({
+        kind: "container",
+        key: "yadraw_system_container",
+        ports: [
+          expect.objectContaining({ key: "in", direction: "input" }),
+          expect.objectContaining({ key: "out", direction: "output" })
+        ]
+      });
+
+    const child = seed.cards[0]!;
+    const attachResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: { cards: [{ id: child.id, containerId: container.id }] }
+    });
+    expect(attachResponse.statusCode).toBe(200);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({
+      containerId: container.id
+    });
+
+    const ordinaryParentResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: { cards: [{ id: child.id, containerId: seed.cards[1]!.id }] }
+    });
+    expect(ordinaryParentResponse.statusCode).toBe(400);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({
+      containerId: container.id
+    });
+
+    const detachResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: { cards: [{ id: child.id, containerId: null }] }
+    });
+    expect(detachResponse.statusCode).toBe(200);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({ containerId: null });
+    await server.close();
+  });
+
   it("rejects unknown boards", async () => {
     const { server, seed } = createCardServer();
 
