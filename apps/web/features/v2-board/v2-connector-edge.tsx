@@ -474,11 +474,16 @@ export function V2ConnectorEdge({
     savedLabelAnchor?.position ?? (usesManualRoute ? getPolylineLabelPosition(routePoints) : automaticLabel);
   const path = usesManualRoute ? manualPath : automaticPath;
   const baseStrokeWidth = getStrokeWidth(visualStyle);
-  const strokeWidth = selected || isVisualEditing ? baseStrokeWidth + 1.25 : baseStrokeWidth;
+  const isSelectionHighlighted = selected && !isVisualEditing;
   const edgeStyle: CSSProperties = {
-    stroke: selected ? "var(--yd-graph-connector-selected)" : getStrokeColor(visualStyle),
-    strokeWidth,
+    stroke: isSelectionHighlighted
+      ? "var(--yd-graph-connector-selected)"
+      : getStrokeColor(visualStyle),
+    strokeWidth: isSelectionHighlighted ? baseStrokeWidth + 1.25 : baseStrokeWidth,
     strokeLinecap: "butt",
+    filter: isVisualEditing
+      ? "drop-shadow(0 0 2px rgba(37, 99, 235, 0.9)) drop-shadow(0 0 5px rgba(37, 99, 235, 0.5))"
+      : undefined,
   };
 
   const materializedRouteKey =
