@@ -20,6 +20,22 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   });
 
+  server.get("/v2/legal/acceptance", async (request, reply) => {
+    try {
+      return await service.getLegalAcceptance(request.requestContext);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
+  server.post("/v2/legal/acceptance", async (request, reply) => {
+    try {
+      return await service.acceptLegalTerms(request.requestContext, request.body);
+    } catch (error) {
+      return handleV2ServiceError(reply, error);
+    }
+  });
+
   server.get("/v2/workspaces", async (request, reply) => {
     try {
       return await service.listWorkspaces(request.requestContext);

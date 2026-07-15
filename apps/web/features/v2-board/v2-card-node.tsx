@@ -46,6 +46,12 @@ import {
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
 
+export type V2CardLayerAction =
+  | "bringForward"
+  | "sendBackward"
+  | "bringToFront"
+  | "sendToBack";
+
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
@@ -58,12 +64,18 @@ export type V2CardNodeData = {
   attachmentsLoading?: boolean;
   connectedPortKeys?: string[];
   isCardActionPending?: boolean;
-  pendingCardAction?: "duplicate" | "delete" | null;
+  pendingCardAction?: "duplicate" | "delete" | "layer" | null;
   cardActionError?: string | null;
+  canMoveForward?: boolean;
+  canMoveBackward?: boolean;
   isVisualEditing?: boolean;
   onStartVisualEditor?: (cardId: string) => void;
   onDuplicateCard?: (cardId: string) => Promise<void> | void;
   onDeleteCard?: (cardId: string) => Promise<void> | void;
+  onMoveCardLayer?: (
+    cardId: string,
+    action: V2CardLayerAction
+  ) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
   onCloseVisualEditor?: () => void;
@@ -1316,6 +1328,48 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
               >
                 Edit
               </button>
+              <div className="v2CardActionMenuSeparator" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={data.isCardActionPending || !data.canMoveForward}
+                onClick={() =>
+                  runMenuAction(() => data.onMoveCardLayer?.(card.id, "bringForward"))
+                }
+              >
+                Bring forward
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={data.isCardActionPending || !data.canMoveBackward}
+                onClick={() =>
+                  runMenuAction(() => data.onMoveCardLayer?.(card.id, "sendBackward"))
+                }
+              >
+                Send backward
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={data.isCardActionPending || !data.canMoveForward}
+                onClick={() =>
+                  runMenuAction(() => data.onMoveCardLayer?.(card.id, "bringToFront"))
+                }
+              >
+                Bring to front
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={data.isCardActionPending || !data.canMoveBackward}
+                onClick={() =>
+                  runMenuAction(() => data.onMoveCardLayer?.(card.id, "sendToBack"))
+                }
+              >
+                Send to back
+              </button>
+              <div className="v2CardActionMenuSeparator" role="separator" />
               <button
                 type="button"
                 role="menuitem"

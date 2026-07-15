@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Pool, type PoolClient, type QueryResultRow } from "pg";
 import {
+  isCurrentLegalAcceptance,
+  V2_CURRENT_LEGAL_VERSIONS,
+  type V2LegalAcceptanceStatus
+} from "./legal.js";
+import {
   v2BoardDetailSchema,
   v2CardAttachmentSchema,
   v2CardLibraryEntrySchema,
@@ -185,6 +190,12 @@ export type V2BootstrapUserInput = {
   demoBoardId: string;
 };
 
+export type V2RecordLegalAcceptanceInput = {
+  userId: string;
+  source: "web";
+  userAgent: string | null;
+};
+
 export type V2Repository = {
   close?(): Promise<void>;
   healthCheck?(): Promise<void>;
@@ -206,6 +217,8 @@ export type V2Repository = {
   duplicateBoard?(boardId: string, input: V2DuplicateBoardRequest): Promise<V2BoardSummary | null>;
   deleteBoard?(boardId: string): Promise<boolean>;
   deleteUserData?(userId: string): Promise<boolean>;
+  getLegalAcceptance?(userId: string): Promise<V2LegalAcceptanceStatus>;
+  recordLegalAcceptance?(input: V2RecordLegalAcceptanceInput): Promise<V2LegalAcceptanceStatus>;
   listCardTypes(workspaceId: string): Promise<V2CardType[]>;
   listConnectionTypes?(workspaceId: string): Promise<V2ConnectionType[]>;
   getCardType(cardTypeId: string): Promise<V2CardType | null>;
@@ -1117,7 +1130,10 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       const timestamp = nowIso();
       input.cards.forEach((update, index) => {
         const card = cards[index]!;
-        card.position = cloneJson(update.position);
+        if (update.position) card.position = cloneJson(update.position);
+        if (update.zIndex !== undefined) {
+          card.visualStyle = { ...card.visualStyle, zIndex: update.zIndex };
+        }
         card.updatedAt = timestamp;
       });
       input.connections.forEach((update, index) => {
@@ -2526,6 +2542,70 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
       }
     },
 
+    async getLegalAcceptance(userId) {
+      const result = await pool.query(
+        `
+          select
+            terms_version,
+            privacy_version,
+            personal_data_consent_version,
+            accepted_at
+          from user_legal_acceptances
+          where user_id = $1
+          order by accepted_at desc, id desc
+          limit 1
+        `,
+        [userId]
+      );
+      const row = result.rows[0];
+      const accepted = {
+        termsVersion: row ? String(row.terms_version) : null,
+        privacyVersion: row ? String(row.privacy_version) : null,
+        personalDataConsentVersion: row ? String(row.personal_data_consent_version) : null,
+        acceptedAt: row ? new Date(row.accepted_at).toISOString() : null
+      };
+      return {
+        current: isCurrentLegalAcceptance(accepted),
+        ...accepted,
+        required: V2_CURRENT_LEGAL_VERSIONS
+      };
+    },
+
+    async recordLegalAcceptance(input) {
+      await pool.query(
+        `
+          insert into user_legal_acceptances (
+            id,
+            user_id,
+            terms_version,
+            privacy_version,
+            personal_data_consent_version,
+            source,
+            user_agent
+          )
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (
+            user_id,
+            terms_version,
+            privacy_version,
+            personal_data_consent_version
+          ) do update
+          set source = excluded.source,
+              user_agent = coalesce(excluded.user_agent, user_legal_acceptances.user_agent)
+        `,
+        [
+          randomUUID(),
+          input.userId,
+          V2_CURRENT_LEGAL_VERSIONS.termsVersion,
+          V2_CURRENT_LEGAL_VERSIONS.privacyVersion,
+          V2_CURRENT_LEGAL_VERSIONS.personalDataConsentVersion,
+          input.source,
+          input.userAgent
+        ]
+      );
+      return this.getLegalAcceptance!(input.userId);
+    },
+
     async getWorkspaceRole(userId, workspaceId) {
       const result = await pool.query(
         `
@@ -2730,10 +2810,22 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           const result = await client.query(
             `
               update cards
-              set position_x = $3, position_y = $4, updated_at = now()
+              set position_x = coalesce($3::numeric, position_x),
+                  position_y = coalesce($4::numeric, position_y),
+                  visual_style = case
+                    when $5::integer is null then visual_style
+                    else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
+                  end,
+                  updated_at = now()
               where id = $1 and board_id = $2 and deleted_at is null
             `,
-            [update.id, boardId, update.position.x, update.position.y]
+            [
+              update.id,
+              boardId,
+              update.position?.x ?? null,
+              update.position?.y ?? null,
+              update.zIndex ?? null
+            ]
           );
           if ((result.rowCount ?? 0) !== 1) {
             await client.query("rollback");

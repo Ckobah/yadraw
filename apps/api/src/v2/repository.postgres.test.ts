@@ -91,6 +91,13 @@ describePostgres("v2 Postgres repository", () => {
     isolatedDatabaseUrl = withSearchPath(databaseUrl, schemaName);
     await applySqlFiles(isolatedDatabaseUrl);
     repository = createV2PostgresRepository(isolatedDatabaseUrl);
+    for (const userId of [
+      ownerContext.userId,
+      "bb7ef8c4-91fd-4f3a-86d2-fb760a532c45",
+      viewerContext.userId
+    ]) {
+      await repository.recordLegalAcceptance?.({ userId, source: "web", userAgent: "postgres-test" });
+    }
   }, 30_000);
 
   afterAll(async () => {
@@ -172,6 +179,12 @@ describePostgres("v2 Postgres repository", () => {
     const original = await service.getBoard(ownerContext, seedIds.board);
     const first = await service.bootstrapSession(context, profile);
     const second = await service.bootstrapSession(context, profile);
+    await service.acceptLegalTerms(context, {
+      termsAccepted: true,
+      personalDataConsentAccepted: true,
+      ageConfirmed: true,
+      userAgent: "postgres-test"
+    });
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
@@ -397,8 +410,8 @@ describePostgres("v2 Postgres repository", () => {
     await expect(
       service.updateBoardLayout(ownerContext, seedIds.board, {
         cards: [
-          { id: source.id, position: { x: 130, y: 140 } },
-          { id: task.id, position: { x: 430, y: 140 } }
+          { id: source.id, position: { x: 130, y: 140 }, zIndex: 2 },
+          { id: task.id, position: { x: 430, y: 140 }, zIndex: 1 }
         ],
         connections: [{ id: connection.id, visualStyle }]
       })
@@ -414,7 +427,12 @@ describePostgres("v2 Postgres repository", () => {
     ).rejects.toMatchObject({ code: "conflict" });
 
     await expect(repository.getCard(source.id)).resolves.toMatchObject({
-      position: { x: 130, y: 140 }
+      position: { x: 130, y: 140 },
+      visualStyle: { zIndex: 2 }
+    });
+    await expect(repository.getCard(task.id)).resolves.toMatchObject({
+      position: { x: 430, y: 140 },
+      visualStyle: { zIndex: 1 }
     });
     await expect(repository.getConnection(connection.id)).resolves.toMatchObject({ visualStyle });
   });

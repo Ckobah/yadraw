@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentV2User } from "../../../lib/auth/current-user";
 import {
   bootstrapCurrentUser,
+  fetchLegalAcceptance,
   fetchCurrentWorkspaces,
   fetchWorkspaceBoards
 } from "../../../features/v2-dashboard/server-api";
@@ -38,6 +39,13 @@ export default async function DashboardPage({
   } catch (error) {
     console.error("Dashboard onboarding failed:", error);
     return <DashboardSetupError />;
+  }
+  const legalAcceptance = await fetchLegalAcceptance(user);
+  if (!legalAcceptance.current) {
+    const next = params.next?.startsWith("/") && !params.next.startsWith("//")
+      ? params.next
+      : "/v2/dashboard";
+    redirect(`/v2/legal/accept?next=${encodeURIComponent(next)}`);
   }
   if (params.next?.startsWith("/") && !params.next.startsWith("//") && params.next !== "/v2/dashboard") {
     redirect(params.next);
