@@ -40,6 +40,7 @@ type Point = V2ConnectionWaypoint;
 
 const MAX_WAYPOINTS = 20;
 const DUPLICATE_POINT_DISTANCE = 6;
+const MIN_EDITABLE_ENDPOINT_SEGMENT_LENGTH = DUPLICATE_POINT_DISTANCE * 2;
 const SNAP_ANGLE_DEGREES = 5;
 const SNAP_ANGLE_RADIANS = (SNAP_ANGLE_DEGREES * Math.PI) / 180;
 const ENDPOINT_GAP = 2;
@@ -92,7 +93,17 @@ function getManualEndpointLeadPoint(
       outwardDistance >= MARKER_FORWARD_LENGTH &&
       lateralDistance <= ENDPOINT_ALIGNMENT_TOLERANCE
     ) {
-      return adjacentWaypoint;
+      const leadDistance = Math.min(
+        MANUAL_ENDPOINT_LEAD_LENGTH,
+        Math.max(
+          MARKER_FORWARD_LENGTH,
+          outwardDistance - MIN_EDITABLE_ENDPOINT_SEGMENT_LENGTH
+        )
+      );
+      return {
+        x: endpoint.x + direction.x * leadDistance,
+        y: endpoint.y + direction.y * leadDistance,
+      };
     }
   }
 
