@@ -71,8 +71,11 @@ export const v2CardVisualStyleSchema = z.object({
   textDecoration: z.enum(["none", "underline"]).optional(),
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
   locked: z.boolean().optional(),
+  zIndex: z.number().int().min(0).max(10000).optional(),
   connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
+
+const v2CardTypeDefaultVisualStyleSchema = v2CardVisualStyleSchema.omit({ zIndex: true });
 
 export const v2ConnectionMarkerSchema = z.enum([
   "none",
@@ -333,7 +336,7 @@ export const v2CardTypeSchema = z.object({
   description: z.string(),
   defaultData: v2JsonObjectSchema,
   schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
-  defaultVisualStyle: v2CardVisualStyleSchema.default({}),
+  defaultVisualStyle: v2CardTypeDefaultVisualStyleSchema.default({}),
   defaultSize: v2SizeSchema,
   ports: z.array(v2CardTypePortSchema),
   createdAt: v2TimestampSchema,
@@ -644,7 +647,7 @@ export const v2CreateCardTypeBodySchema = z
     description: z.string().optional(),
     schema: v2CardTypeDefinitionSchema.default({ fields: [] }),
     defaultSize: v2SizeSchema.optional(),
-    defaultVisualStyle: v2CardVisualStyleSchema.default({}),
+    defaultVisualStyle: v2CardTypeDefaultVisualStyleSchema.default({}),
     ports: v2DefaultCardTypePortsSchema
   })
   .strict();
@@ -663,7 +666,7 @@ export const v2UpdateCardTypeBodySchema = z
     description: z.string().optional(),
     schema: v2CardTypeDefinitionSchema.optional(),
     defaultSize: v2SizeSchema.optional(),
-    defaultVisualStyle: v2CardVisualStyleSchema.optional(),
+    defaultVisualStyle: v2CardTypeDefaultVisualStyleSchema.optional(),
     ports: z.array(v2CardTypePortInputSchema).optional()
   })
   .strict();
@@ -844,7 +847,21 @@ export const v2UpdateBoardLayoutParamsSchema = z.object({
 
 export const v2UpdateBoardLayoutBodySchema = z
   .object({
-    cards: z.array(z.object({ id: v2UuidSchema, position: v2PositionSchema })).max(500).default([]),
+    cards: z
+      .array(
+        z
+          .object({
+            id: v2UuidSchema,
+            position: v2PositionSchema.optional(),
+            zIndex: z.number().int().min(0).max(10000).optional()
+          })
+          .strict()
+          .refine((card) => card.position !== undefined || card.zIndex !== undefined, {
+            message: "At least one card layout change is required"
+          })
+      )
+      .max(500)
+      .default([]),
     connections: z
       .array(z.object({ id: v2UuidSchema, visualStyle: v2ConnectionVisualStyleSchema }))
       .max(500)

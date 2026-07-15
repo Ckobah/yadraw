@@ -1130,7 +1130,10 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       const timestamp = nowIso();
       input.cards.forEach((update, index) => {
         const card = cards[index]!;
-        card.position = cloneJson(update.position);
+        if (update.position) card.position = cloneJson(update.position);
+        if (update.zIndex !== undefined) {
+          card.visualStyle = { ...card.visualStyle, zIndex: update.zIndex };
+        }
         card.updatedAt = timestamp;
       });
       input.connections.forEach((update, index) => {
@@ -2807,10 +2810,22 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           const result = await client.query(
             `
               update cards
-              set position_x = $3, position_y = $4, updated_at = now()
+              set position_x = coalesce($3::numeric, position_x),
+                  position_y = coalesce($4::numeric, position_y),
+                  visual_style = case
+                    when $5::integer is null then visual_style
+                    else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
+                  end,
+                  updated_at = now()
               where id = $1 and board_id = $2 and deleted_at is null
             `,
-            [update.id, boardId, update.position.x, update.position.y]
+            [
+              update.id,
+              boardId,
+              update.position?.x ?? null,
+              update.position?.y ?? null,
+              update.zIndex ?? null
+            ]
           );
           if ((result.rowCount ?? 0) !== 1) {
             await client.query("rollback");

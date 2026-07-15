@@ -41,7 +41,8 @@ describe("v2 card API", () => {
     const payload = {
       cards: cards.map((card, index) => ({
         id: card.id,
-        position: { x: card.position.x + 80 + index, y: card.position.y + 40 }
+        position: { x: card.position.x + 80 + index, y: card.position.y + 40 },
+        zIndex: cards.length - index
       })),
       connections: [
         {
@@ -67,6 +68,9 @@ describe("v2 card API", () => {
     expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.position).toEqual(
       payload.cards[0]!.position
     );
+    expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.visualStyle).toMatchObject({
+      zIndex: payload.cards[0]!.zIndex
+    });
     expect(detail?.connections.find((item) => item.id === connection.id)?.visualStyle).toEqual(
       payload.connections[0]!.visualStyle
     );
