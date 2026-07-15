@@ -481,7 +481,7 @@ export function V2ConnectorEdge({
     strokeWidth: baseStrokeWidth,
     strokeLinecap: "butt",
     filter: isHighlighted
-      ? `drop-shadow(0 0 2px ${strokeColor}) drop-shadow(0 0 5px ${strokeColor})`
+      ? `drop-shadow(0 0 3px color-mix(in srgb, ${strokeColor} 30%, transparent))`
       : undefined,
   };
 
