@@ -5,6 +5,7 @@ import {
   type V2BootstrapUserInput
 } from "./repository.js";
 import { createV2BoardService, V2ServiceError } from "./service.js";
+import type { V2LegalAcceptanceStatus } from "./legal.js";
 
 const ownerContext = {
   userId: "02f38bb1-0cde-4473-95ef-1d50db3467e4",
@@ -30,6 +31,55 @@ function getSeedParts() {
 }
 
 describe("v2 board service", () => {
+  it("requires and records the current legal acceptance before workspace access", async () => {
+    const { seed } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const missing: V2LegalAcceptanceStatus = {
+      current: false,
+      termsVersion: null,
+      privacyVersion: null,
+      personalDataConsentVersion: null,
+      acceptedAt: null,
+      required: {
+        termsVersion: "2026-07-15",
+        privacyVersion: "2026-07-15",
+        personalDataConsentVersion: "2026-07-15"
+      }
+    };
+    repository.listUserWorkspaces = vi.fn(async () => []);
+    repository.getLegalAcceptance = vi.fn(async () => missing);
+    repository.recordLegalAcceptance = vi.fn(async () => ({
+      ...missing,
+      current: true,
+      termsVersion: "2026-07-15",
+      privacyVersion: "2026-07-15",
+      personalDataConsentVersion: "2026-07-15",
+      acceptedAt: "2026-07-15T00:00:00.000Z"
+    }));
+    const service = createV2BoardService(repository);
+
+    await expect(service.listWorkspaces(ownerContext)).rejects.toMatchObject({
+      code: "forbidden"
+    });
+    await expect(service.acceptLegalTerms(ownerContext, {
+      termsAccepted: true,
+      personalDataConsentAccepted: false,
+      ageConfirmed: true,
+      userAgent: null
+    })).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(service.acceptLegalTerms(ownerContext, {
+      termsAccepted: true,
+      personalDataConsentAccepted: true,
+      ageConfirmed: true,
+      userAgent: "test-agent"
+    })).resolves.toMatchObject({ current: true });
+    expect(repository.recordLegalAcceptance).toHaveBeenCalledWith({
+      userId: ownerContext.userId,
+      source: "web",
+      userAgent: "test-agent"
+    });
+  });
+
   it("uses authenticated context for dashboard and bootstrap operations", async () => {
     const { seed } = getSeedParts();
     const repository = createV2MemoryRepository(seed);

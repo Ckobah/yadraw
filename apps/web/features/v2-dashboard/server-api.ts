@@ -6,6 +6,7 @@ import type {
   V2ListWorkspacesResponse
 } from "@yadraw/shared";
 import type { CurrentV2User } from "../../lib/auth/current-user";
+import type { LegalAcceptanceStatus } from "../../lib/legal";
 import { buildInternalApiHeaders } from "../../lib/api/internal-api";
 
 const apiBaseUrl =
@@ -44,6 +45,10 @@ export function bootstrapCurrentUser(user: CurrentV2User) {
       authProvider: user.authProvider
     })
   });
+}
+
+export function fetchLegalAcceptance(user: CurrentV2User) {
+  return requestApi<LegalAcceptanceStatus>(user, "/v2/legal/acceptance");
 }
 
 export async function fetchCurrentWorkspaces(user: CurrentV2User) {

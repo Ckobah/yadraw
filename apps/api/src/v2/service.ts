@@ -72,6 +72,7 @@ import {
   type V2WorkspaceSummary
 } from "@yadraw/shared";
 import type { RequestContext } from "../context.js";
+import { z } from "zod";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
 import type {
   V2CreateCardAttachmentRecordInput,
@@ -121,6 +122,11 @@ export type V2BoardService = {
   deleteBoard(context: RequestContext, boardId: string): Promise<{ deleted: true; id: string }>;
   exportBoard(context: RequestContext, boardId: string): Promise<V2BoardExport>;
   deleteAccount(context: RequestContext): Promise<{ deleted: true; id: string }>;
+  getLegalAcceptance(context: RequestContext): Promise<import("./legal.js").V2LegalAcceptanceStatus>;
+  acceptLegalTerms(
+    context: RequestContext,
+    input: unknown
+  ): Promise<import("./legal.js").V2LegalAcceptanceStatus>;
   getBoard(context: RequestContext, boardId: string): Promise<V2BoardDetail>;
   getSemanticGraph(context: RequestContext, boardId: string): Promise<V2SemanticGraph>;
   evaluateBoardCalculations(
@@ -571,7 +577,17 @@ export function createV2BoardService(
     storageBucket?: string | null;
   } = {}
 ): V2BoardService {
+  async function requireCurrentLegalAcceptance(context: RequestContext) {
+    // Non-Postgres test adapters do not implement legal storage. Production V2 does.
+    if (!repository.getLegalAcceptance) return;
+    const acceptance = await repository.getLegalAcceptance(context.userId);
+    if (!acceptance.current) {
+      throw new V2ServiceError("forbidden", "Current legal terms must be accepted");
+    }
+  }
+
   async function authorizeWorkspace(context: RequestContext, workspaceId: string, accessLevel: V2AccessLevel) {
+    await requireCurrentLegalAcceptance(context);
     const role = await repository.getWorkspaceRole(context.userId, workspaceId);
     if (!hasV2WorkspaceAccess(role, accessLevel)) forbidden();
   }
@@ -884,6 +900,7 @@ export function createV2BoardService(
     },
 
     async listWorkspaces(context) {
+      await requireCurrentLegalAcceptance(context);
       return {
         workspaces: await requireDashboardRepository().listUserWorkspaces(context.userId)
       };
@@ -969,6 +986,31 @@ export function createV2BoardService(
       }
       if (!(await repository.deleteUserData(context.userId))) notFound("Account not found");
       return { deleted: true, id: context.userId };
+    },
+
+    async getLegalAcceptance(context) {
+      if (!repository.getLegalAcceptance) {
+        throw new V2ServiceError("storage_unavailable", "Legal acceptance storage is unavailable");
+      }
+      return repository.getLegalAcceptance(context.userId);
+    },
+
+    async acceptLegalTerms(context, rawInput) {
+      const parsed = z.object({
+        termsAccepted: z.literal(true),
+        personalDataConsentAccepted: z.literal(true),
+        ageConfirmed: z.literal(true),
+        userAgent: z.string().trim().max(512).nullable().default(null)
+      }).strict().safeParse(rawInput);
+      if (!parsed.success) validationFailed("All required legal confirmations must be accepted");
+      if (!repository.recordLegalAcceptance) {
+        throw new V2ServiceError("storage_unavailable", "Legal acceptance storage is unavailable");
+      }
+      return repository.recordLegalAcceptance({
+        userId: context.userId,
+        source: "web",
+        userAgent: parsed.data.userAgent
+      });
     },
 
     async getBoard(context, boardId) {

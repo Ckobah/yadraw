@@ -91,6 +91,13 @@ describePostgres("v2 Postgres repository", () => {
     isolatedDatabaseUrl = withSearchPath(databaseUrl, schemaName);
     await applySqlFiles(isolatedDatabaseUrl);
     repository = createV2PostgresRepository(isolatedDatabaseUrl);
+    for (const userId of [
+      ownerContext.userId,
+      "bb7ef8c4-91fd-4f3a-86d2-fb760a532c45",
+      viewerContext.userId
+    ]) {
+      await repository.recordLegalAcceptance?.({ userId, source: "web", userAgent: "postgres-test" });
+    }
   }, 30_000);
 
   afterAll(async () => {
@@ -172,6 +179,12 @@ describePostgres("v2 Postgres repository", () => {
     const original = await service.getBoard(ownerContext, seedIds.board);
     const first = await service.bootstrapSession(context, profile);
     const second = await service.bootstrapSession(context, profile);
+    await service.acceptLegalTerms(context, {
+      termsAccepted: true,
+      personalDataConsentAccepted: true,
+      ageConfirmed: true,
+      userAgent: "postgres-test"
+    });
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
