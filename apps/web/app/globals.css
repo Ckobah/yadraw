@@ -4064,6 +4064,12 @@ button:disabled {
   opacity: 0.58;
 }
 
+.v2CardActionMenuSeparator {
+  height: 1px;
+  margin: 4px 6px;
+  background: #e8edf5;
+}
+
 .v2CardActionMenu .v2CardActionMenuDanger {
   color: #c2410c;
 }

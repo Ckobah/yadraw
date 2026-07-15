@@ -665,7 +665,24 @@ describe("v2 API contracts", () => {
       })
     ).toMatchObject({ cards: [{ id: cardId }], connections: [{ id: connectionId }] });
 
+    expect(
+      v2UpdateBoardLayoutBodySchema.parse({
+        cards: [
+          { id: cardId, zIndex: 2 },
+          { id: cardTypeId, zIndex: 1 }
+        ]
+      })
+    ).toMatchObject({
+      cards: [
+        { id: cardId, zIndex: 2 },
+        { id: cardTypeId, zIndex: 1 }
+      ]
+    });
+
     expect(() => v2UpdateBoardLayoutBodySchema.parse({})).toThrow();
+    expect(() =>
+      v2UpdateBoardLayoutBodySchema.parse({ cards: [{ id: cardId }] })
+    ).toThrow();
   });
 
   it("parses card type create and update requests", () => {
@@ -704,6 +721,14 @@ describe("v2 API contracts", () => {
         fields: [{ key: "phone", label: "Phone", type: "text" }]
       }
     });
+
+    expect(
+      v2CreateCardTypeBodySchema.parse({
+        key: "layered_supplier",
+        name: "Layered supplier",
+        defaultVisualStyle: { zIndex: 4 }
+      }).defaultVisualStyle
+    ).toEqual({});
 
     expect(
       v2UpdateCardTypeBodySchema.parse({
@@ -1219,7 +1244,8 @@ describe("v2CardSchema with visualStyle", () => {
         textColor: "#333",
         fontWeight: "700",
         fontStyle: "italic",
-        textDecoration: "underline"
+        textDecoration: "underline",
+        zIndex: 4
       }
     });
     expect(card.visualStyle).toEqual({
@@ -1228,7 +1254,8 @@ describe("v2CardSchema with visualStyle", () => {
       textColor: "#333",
       fontWeight: "700",
       fontStyle: "italic",
-      textDecoration: "underline"
+      textDecoration: "underline",
+      zIndex: 4
     });
   });
 

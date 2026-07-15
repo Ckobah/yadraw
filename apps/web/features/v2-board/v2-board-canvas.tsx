@@ -46,6 +46,7 @@ import {
 import {
   V2_CARD_MIN_SIZE,
   V2CardNodeComponent,
+  type V2CardLayerAction,
   type V2CardNode,
 } from "./v2-card-node";
 import { V2CardInspector } from "./v2-card-inspector";
@@ -109,7 +110,7 @@ type Props = {
   onSaveStatusChange?: (status: SaveStatus) => void;
 };
 
-type CardAction = "duplicate" | "delete";
+type CardAction = "duplicate" | "delete" | "layer";
 type PendingCardAction = {
   cardId: string;
   action: CardAction;
@@ -405,7 +406,8 @@ function buildCardNode(
   card: V2Card,
   cardTypeMap: Map<string, V2CardType>,
   workspaceId: string,
-  attachmentCount = 0
+  attachmentCount = 0,
+  fallbackZIndex = 1
 ): V2CardNode {
   const size = clampCardSize(card.size);
 
@@ -413,6 +415,7 @@ function buildCardNode(
     id: card.id,
     type: "v2Card",
     position: { x: card.position.x, y: card.position.y },
+    zIndex: card.visualStyle?.zIndex ?? fallbackZIndex,
     draggable: !isCardLocked(card),
     data: {
       card: {
@@ -427,6 +430,47 @@ function buildCardNode(
       height: size.height,
     },
   };
+}
+
+function orderCardNodesByLayer(nodes: V2CardNode[]): V2CardNode[] {
+  const originalIndexById = new Map(nodes.map((node, index) => [node.id, index]));
+  return [...nodes].sort((left, right) => {
+    const layerDifference = (left.zIndex ?? 0) - (right.zIndex ?? 0);
+    if (layerDifference !== 0) return layerDifference;
+    return (originalIndexById.get(left.id) ?? 0) - (originalIndexById.get(right.id) ?? 0);
+  });
+}
+
+function getNextCardLayerZIndex(nodes: V2CardNode[]): number {
+  return Math.min(
+    10000,
+    nodes.reduce((highest, node) => Math.max(highest, node.zIndex ?? 0), 0) + 1
+  );
+}
+
+function moveCardInLayerOrder(
+  nodes: V2CardNode[],
+  cardId: string,
+  action: V2CardLayerAction
+): V2CardNode[] {
+  const ordered = orderCardNodesByLayer(nodes);
+  const currentIndex = ordered.findIndex((node) => node.id === cardId);
+  if (currentIndex === -1) return ordered;
+
+  const targetIndex =
+    action === "bringForward"
+      ? Math.min(currentIndex + 1, ordered.length - 1)
+      : action === "sendBackward"
+        ? Math.max(currentIndex - 1, 0)
+        : action === "bringToFront"
+          ? ordered.length - 1
+          : 0;
+  if (targetIndex === currentIndex) return ordered;
+
+  const [moved] = ordered.splice(currentIndex, 1);
+  if (!moved) return ordered;
+  ordered.splice(targetIndex, 0, moved);
+  return ordered;
 }
 
 function getV2CardTypeAccentToken(cardType: V2CardType | null | undefined): string {
@@ -514,12 +558,13 @@ export function V2BoardCanvas({
   const ignoreNextPaneClickRef = useRef(false);
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    const nodes: V2CardNode[] = cards.map((card: V2Card) =>
+    const nodes: V2CardNode[] = cards.map((card: V2Card, index) =>
       buildCardNode(
         card,
         cardTypeMap,
         board.workspaceId,
-        initialCardAttachmentCounts[card.id] ?? 0
+        initialCardAttachmentCounts[card.id] ?? 0,
+        index + 1
       )
     );
 
@@ -962,6 +1007,10 @@ export function V2BoardCanvas({
           updatedAt: node.data.card.updatedAt,
         }))
       ),
+    [nodes]
+  );
+  const cardLayerSignature = useMemo(
+    () => nodes.map((node) => `${node.id}:${node.zIndex ?? 0}`).join("|"),
     [nodes]
   );
   const calculationInputSignature = useMemo(
@@ -1422,7 +1471,13 @@ export function V2BoardCanvas({
 
         setNodes((current) => [
           ...current,
-          buildCardNode(created, cardTypeMap, board.workspaceId),
+          buildCardNode(
+            created,
+            cardTypeMap,
+            board.workspaceId,
+            0,
+            getNextCardLayerZIndex(current)
+          ),
         ]);
         selectOnlyCard(created.id);
         setInspectedCardId(null);
@@ -1444,6 +1499,100 @@ export function V2BoardCanvas({
       }
     },
     [board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
+  );
+
+  const handleMoveCardLayer = useCallback(
+    async (cardId: string, action: V2CardLayerAction) => {
+      if (cardActionLockRef.current) return;
+
+      const currentNodes = nodesRef.current;
+      const currentOrder = orderCardNodesByLayer(currentNodes);
+      const nextOrder = moveCardInLayerOrder(currentNodes, cardId, action);
+      if (currentOrder.every((node, index) => node.id === nextOrder[index]?.id)) return;
+
+      const previousLayers = new Map(
+        currentNodes.map((node) => [
+          node.id,
+          {
+            nodeZIndex: node.zIndex,
+            hadStoredZIndex: Object.prototype.hasOwnProperty.call(
+              node.data.card.visualStyle ?? {},
+              "zIndex"
+            ),
+            storedZIndex: node.data.card.visualStyle?.zIndex,
+          },
+        ])
+      );
+      const nextLayerById = new Map(
+        nextOrder.map((node, index) => [node.id, index + 1])
+      );
+      const updates = nextOrder.map((node, index) => ({
+        id: node.id,
+        zIndex: index + 1,
+      }));
+      const pending = { cardId, action: "layer" as const };
+      cardActionLockRef.current = pending;
+      setPendingCardAction(pending);
+      setCardActionError(null);
+      setMovementSaveError(null);
+      setSaveStatus("saving");
+
+      setNodes((current) =>
+        current.map((node) => {
+          const zIndex = nextLayerById.get(node.id);
+          if (zIndex === undefined) return node;
+          return {
+            ...node,
+            zIndex,
+            data: {
+              ...node.data,
+              card: {
+                ...node.data.card,
+                visualStyle: { ...node.data.card.visualStyle, zIndex },
+              },
+            },
+          };
+        })
+      );
+
+      try {
+        await updateV2BoardLayout(board.id, { cards: updates, connections: [] });
+        setSaveStatus("saved");
+      } catch (error) {
+        console.error("Failed to save card layer order:", error);
+        setNodes((current) =>
+          current.map((node) => {
+            const previous = previousLayers.get(node.id);
+            if (!previous) return node;
+            const visualStyle = { ...node.data.card.visualStyle };
+            if (previous.hadStoredZIndex) {
+              visualStyle.zIndex = previous.storedZIndex;
+            } else {
+              delete visualStyle.zIndex;
+            }
+            return {
+              ...node,
+              zIndex: previous.nodeZIndex,
+              data: {
+                ...node.data,
+                card: { ...node.data.card, visualStyle },
+              },
+            };
+          })
+        );
+        setCardActionError({
+          cardId,
+          message: "Could not change this card's layer.",
+        });
+        setMovementSaveError("Card layer order could not be saved.");
+        setSaveStatus("error");
+        throw error;
+      } finally {
+        cardActionLockRef.current = null;
+        setPendingCardAction(null);
+      }
+    },
+    [board.id, setNodes]
   );
 
   const applyDeletedCardIds = useCallback(
@@ -1565,7 +1714,13 @@ export function V2BoardCanvas({
 
         setNodes((current) => [
           ...current,
-          buildCardNode(created, cardTypeMap, board.workspaceId),
+          buildCardNode(
+            created,
+            cardTypeMap,
+            board.workspaceId,
+            0,
+            getNextCardLayerZIndex(current)
+          ),
         ]);
         selectOnlyCard(created.id);
         setInspectedCardId(null);
@@ -1947,41 +2102,52 @@ export function V2BoardCanvas({
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     const previewCards = nodesRef.current.map((node) => node.data.card);
+    const orderedLayerNodes = orderCardNodesByLayer(nodesRef.current);
+    const layerIndexByCardId = new Map(
+      orderedLayerNodes.map((node, index) => [node.id, index])
+    );
 
     setNodes((nds) =>
-      nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          allCards: previewCards,
-          allConnections: connectionRecordsRef.current,
-          cardTypes,
-          linkedFieldBindings,
-          attachmentCount: attachmentCountsByCardId.get(node.id) ?? 0,
-          attachments: cardAttachmentsByCardId.get(node.id),
-          attachmentsLoading: attachmentLoadingCardIds.has(node.id),
-          isCardActionPending: pendingCardAction?.cardId === node.id,
-          pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
-          cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
-          connectedPortKeys: Array.from(connectedPortKeyMap.get(node.id) ?? []),
-          isVisualEditing: visualEditingCardId === node.id,
-          onStartVisualEditor: handleStartVisualEditor,
-          onDuplicateCard: handleDuplicateCard,
-          onDeleteCard: handleDeleteCard,
-          onResizeCard: handleResizeCard,
-          onUpdateVisualStyle: handleUpdateVisualStyle,
-          onCloseVisualEditor: () => setVisualEditingCardId(null),
-          onConnectorSlotDragStart: handleConnectorSlotDragStart,
-          onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
-          onLoadAttachments: loadCardAttachments,
-          onOpenAttachment: handleOpenAttachment,
-          onAddAttachments: handleAddCardAttachments,
-        },
-      }))
+      nds.map((node) => {
+        const layerIndex = layerIndexByCardId.get(node.id) ?? 0;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            allCards: previewCards,
+            allConnections: connectionRecordsRef.current,
+            cardTypes,
+            linkedFieldBindings,
+            attachmentCount: attachmentCountsByCardId.get(node.id) ?? 0,
+            attachments: cardAttachmentsByCardId.get(node.id),
+            attachmentsLoading: attachmentLoadingCardIds.has(node.id),
+            isCardActionPending: pendingCardAction?.cardId === node.id,
+            pendingCardAction: pendingCardAction?.cardId === node.id ? pendingCardAction.action : null,
+            cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
+            canMoveBackward: layerIndex > 0,
+            canMoveForward: layerIndex < orderedLayerNodes.length - 1,
+            connectedPortKeys: Array.from(connectedPortKeyMap.get(node.id) ?? []),
+            isVisualEditing: visualEditingCardId === node.id,
+            onStartVisualEditor: handleStartVisualEditor,
+            onDuplicateCard: handleDuplicateCard,
+            onDeleteCard: handleDeleteCard,
+            onMoveCardLayer: handleMoveCardLayer,
+            onResizeCard: handleResizeCard,
+            onUpdateVisualStyle: handleUpdateVisualStyle,
+            onCloseVisualEditor: () => setVisualEditingCardId(null),
+            onConnectorSlotDragStart: handleConnectorSlotDragStart,
+            onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
+            onLoadAttachments: loadCardAttachments,
+            onOpenAttachment: handleOpenAttachment,
+            onAddAttachments: handleAddCardAttachments,
+          },
+        };
+      })
     );
   }, [
     setNodes,
     boardCardPreviewSignature,
+    cardLayerSignature,
     cardTypes,
     linkedFieldBindings,
     attachmentCountsByCardId,
@@ -1995,6 +2161,7 @@ export function V2BoardCanvas({
     handleStartVisualEditor,
     handleDuplicateCard,
     handleDeleteCard,
+    handleMoveCardLayer,
     handleResizeCard,
     handleUpdateVisualStyle,
     handleConnectorSlotDragStart,
@@ -2900,6 +3067,7 @@ export function V2BoardCanvas({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={true}
         elementsSelectable={true}
+        elevateNodesOnSelect={false}
         selectionOnDrag={!visualEditingCardId && !visualEditingConnectionId}
         selectionMode={SelectionMode.Full}
         selectionKeyCode={null}
@@ -3104,7 +3272,12 @@ export function V2BoardCanvas({
           calculationLoading={calculationLoading}
           calculationError={calculationError}
           saveStatus={saveStatus}
-          pendingAction={pendingCardAction?.cardId === inspectedCard.id ? pendingCardAction.action : null}
+          pendingAction={
+            pendingCardAction?.cardId === inspectedCard.id &&
+            pendingCardAction.action !== "layer"
+              ? pendingCardAction.action
+              : null
+          }
           actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
