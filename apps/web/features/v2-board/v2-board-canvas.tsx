@@ -82,6 +82,7 @@ import {
   updateV2ConnectionType,
   V2ApiError,
   listV2CardAttachments,
+  uploadV2CardAttachment,
 } from "./api";
 import { V2AiAssistantPanel } from "./v2-ai-assistant-panel";
 import type { V2BoardAssistantContext } from "./v2-board-assistant";
@@ -650,6 +651,21 @@ export function V2BoardCanvas({
       }
     },
     [loadCardAttachments]
+  );
+
+  const handleAddCardAttachments = useCallback(
+    async (cardId: string, files: File[]) => {
+      let nextAttachments = await loadCardAttachments(cardId);
+      for (const file of files) {
+        const attachment = await uploadV2CardAttachment(cardId, {
+          file,
+          role: "attachment",
+        });
+        nextAttachments = [attachment, ...nextAttachments];
+        handleAttachmentsChange(cardId, nextAttachments);
+      }
+    },
+    [handleAttachmentsChange, loadCardAttachments]
   );
 
   const clearCardSelection = useCallback(() => {
@@ -1959,6 +1975,7 @@ export function V2BoardCanvas({
           onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
           onLoadAttachments: loadCardAttachments,
           onOpenAttachment: handleOpenAttachment,
+          onAddAttachments: handleAddCardAttachments,
         },
       }))
     );
@@ -1984,6 +2001,7 @@ export function V2BoardCanvas({
     handleConnectorSlotDragEnd,
     loadCardAttachments,
     handleOpenAttachment,
+    handleAddCardAttachments,
   ]);
 
   const handleUpdateConnection = useCallback(

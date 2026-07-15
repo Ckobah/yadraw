@@ -17,7 +17,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Lock, MoreHorizontal, Paperclip, X } from "lucide-react";
+import { Lock, MoreHorizontal, Paperclip, Plus, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -71,6 +71,7 @@ export type V2CardNodeData = {
   onConnectorSlotDragEnd?: (moved: boolean) => void;
   onLoadAttachments?: (cardId: string) => Promise<V2CardAttachment[]>;
   onOpenAttachment?: (cardId: string, attachmentId: string) => Promise<void> | void;
+  onAddAttachments?: (cardId: string, files: File[]) => Promise<void>;
 };
 
 export type V2CardNode = Node<V2CardNodeData, "v2Card">;
@@ -566,6 +567,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const titleRef = useRef<HTMLSpanElement>(null);
   const subtitleRef = useRef<HTMLSpanElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const attachmentIndicatorRef = useRef<HTMLDivElement>(null);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const updateNodeInternals = useUpdateNodeInternals();
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
@@ -624,6 +627,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const [typeChooserSlotId, setTypeChooserSlotId] = useState<string | null>(null);
   const [draggingSlotId, setDraggingSlotId] = useState<string | null>(null);
   const [isAttachmentListOpen, setIsAttachmentListOpen] = useState(false);
+  const [isAttachmentUploading, setIsAttachmentUploading] = useState(false);
+  const [attachmentUploadError, setAttachmentUploadError] = useState<string | null>(null);
   const slotDraftRef = useRef(slotDraft);
   const slotPersistQueueRef = useRef<Promise<void>>(Promise.resolve());
   const dragStartRef = useRef<{
@@ -951,6 +956,46 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
   }, [isMenuOpen]);
 
+  useEffect(() => {
+    if (!isAttachmentListOpen) return;
+
+    function closeAttachmentList(event: PointerEvent) {
+      if (
+        event.target instanceof globalThis.Node &&
+        !attachmentIndicatorRef.current?.contains(event.target)
+      ) {
+        setIsAttachmentListOpen(false);
+      }
+    }
+
+    function closeAttachmentListOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsAttachmentListOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeAttachmentList);
+    document.addEventListener("keydown", closeAttachmentListOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeAttachmentList);
+      document.removeEventListener("keydown", closeAttachmentListOnEscape);
+    };
+  }, [isAttachmentListOpen]);
+
+  async function handleAttachmentInputChange(files: File[]) {
+    if (files.length === 0 || !data.onAddAttachments) return;
+
+    setIsAttachmentUploading(true);
+    setAttachmentUploadError(null);
+    try {
+      await data.onAddAttachments(card.id, files);
+    } catch {
+      setAttachmentUploadError("Could not add files.");
+    } finally {
+      setIsAttachmentUploading(false);
+    }
+  }
+
   function runMenuAction(action: () => Promise<void> | void) {
     if (data.isCardActionPending) return;
     setIsMenuOpen(false);
@@ -1168,54 +1213,77 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         ) : null}
         {(data.attachmentCount ?? 0) > 0 ? (
           <div
+            ref={attachmentIndicatorRef}
             className="v2CardAttachmentIndicator nodrag nopan"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
-            onMouseEnter={() => {
-              setIsAttachmentListOpen(true);
-              void data.onLoadAttachments?.(card.id).catch(() => {});
-            }}
-            onMouseLeave={() => setIsAttachmentListOpen(false)}
-            onFocus={() => {
-              setIsAttachmentListOpen(true);
-              void data.onLoadAttachments?.(card.id).catch(() => {});
-            }}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) {
-                setIsAttachmentListOpen(false);
-              }
-            }}
           >
             <button
               type="button"
               className="v2CardAttachmentButton"
               aria-label={`${data.attachmentCount} attached ${data.attachmentCount === 1 ? "file" : "files"}`}
+              aria-haspopup="menu"
               aria-expanded={isAttachmentListOpen}
+              onClick={() => {
+                const willOpen = !isAttachmentListOpen;
+                setIsAttachmentListOpen(willOpen);
+                setAttachmentUploadError(null);
+                if (willOpen) {
+                  void data.onLoadAttachments?.(card.id).catch(() => {});
+                }
+              }}
             >
               <Paperclip size={15} strokeWidth={2.2} />
               <span>{data.attachmentCount}</span>
             </button>
             {isAttachmentListOpen ? (
               <div className="v2CardAttachmentPopover" role="menu">
-                {data.attachmentsLoading ? <p>Loading files...</p> : null}
-                {!data.attachmentsLoading && !data.attachments ? (
-                  <p>Files could not be loaded.</p>
-                ) : null}
-                {data.attachments?.map((attachment) => (
-                  <button
-                    key={attachment.id}
-                    type="button"
-                    role="menuitem"
-                    title={attachment.filename}
-                    onClick={() => {
-                      void Promise.resolve(
-                        data.onOpenAttachment?.(card.id, attachment.id)
-                      ).catch(() => {});
-                    }}
-                  >
-                    {attachment.filename}
-                  </button>
-                ))}
+                <div className="v2CardAttachmentList">
+                  {data.attachmentsLoading ? <p>Loading files...</p> : null}
+                  {!data.attachmentsLoading && !data.attachments ? (
+                    <p>Files could not be loaded.</p>
+                  ) : null}
+                  {data.attachments?.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      role="menuitem"
+                      title={attachment.filename}
+                      onClick={() => {
+                        setIsAttachmentListOpen(false);
+                        void Promise.resolve(
+                          data.onOpenAttachment?.(card.id, attachment.id)
+                        ).catch(() => {});
+                      }}
+                    >
+                      {attachment.filename}
+                    </button>
+                  ))}
+                  {attachmentUploadError ? (
+                    <p className="v2CardAttachmentError">{attachmentUploadError}</p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="v2CardAttachmentAddButton"
+                  disabled={isAttachmentUploading}
+                  onClick={() => attachmentInputRef.current?.click()}
+                >
+                  <Plus size={14} strokeWidth={2.2} />
+                  <span>{isAttachmentUploading ? "Adding..." : "Add files"}</span>
+                </button>
+                <input
+                  ref={attachmentInputRef}
+                  className="v2InspectorFileInput"
+                  type="file"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    void handleAttachmentInputChange(files);
+                  }}
+                />
               </div>
             ) : null}
           </div>

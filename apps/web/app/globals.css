@@ -5668,13 +5668,20 @@ button:disabled {
   width: max-content;
   min-width: 180px;
   max-width: 280px;
-  max-height: 220px;
-  overflow-y: auto;
+  max-height: 260px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
   padding: 5px;
   border: 1px solid #d9e2ef;
   border-radius: 7px;
   background: #fff;
   box-shadow: 0 14px 35px rgba(31, 45, 73, 0.18);
+}
+
+.v2CardAttachmentList {
+  display: grid;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .v2CardAttachmentPopover button,
@@ -5703,6 +5710,27 @@ button:disabled {
   background: #f2f6fb;
   color: #175cd3;
   outline: 0;
+}
+
+.v2CardAttachmentPopover .v2CardAttachmentAddButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #e4eaf2;
+  border-radius: 0 0 5px 5px;
+  color: #175cd3;
+  font-weight: 700;
+}
+
+.v2CardAttachmentPopover .v2CardAttachmentAddButton:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.v2CardAttachmentPopover .v2CardAttachmentError {
+  color: #b42318;
 }
 
 .v2CardTypeManagerRowText strong {
