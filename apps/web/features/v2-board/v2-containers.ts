@@ -43,23 +43,26 @@ export function getV2ContainerTheme(card: V2Card): V2ContainerTheme {
   return card.visualStyle.containerTheme ?? "yellow";
 }
 
+export function isV2CardCenterInsideContainer(container: V2Card, card: V2Card): boolean {
+  const left = container.position.x;
+  const right = left + container.size.width;
+  const top = container.position.y + 44;
+  const bottom = container.position.y + container.size.height;
+  const centerX = card.position.x + card.size.width / 2;
+  const centerY = card.position.y + card.size.height / 2;
+  return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
+}
+
 export function getV2CardsInsideContainer(
   container: V2Card,
   cards: V2Card[],
   cardTypeById: Map<string, V2CardType>
 ): V2Card[] {
-  const left = container.position.x;
-  const right = left + container.size.width;
-  const top = container.position.y + 44;
-  const bottom = container.position.y + container.size.height;
-
   return cards.filter((card) => {
     if (card.id === container.id || isV2ContainerCard(card, cardTypeById.get(card.cardTypeId))) {
       return false;
     }
-    const centerX = card.position.x + card.size.width / 2;
-    const centerY = card.position.y + card.size.height / 2;
-    return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
+    return isV2CardCenterInsideContainer(container, card);
   });
 }
 

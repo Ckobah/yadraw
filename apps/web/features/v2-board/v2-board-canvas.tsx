@@ -25,7 +25,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Bot, Play } from "lucide-react";
+import { Bot, Pin, Play } from "lucide-react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -107,6 +107,7 @@ import type { SaveStatus } from "./v2-card-inspector-helpers";
 import {
   buildV2ContainerFallbackType,
   getV2CardsInsideContainer,
+  isV2CardCenterInsideContainer,
   isV2ContainerCard,
   isV2ContainerType,
 } from "./v2-containers";
@@ -126,6 +127,12 @@ type CardActionError = {
   cardId: string;
   message: string;
 } | null;
+
+type ContainerMembershipSuggestion = {
+  cardId: string;
+  previousContainerId: string | null;
+  nextContainerId: string | null;
+};
 
 type GroupDragSnapshot = {
   draggedNodeId: string;
@@ -466,6 +473,33 @@ function getNextCardLayerZIndex(nodes: V2CardNode[]): number {
   );
 }
 
+function findContainerDropTarget(
+  draggedNode: V2CardNode,
+  nodes: V2CardNode[]
+): V2CardNode | null {
+  if (isV2ContainerCard(draggedNode.data.card, draggedNode.data.cardType)) return null;
+  const draggedCard = {
+    ...draggedNode.data.card,
+    position: { x: draggedNode.position.x, y: draggedNode.position.y },
+  };
+  return (
+    nodes
+      .filter(
+        (candidate) =>
+          candidate.id !== draggedNode.id &&
+          isV2ContainerCard(candidate.data.card, candidate.data.cardType) &&
+          isV2CardCenterInsideContainer(candidate.data.card, draggedCard)
+      )
+      .sort((left, right) => {
+        const layerDifference = (right.zIndex ?? 0) - (left.zIndex ?? 0);
+        if (layerDifference !== 0) return layerDifference;
+        const leftArea = left.data.card.size.width * left.data.card.size.height;
+        const rightArea = right.data.card.size.width * right.data.card.size.height;
+        return leftArea - rightArea;
+      })[0] ?? null
+  );
+}
+
 function buildCardLayerBlocks(nodes: V2CardNode[]): Array<{
   key: string;
   nodes: V2CardNode[];
@@ -580,10 +614,21 @@ export function V2BoardCanvas({
   const [cardActionError, setCardActionError] = useState<CardActionError>(null);
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
   const [movementSaveError, setMovementSaveError] = useState<string | null>(null);
+  const [containerDropTargetId, setContainerDropTargetId] = useState<string | null>(null);
+  const [containerMembershipSuggestion, setContainerMembershipSuggestion] =
+    useState<ContainerMembershipSuggestion | null>(null);
   const [editorCommandError, setEditorCommandError] = useState<string | null>(null);
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
+  useEffect(() => {
+    if (!containerMembershipSuggestion) return;
+    const dismissSuggestion = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContainerMembershipSuggestion(null);
+    };
+    window.addEventListener("keydown", dismissSuggestion);
+    return () => window.removeEventListener("keydown", dismissSuggestion);
+  }, [containerMembershipSuggestion]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCardTypeManagerOpen, setIsCardTypeManagerOpen] = useState(false);
   const [cardTypeManagerInitialId, setCardTypeManagerInitialId] = useState<string | null>(null);
@@ -952,6 +997,15 @@ export function V2BoardCanvas({
     () => new Map(nodes.map((node) => [node.id, node.data.card])),
     [nodes]
   );
+  const suggestedMembershipCard = containerMembershipSuggestion
+    ? cardById.get(containerMembershipSuggestion.cardId) ?? null
+    : null;
+  const suggestedPreviousContainer = containerMembershipSuggestion?.previousContainerId
+    ? cardById.get(containerMembershipSuggestion.previousContainerId) ?? null
+    : null;
+  const suggestedNextContainer = containerMembershipSuggestion?.nextContainerId
+    ? cardById.get(containerMembershipSuggestion.nextContainerId) ?? null
+    : null;
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedCardId) ?? null,
     [nodes, selectedCardId]
@@ -1798,6 +1852,26 @@ export function V2BoardCanvas({
     [runContainerMembershipAction]
   );
 
+  const handleAttachContainerCards = useCallback(
+    async (containerId: string, cardIds: string[]) => {
+      await runContainerMembershipAction(
+        containerId,
+        cardIds.map((cardId) => ({ cardId, containerId }))
+      );
+    },
+    [runContainerMembershipAction]
+  );
+
+  const handleDetachContainerCards = useCallback(
+    async (containerId: string, cardIds: string[]) => {
+      await runContainerMembershipAction(
+        containerId,
+        cardIds.map((cardId) => ({ cardId, containerId: null }))
+      );
+    },
+    [runContainerMembershipAction]
+  );
+
   const handleDetachAllCards = useCallback(
     async (containerId: string) => {
       const assignments = nodesRef.current
@@ -1817,11 +1891,35 @@ export function V2BoardCanvas({
     [runContainerMembershipAction]
   );
 
+  const handleApplyContainerMembershipSuggestion = useCallback(async () => {
+    const suggestion = containerMembershipSuggestion;
+    if (!suggestion || cardActionLockRef.current) return;
+    try {
+      await runContainerMembershipAction(suggestion.cardId, [
+        { cardId: suggestion.cardId, containerId: suggestion.nextContainerId },
+      ]);
+      setContainerMembershipSuggestion((current) =>
+        current === suggestion ? null : current
+      );
+    } catch {
+      // Keep the suggestion visible so the user can retry or dismiss it.
+    }
+  }, [containerMembershipSuggestion, runContainerMembershipAction]);
+
   const applyDeletedCardIds = useCallback(
     (cardIds: string[], invalidateHistory = false) => {
       const deletedIds = new Set(cardIds);
       if (invalidateHistory) clearEditorHistory();
       groupDragSnapshotRef.current = null;
+      setContainerDropTargetId((current) => (current && deletedIds.has(current) ? null : current));
+      setContainerMembershipSuggestion((current) =>
+        current &&
+        (deletedIds.has(current.cardId) ||
+          (current.previousContainerId !== null && deletedIds.has(current.previousContainerId)) ||
+          (current.nextContainerId !== null && deletedIds.has(current.nextContainerId)))
+          ? null
+          : current
+      );
       setNodes((current) =>
         current
           .filter((node) => !deletedIds.has(node.id))
@@ -2425,6 +2523,7 @@ export function V2BoardCanvas({
             insideCardCount: cardsInside.length,
             attachedCardCount: attachedCards.length,
             attachedContainerTitle: attachedContainer?.title ?? null,
+            isContainerDropTarget: containerDropTargetId === node.id,
             connectedPortKeys: Array.from(connectedPortKeyMap.get(node.id) ?? []),
             isVisualEditing: visualEditingCardId === node.id,
             onStartVisualEditor: handleStartVisualEditor,
@@ -2451,6 +2550,7 @@ export function V2BoardCanvas({
     boardCardPreviewSignature,
     cardLayerSignature,
     containerLayoutSignature,
+    containerDropTargetId,
     cardTypes,
     linkedFieldBindings,
     attachmentCountsByCardId,
@@ -2692,6 +2792,8 @@ export function V2BoardCanvas({
 
   const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
     (_event, node, draggedNodes) => {
+      setContainerDropTargetId(null);
+      setContainerMembershipSuggestion(null);
       const directlyMovingNodes = (draggedNodes.length > 0 ? draggedNodes : [node]).filter(
         (movingNode) => !isCardLocked(movingNode.data.card)
       );
@@ -2747,6 +2849,17 @@ export function V2BoardCanvas({
         x: node.position.x - draggedStart.x,
         y: node.position.y - draggedStart.y,
       };
+      if (
+        snapshot.positions.size === 1 &&
+        !isV2ContainerCard(node.data.card, node.data.cardType)
+      ) {
+        const dropTarget = findContainerDropTarget(node, nodesRef.current);
+        setContainerDropTargetId(
+          dropTarget?.id !== (node.data.card.containerId ?? null) ? dropTarget?.id ?? null : null
+        );
+      } else {
+        setContainerDropTargetId(null);
+      }
       const movedCardIds = new Set(snapshot.positions.keys());
       const translatedById = new Map(
         snapshot.manualConnections.flatMap((connection) => {
@@ -2792,6 +2905,7 @@ export function V2BoardCanvas({
       const snapshot = groupDragSnapshotRef.current;
       if (!snapshot || snapshot.draggedNodeId !== node.id) return;
       groupDragSnapshotRef.current = null;
+      setContainerDropTargetId(null);
 
       const draggedStart = snapshot.positions.get(node.id);
       if (!draggedStart) return;
@@ -2800,6 +2914,22 @@ export function V2BoardCanvas({
         y: node.position.y - draggedStart.y,
       };
       if (delta.x === 0 && delta.y === 0) return;
+
+      if (
+        snapshot.positions.size === 1 &&
+        !isV2ContainerCard(node.data.card, node.data.cardType)
+      ) {
+        const dropTarget = findContainerDropTarget(node, nodesRef.current);
+        const previousContainerId = node.data.card.containerId ?? null;
+        const nextContainerId = dropTarget?.id ?? null;
+        if (previousContainerId !== nextContainerId) {
+          setContainerMembershipSuggestion({
+            cardId: node.id,
+            previousContainerId,
+            nextContainerId,
+          });
+        }
+      }
 
       const finalPositionById = new Map(
         draggedNodes.map((draggedNode) => [
@@ -3568,7 +3698,12 @@ export function V2BoardCanvas({
           maskColor="rgba(0,0,0,0.08)"
         />
         {(editorCommandError ?? movementSaveError ?? connectionCreateError) ? (
-          <div className="v2CanvasConnectionError" role="status">
+          <div
+            className={`v2CanvasConnectionError${
+              containerMembershipSuggestion ? " v2CanvasConnectionErrorRaised" : ""
+            }`}
+            role="status"
+          >
             {editorCommandError ?? movementSaveError ?? connectionCreateError}
           </div>
         ) : null}
@@ -3598,6 +3733,57 @@ export function V2BoardCanvas({
           />
         ) : null}
       </ReactFlow>
+      {containerMembershipSuggestion && suggestedMembershipCard ? (
+        <div className="v2ContainerDropSuggestion" role="status" aria-live="polite">
+          <span className="v2ContainerDropSuggestionIcon" aria-hidden="true">
+            <Pin size={16} strokeWidth={2.3} />
+          </span>
+          <span className="v2ContainerDropSuggestionText">
+            <strong>
+              {containerMembershipSuggestion.nextContainerId
+                ? containerMembershipSuggestion.previousContainerId
+                  ? `Move to ${suggestedNextContainer?.title ?? "container"}?`
+                  : `Attach to ${suggestedNextContainer?.title ?? "container"}?`
+                : `Detach from ${suggestedPreviousContainer?.title ?? "container"}?`}
+            </strong>
+            <small
+              className={
+                cardActionError?.cardId === containerMembershipSuggestion.cardId
+                  ? "v2ContainerDropSuggestionError"
+                  : undefined
+              }
+              title={suggestedMembershipCard.title}
+            >
+              {cardActionError?.cardId === containerMembershipSuggestion.cardId
+                ? cardActionError.message
+                : suggestedMembershipCard.title}
+            </small>
+          </span>
+          <button
+            type="button"
+            className="v2ContainerDropSuggestionDismiss"
+            disabled={pendingCardAction?.action === "membership"}
+            onClick={() => setContainerMembershipSuggestion(null)}
+          >
+            Not now
+          </button>
+          <button
+            type="button"
+            className="v2ContainerDropSuggestionConfirm"
+            disabled={pendingCardAction !== null}
+            onClick={() => void handleApplyContainerMembershipSuggestion()}
+          >
+            {pendingCardAction?.cardId === containerMembershipSuggestion.cardId &&
+            pendingCardAction.action === "membership"
+              ? "Updating…"
+              : containerMembershipSuggestion.nextContainerId
+                ? containerMembershipSuggestion.previousContainerId
+                  ? "Move"
+                  : "Attach"
+                : "Detach"}
+          </button>
+        </div>
+      ) : null}
       {inspectedCard ? (
         <V2CardInspector
           card={inspectedCard}
@@ -3622,10 +3808,16 @@ export function V2BoardCanvas({
               ? pendingCardAction.action
               : null
           }
+          membershipPending={
+            pendingCardAction?.cardId === inspectedCard.id &&
+            pendingCardAction.action === "membership"
+          }
           actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onUpdateVisualStyle={handleUpdateVisualStyle}
+          onAttachContainerCards={handleAttachContainerCards}
+          onDetachContainerCards={handleDetachContainerCards}
           onSetLibraryEntry={handleSetCardLibraryEntry}
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}

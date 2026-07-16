@@ -72,6 +72,7 @@ export type V2CardNodeData = {
   insideCardCount?: number;
   attachedCardCount?: number;
   attachedContainerTitle?: string | null;
+  isContainerDropTarget?: boolean;
   isVisualEditing?: boolean;
   onStartVisualEditor?: (cardId: string) => void;
   onDuplicateCard?: (cardId: string) => Promise<void> | void;
@@ -1038,7 +1039,9 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         isContainer
           ? ` v2ContainerNode v2ContainerNode${containerVariant === "frame" ? "Frame" : "Sticky"}`
           : ""
-      }${isLocked ? " v2CardNodeLocked nopan" : ""}`}
+      }${data.isContainerDropTarget ? " v2ContainerNodeDropTarget" : ""}${
+        isLocked ? " v2CardNodeLocked nopan" : ""
+      }`}
       onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",

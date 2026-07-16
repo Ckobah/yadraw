@@ -2686,6 +2686,115 @@ button:disabled {
   pointer-events: none;
 }
 
+.v2CanvasConnectionErrorRaised {
+  bottom: 88px;
+}
+
+.v2ContainerDropSuggestion {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  width: min(520px, calc(100vw - 48px));
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  transform: translateX(-50%);
+  border: 1px solid #d8d08d;
+  border-radius: 12px;
+  background: rgba(255, 253, 237, 0.98);
+  padding: 9px 10px;
+  box-shadow: 0 16px 42px rgba(62, 53, 18, 0.18);
+}
+
+.v2ContainerDropSuggestionIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 9px;
+  background: #fff4b3;
+  color: #735f11;
+}
+
+.v2ContainerDropSuggestionText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.v2ContainerDropSuggestionText strong,
+.v2ContainerDropSuggestionText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ContainerDropSuggestionText .v2ContainerDropSuggestionError {
+  color: #b54708;
+  font-weight: 700;
+}
+
+.v2ContainerDropSuggestionText strong {
+  color: #40360d;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.v2ContainerDropSuggestionText small {
+  color: #7b6e30;
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.v2ContainerDropSuggestion button {
+  height: 30px;
+  border: 1px solid #ddd59b;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.v2ContainerDropSuggestionDismiss {
+  background: #fff;
+  color: #667085;
+}
+
+.v2ContainerDropSuggestionConfirm {
+  background: #735f11;
+  color: #fff;
+}
+
+.v2ContainerDropSuggestion button:hover:not(:disabled),
+.v2ContainerDropSuggestion button:focus-visible:not(:disabled) {
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(115, 95, 17, 0.13);
+}
+
+.v2ContainerDropSuggestion button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (max-width: 560px) {
+  .v2ContainerDropSuggestion {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+
+  .v2ContainerDropSuggestionIcon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .v2ContainerDropSuggestionDismiss {
+    display: none;
+  }
+}
+
 .v2BoardCanvasArea .v2BoardControls.react-flow__controls {
   left: var(--v2-minimap-left);
   bottom: var(--v2-minimap-bottom);
@@ -4019,6 +4128,30 @@ button:disabled {
   background: color-mix(in srgb, var(--yd-surface-card, #fff) 34%, transparent);
 }
 
+.v2ContainerNodeDropTarget {
+  border-color: #8e7416 !important;
+  box-shadow: 0 0 0 5px rgba(183, 154, 40, 0.2), 0 16px 38px rgba(62, 53, 18, 0.18) !important;
+}
+
+.v2ContainerNodeDropTarget::after {
+  content: "Release to link card";
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  border: 1px solid #c9b34f;
+  border-radius: 999px;
+  background: rgba(255, 250, 214, 0.96);
+  padding: 5px 9px;
+  color: #5f4e0c;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .v2ContainerPinnedIndicator,
 .v2ContainerCountIndicator {
   flex: 0 0 auto;
@@ -5279,6 +5412,155 @@ button:disabled {
 
 .v2ContainerThemeChoice button[aria-pressed="true"] {
   box-shadow: 0 0 0 3px var(--v2-container-theme-border);
+}
+
+.v2ContainerCardsCount {
+  display: inline-flex;
+  min-width: 30px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--v2-inspector-accent) 26%, #e4e7f0);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  padding: 0 7px;
+  color: var(--v2-inspector-accent);
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.v2ContainerCardsGroup {
+  display: grid;
+  gap: 5px;
+}
+
+.v2ContainerCardsGroup + .v2ContainerCardsGroup {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #f0f1f3;
+}
+
+.v2ContainerCardsGroupHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.v2ContainerCardsGroupHeader strong {
+  overflow: hidden;
+  color: #475467;
+  font-size: 10.5px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ContainerCardsGroupHeader button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  color: var(--v2-inspector-accent);
+  font-size: 10.5px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.v2ContainerCardsGroupHeader button:hover:not(:disabled),
+.v2ContainerCardsGroupHeader button:focus-visible:not(:disabled) {
+  outline: 0;
+  text-decoration: underline;
+}
+
+.v2ContainerCardsGroupHeader button:disabled,
+.v2ContainerCardRow > button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.v2ContainerCardsList {
+  display: grid;
+}
+
+.v2ContainerCardRow {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 28px;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 0;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.v2ContainerCardRow:last-child {
+  border-bottom: 0;
+}
+
+.v2ContainerCardRowPin,
+.v2ContainerCardRow > button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 7px;
+}
+
+.v2ContainerCardRowPin {
+  background: color-mix(in srgb, var(--v2-inspector-accent) 9%, #fff);
+  color: var(--v2-inspector-accent);
+}
+
+.v2ContainerCardRowText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.v2ContainerCardRowText strong,
+.v2ContainerCardRowText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2ContainerCardRowText strong {
+  color: #1d2939;
+  font-size: 11.5px;
+  font-weight: 730;
+}
+
+.v2ContainerCardRowText small {
+  color: #7b8495;
+  font-size: 9.5px;
+  font-weight: 620;
+}
+
+.v2ContainerCardRow > button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e4e7f0;
+  background: #fff;
+  color: #667085;
+  cursor: pointer;
+}
+
+.v2ContainerCardRow > button:hover:not(:disabled),
+.v2ContainerCardRow > button:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 42%, #e4e7f0);
+  background: color-mix(in srgb, var(--v2-inspector-accent) 8%, #fff);
+  color: var(--v2-inspector-accent);
+  outline: 0;
+}
+
+.v2ContainerCardsEmpty {
+  margin: 2px 0 0;
+  color: #8a93a5;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .v2CalculatedSection h3 {

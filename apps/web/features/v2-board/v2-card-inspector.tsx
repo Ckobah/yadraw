@@ -23,6 +23,7 @@ import { V2InspectorActionMenu } from "./v2-inspector-action-menu";
 import { V2CardCalculatedSection } from "./v2-card-calculated-section";
 import { V2CardLibrarySelector } from "../v2-card-library/v2-card-library-selector";
 import { V2ContainerSettings } from "./v2-container-settings";
+import { V2ContainerCardsSection } from "./v2-container-cards-section";
 import { getV2ContainerVariant, isV2ContainerCard } from "./v2-containers";
 
 type V2CardInspectorProps = {
@@ -42,6 +43,7 @@ type V2CardInspectorProps = {
   calculationError: string | null;
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
+  membershipPending: boolean;
   actionError: string | null;
   attachments: V2CardAttachment[] | undefined;
   attachmentsLoading: boolean;
@@ -54,6 +56,8 @@ type V2CardInspectorProps = {
     data: Record<string, unknown>
   ) => Promise<void>;
   onUpdateVisualStyle: (cardId: string, patch: V2CardVisualStyle) => Promise<void>;
+  onAttachContainerCards: (containerId: string, cardIds: string[]) => Promise<void>;
+  onDetachContainerCards: (containerId: string, cardIds: string[]) => Promise<void>;
   onSetLibraryEntry: (
     cardId: string,
     libraryEntryId: string | null,
@@ -91,12 +95,15 @@ export function V2CardInspector({
   calculationError,
   saveStatus,
   pendingAction,
+  membershipPending,
   actionError,
   attachments,
   attachmentsLoading,
   onUpdateCardBasics,
   onUpdateCardData,
   onUpdateVisualStyle,
+  onAttachContainerCards,
+  onDetachContainerCards,
   onSetLibraryEntry,
   onManageCardType,
   onCreateLinkedFieldBinding,
@@ -179,11 +186,21 @@ export function V2CardInspector({
           onUpdateCardBasics={onUpdateCardBasics}
         />
         {isContainer ? (
-          <V2ContainerSettings
-            card={card}
-            saveStatus={saveStatus}
-            onUpdateVisualStyle={onUpdateVisualStyle}
-          />
+          <>
+            <V2ContainerSettings
+              card={card}
+              saveStatus={saveStatus}
+              onUpdateVisualStyle={onUpdateVisualStyle}
+            />
+            <V2ContainerCardsSection
+              container={card}
+              allCards={allCards}
+              cardTypes={cardTypes}
+              pending={membershipPending}
+              onAttachCards={onAttachContainerCards}
+              onDetachCards={onDetachContainerCards}
+            />
+          </>
         ) : (
           <V2CardDataSection
             card={card}
