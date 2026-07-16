@@ -52,44 +52,10 @@
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  gap: 10px;
-  color: var(--home-ink);
-  font-size: 17px;
-  font-weight: 820;
-  letter-spacing: -0.025em;
 }
 
-.brandMark {
-  position: relative;
-  display: inline-flex;
-  width: 27px;
-  height: 22px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.brandMark::after {
-  position: absolute;
-  right: 5px;
-  left: 5px;
-  height: 1px;
-  background: var(--home-ink);
-  content: "";
-}
-
-.brandMark span {
-  position: relative;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
-  border: 2px solid var(--home-ink);
-  border-radius: 3px;
-  background: var(--home-surface);
-}
-
-.brandMark span:last-child {
-  border-color: var(--home-accent);
-  background: var(--home-accent);
+.brandLogo {
+  --yadraw-logo-width: 106px;
 }
 
 .navigation,
