@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { YadrawLogo } from "../../components/yadraw-logo";
 import { getCurrentV2User } from "../../lib/auth/current-user";
 import { LoginForm } from "./login-form";
 
@@ -16,7 +17,7 @@ export default async function LoginPage({
   return (
     <main className="v2AuthPage">
       <section className="v2AuthPanel" aria-labelledby="login-title">
-        <div className="v2AuthBrand">Yadraw</div>
+        <div className="v2AuthBrand"><YadrawLogo /></div>
         <h1 id="login-title">Sign in to your workspace</h1>
         <p>Use your email and password to access private boards.</p>
         <LoginForm

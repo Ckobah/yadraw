@@ -1,5 +1,6 @@
-import { LayoutDashboard, LogOut, Settings } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { redirect } from "next/navigation";
+import { YadrawLogo } from "../../../components/yadraw-logo";
 import { getCurrentV2User } from "../../../lib/auth/current-user";
 import {
   bootstrapCurrentUser,
@@ -55,10 +56,7 @@ export default async function DashboardPage({
     return (
       <main className="v2DashboardPage">
         <header className="v2DashboardHeader">
-          <div className="v2DashboardBrand">
-            <LayoutDashboard size={22} />
-            <strong>Yadraw</strong>
-          </div>
+          <YadrawLogo className="v2DashboardBrand" />
           <div className="v2DashboardAccount">
             <div>
               <strong>{user.name}</strong>

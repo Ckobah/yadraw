@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { YadrawLogo } from "../components/yadraw-logo";
 import styles from "./home.module.css";
 
 export const metadata: Metadata = {
@@ -17,11 +18,7 @@ export default function Home() {
 
       <header className={styles.header}>
         <a className={styles.brand} href="/" aria-label="Yadraw home">
-          <span className={styles.brandMark} aria-hidden="true">
-            <span />
-            <span />
-          </span>
-          <span>Yadraw</span>
+          <YadrawLogo className={styles.brandLogo} />
         </a>
 
         <nav className={styles.navigation} aria-label="Main navigation">
@@ -218,8 +215,7 @@ export default function Home() {
       <footer className={styles.footer}>
         <div>
           <a className={styles.brand} href="/" aria-label="Yadraw home">
-            <span className={styles.brandMark} aria-hidden="true"><span /><span /></span>
-            <span>Yadraw</span>
+            <YadrawLogo className={styles.brandLogo} />
           </a>
           <p>Structured cards. Meaningful relationships. Clear models.</p>
         </div>

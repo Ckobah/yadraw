@@ -2522,11 +2522,25 @@ button:disabled {
   box-shadow: 0 12px 32px rgba(16, 24, 40, 0.08);
 }
 
+.yadrawLogo {
+  display: inline-flex;
+  width: var(--yadraw-logo-width, 104px);
+  max-width: 100%;
+  line-height: 0;
+}
+
+.yadrawLogo img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .v2AuthBrand {
   margin-bottom: 24px;
-  color: #175cd3;
-  font-size: 20px;
-  font-weight: 750;
+}
+
+.v2AuthBrand .yadrawLogo {
+  --yadraw-logo-width: 126px;
 }
 
 .v2AuthPanel h1 {
@@ -2660,8 +2674,7 @@ button:disabled {
 }
 
 .v2DashboardBrand {
-  gap: 9px;
-  color: #175cd3;
+  --yadraw-logo-width: 100px;
   text-decoration: none;
 }
 
@@ -2792,6 +2805,7 @@ button:disabled {
 .v2PublicDocument { min-height: 100vh; color: #101828; background: #fff; }
 .v2PublicDocument nav { display: flex; justify-content: space-between; border-bottom: 1px solid #e4e7ec; padding: 18px clamp(16px,4vw,48px); }
 .v2PublicDocument nav a { color: #175cd3; text-decoration: none; font-weight: 700; }
+.v2PublicDocument nav .yadrawLogo { --yadraw-logo-width: 92px; }
 .v2PublicDocument article { line-height: 1.65; }
 .v2PublicDocument h2 { margin-top: 28px; font-size: 18px; }
 .v2PublicDocument .updated { color: #667085; font-size: 13px; }
