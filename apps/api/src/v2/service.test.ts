@@ -4,6 +4,7 @@ import {
   createV2MemoryRepository,
   type V2BootstrapUserInput
 } from "./repository.js";
+import type { V2BoardBlueprint } from "./blueprints.js";
 import { createV2BoardService, V2ServiceError } from "./service.js";
 
 const ownerContext = {
@@ -95,6 +96,45 @@ describe("v2 board service", () => {
       .resolves.toMatchObject({ name: "New board" });
     await expect(service.createBoard(viewerContext, seed.workspace.id, { name: "Denied" }))
       .rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("creates only server-controlled board blueprints after workspace authorization", async () => {
+    const { seed } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    const createBoardFromBlueprint = vi.fn(
+      async (workspaceId: string, name: string, blueprint: V2BoardBlueprint) => ({
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        workspaceId,
+        name,
+        updatedAt: timestamp,
+        blueprintKey: blueprint.key
+      })
+    );
+    repository.createBoardFromBlueprint = createBoardFromBlueprint;
+    const service = createV2BoardService(repository);
+
+    await expect(service.createBoard(ownerContext, seed.workspace.id, {
+      name: "Client process",
+      blueprint: "process_map_v1"
+    })).resolves.toMatchObject({ name: "Client process" });
+    expect(createBoardFromBlueprint).toHaveBeenCalledWith(
+      seed.workspace.id,
+      "Client process",
+      expect.objectContaining({ key: "process_map_v1", version: 1 })
+    );
+
+    await expect(service.createBoard(viewerContext, seed.workspace.id, {
+      name: "Denied graph",
+      blueprint: "typed_knowledge_graph_v1"
+    })).rejects.toMatchObject({ code: "forbidden" });
+    expect(createBoardFromBlueprint).toHaveBeenCalledTimes(1);
+
+    await expect(service.createBoard(ownerContext, seed.workspace.id, {
+      name: "Untrusted",
+      blueprint: "custom_payload_v1" as "process_map_v1"
+    })).rejects.toMatchObject({ code: "validation_failed" });
+    expect(createBoardFromBlueprint).toHaveBeenCalledTimes(1);
   });
 
   it("creates cards from minimal canvas input", async () => {

@@ -49,6 +49,7 @@ import {
   type V2Connection,
   type V2CalculationEvaluation,
   type V2CreateCardRequest,
+  type V2CreateBoardRequest,
   type V2CreateCardLibraryEntryRequest,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
@@ -71,6 +72,7 @@ import {
   type V2UpdateLinkedFieldBindingRequest,
   type V2WorkspaceSummary
 } from "@yadraw/shared";
+import { getV2BoardBlueprint } from "./blueprints.js";
 import type { RequestContext } from "../context.js";
 import { hasV2WorkspaceAccess, type V2AccessLevel } from "./policy.js";
 import type {
@@ -124,7 +126,7 @@ export type V2BoardService = {
   createBoard(
     context: RequestContext,
     workspaceId: string,
-    input: { name: string }
+    input: V2CreateBoardRequest
   ): Promise<V2BoardSummary>;
   updateBoard(context: RequestContext, boardId: string, input: unknown): Promise<V2BoardSummary>;
   duplicateBoard(context: RequestContext, boardId: string, input: unknown): Promise<V2BoardSummary>;
@@ -736,6 +738,16 @@ export function createV2BoardService(
     };
   }
 
+  function requireBlueprintRepository() {
+    if (!repository.createBoardFromBlueprint) {
+      throw new V2ServiceError(
+        "storage_unavailable",
+        "V2 board blueprint repository is not available"
+      );
+    }
+    return repository.createBoardFromBlueprint.bind(repository);
+  }
+
   function requireConnectionTypeRepository(): {
     listConnectionTypes(workspaceId: string): Promise<V2ConnectionType[]>;
     getConnectionType(connectionTypeId: string): Promise<V2ConnectionType | null>;
@@ -910,6 +922,13 @@ export function createV2BoardService(
       const parsedInput = v2CreateBoardBodySchema.safeParse(rawInput);
       if (!parsedInput.success) validationFailed("Invalid board payload");
       await authorizeWorkspace(context, workspaceId, "write");
+      if (parsedInput.data.blueprint) {
+        return requireBlueprintRepository()(
+          workspaceId,
+          parsedInput.data.name,
+          getV2BoardBlueprint(parsedInput.data.blueprint)
+        );
+      }
       return requireDashboardRepository().createBoard(workspaceId, parsedInput.data.name);
     },
 

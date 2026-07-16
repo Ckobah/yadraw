@@ -75,7 +75,9 @@ export default async function DashboardPage({
 
         <section className="v2DashboardWorkspaceBar" aria-label="Workspace controls">
           <WorkspaceSelector workspaces={workspaces} selectedId={selectedWorkspace?.id ?? null} />
-          {selectedWorkspace ? <NewBoardForm workspaceId={selectedWorkspace.id} /> : null}
+          {selectedWorkspace && boards.length > 0 ? (
+            <NewBoardForm workspaceId={selectedWorkspace.id} />
+          ) : null}
         </section>
 
         <section className="v2DashboardContent" aria-labelledby="boards-title">
@@ -89,8 +91,16 @@ export default async function DashboardPage({
 
           {boards.length > 0 ? <BoardList boards={boards} /> : (
             <div className="v2DashboardEmptyState">
-              <h2>No boards yet</h2>
-              <p>Create a board to start arranging cards and connections.</p>
+              <div className="v2DashboardEmptyIntro">
+                <span>Start in under a minute</span>
+                <h2>Build from a real example</h2>
+                <p>Choose a structured model or begin with an empty canvas.</p>
+              </div>
+              {selectedWorkspace ? (
+                <NewBoardForm workspaceId={selectedWorkspace.id} initiallyOpen />
+              ) : (
+                <p role="status">Your personal workspace is being prepared.</p>
+              )}
             </div>
           )}
         </section>

@@ -618,9 +618,15 @@ export const v2ListWorkspaceBoardsResponseSchema = z.object({
   boards: z.array(v2BoardSummarySchema)
 });
 
+export const v2BoardBlueprintKeySchema = z.enum([
+  "process_map_v1",
+  "typed_knowledge_graph_v1"
+]);
+
 export const v2CreateBoardBodySchema = z
   .object({
-    name: z.string().trim().min(1).max(120)
+    name: z.string().trim().min(1).max(120),
+    blueprint: v2BoardBlueprintKeySchema.optional()
   })
   .strict();
 
@@ -1477,6 +1483,7 @@ export type V2BoardDetail = z.infer<typeof v2BoardDetailSchema>;
 export type V2UserSummary = z.infer<typeof v2UserSummarySchema>;
 export type V2WorkspaceSummary = z.infer<typeof v2WorkspaceSummarySchema>;
 export type V2BoardSummary = z.infer<typeof v2BoardSummarySchema>;
+export type V2BoardBlueprintKey = z.infer<typeof v2BoardBlueprintKeySchema>;
 export type V2ListWorkspacesResponse = z.infer<typeof v2ListWorkspacesResponseSchema>;
 export type V2ListWorkspaceBoardsResponse = z.infer<typeof v2ListWorkspaceBoardsResponseSchema>;
 export type V2CreateBoardInput = z.infer<typeof v2CreateBoardBodySchema>;

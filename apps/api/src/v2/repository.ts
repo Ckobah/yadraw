@@ -50,6 +50,7 @@ import {
   type V2WorkspaceSummary,
   type V2WorkspaceRole
 } from "@yadraw/shared";
+import type { V2BoardBlueprint } from "./blueprints.js";
 
 export type V2CreateCardRecordInput = {
   workspaceId: string;
@@ -203,6 +204,11 @@ export type V2Repository = {
   listUserWorkspaces?(userId: string): Promise<V2WorkspaceSummary[]>;
   listWorkspaceBoards?(workspaceId: string): Promise<V2BoardSummary[]>;
   createBoard?(workspaceId: string, name: string): Promise<V2BoardSummary>;
+  createBoardFromBlueprint?(
+    workspaceId: string,
+    name: string,
+    blueprint: V2BoardBlueprint
+  ): Promise<V2BoardSummary>;
   updateBoard?(boardId: string, input: { name?: string; archived?: boolean }): Promise<V2BoardSummary | null>;
   duplicateBoard?(boardId: string, input: V2DuplicateBoardRequest): Promise<V2BoardSummary | null>;
   deleteBoard?(boardId: string): Promise<boolean>;
@@ -2432,6 +2438,241 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         );
         await client.query("commit");
         return boardSummaryFromRow(result.rows[0]);
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async createBoardFromBlueprint(workspaceId, name, blueprint) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        let projectResult = await client.query(
+          `
+            select id
+            from projects
+            where workspace_id = $1
+              and deleted_at is null
+            order by created_at asc, id asc
+            limit 1
+            for update
+          `,
+          [workspaceId]
+        );
+        if (!projectResult.rows[0]) {
+          projectResult = await client.query(
+            `insert into projects (workspace_id, name) values ($1, 'Boards') returning id`,
+            [workspaceId]
+          );
+        }
+
+        const boardResult = await client.query(
+          `
+            insert into boards (
+              workspace_id, project_id, name, viewport_x, viewport_y, viewport_zoom
+            ) values ($1, $2, $3, $4, $5, $6)
+            returning id as board_id, workspace_id, name as board_name, archived_at,
+                      updated_at as board_updated_at
+          `,
+          [
+            workspaceId,
+            projectResult.rows[0].id,
+            name,
+            blueprint.viewport.x,
+            blueprint.viewport.y,
+            blueprint.viewport.zoom
+          ]
+        );
+        const board = boardResult.rows[0];
+        if (!board) throw new Error("Blueprint board creation did not return a board");
+
+        const cardTypeIds = new Map<string, string>();
+        for (const cardType of blueprint.cardTypes) {
+          const inserted = await client.query(
+            `
+              insert into card_types (
+                workspace_id, key, name, description, default_data, schema,
+                default_width, default_height, default_visual_style
+              ) values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb)
+              on conflict (workspace_id, key) where deleted_at is null do nothing
+              returning id
+            `,
+            [
+              workspaceId,
+              cardType.key,
+              cardType.name,
+              cardType.description,
+              JSON.stringify(cardType.defaultData),
+              JSON.stringify(cardType.schema),
+              cardType.defaultSize.width,
+              cardType.defaultSize.height,
+              JSON.stringify(cardType.defaultVisualStyle)
+            ]
+          );
+          const existing = inserted.rows[0]
+            ? inserted
+            : await client.query(
+                `
+                  select id
+                  from card_types
+                  where workspace_id = $1 and key = $2 and deleted_at is null
+                  limit 1
+                  for share
+                `,
+                [workspaceId, cardType.key]
+              );
+          const cardTypeId = existing.rows[0]?.id ? String(existing.rows[0].id) : null;
+          if (!cardTypeId) throw new Error(`Blueprint card type ${cardType.key} was not available`);
+          cardTypeIds.set(cardType.key, cardTypeId);
+
+          for (const [index, port] of cardType.ports.entries()) {
+            await client.query(
+              `
+                insert into card_type_ports (
+                  workspace_id, card_type_id, key, label, direction,
+                  data_type, required, sort_order
+                ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+                on conflict (card_type_id, direction, key) where deleted_at is null do nothing
+              `,
+              [
+                workspaceId,
+                cardTypeId,
+                port.key,
+                port.label,
+                port.direction,
+                port.dataType,
+                port.required,
+                port.sortOrder ?? index
+              ]
+            );
+          }
+        }
+
+        const connectionTypeIds = new Map<string, string>();
+        for (const connectionType of blueprint.connectionTypes) {
+          const inserted = await client.query(
+            `
+              insert into connection_types (
+                workspace_id, key, name, description, schema, default_visual_style
+              ) values ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
+              on conflict (workspace_id, key) where deleted_at is null do nothing
+              returning id
+            `,
+            [
+              workspaceId,
+              connectionType.key,
+              connectionType.name,
+              connectionType.description,
+              JSON.stringify(connectionType.schema),
+              JSON.stringify(connectionType.defaultVisualStyle)
+            ]
+          );
+          const existing = inserted.rows[0]
+            ? inserted
+            : await client.query(
+                `
+                  select id
+                  from connection_types
+                  where workspace_id = $1 and key = $2 and deleted_at is null
+                  limit 1
+                  for share
+                `,
+                [workspaceId, connectionType.key]
+              );
+          const connectionTypeId = existing.rows[0]?.id
+            ? String(existing.rows[0].id)
+            : null;
+          if (!connectionTypeId) {
+            throw new Error(`Blueprint connection type ${connectionType.key} was not available`);
+          }
+          connectionTypeIds.set(connectionType.key, connectionTypeId);
+        }
+
+        const cardIds = new Map<string, string>();
+        const cardTypeDefinitions = new Map(
+          blueprint.cardTypes.map((cardType) => [cardType.key, cardType])
+        );
+        for (const card of blueprint.cards) {
+          const cardTypeId = cardTypeIds.get(card.cardTypeKey);
+          const cardType = cardTypeDefinitions.get(card.cardTypeKey);
+          if (!cardTypeId || !cardType) {
+            throw new Error(`Blueprint card ${card.localKey} has an unknown card type`);
+          }
+          if (cardIds.has(card.localKey)) {
+            throw new Error(`Blueprint card key ${card.localKey} is duplicated`);
+          }
+          const cardId = randomUUID();
+          cardIds.set(card.localKey, cardId);
+          const size = card.size ?? cardType.defaultSize;
+          await client.query(
+            `
+              insert into cards (
+                id, workspace_id, board_id, card_type_id, title, description,
+                data, position_x, position_y, width, height, visual_style, status
+              ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13)
+            `,
+            [
+              cardId,
+              workspaceId,
+              board.board_id,
+              cardTypeId,
+              card.title,
+              card.description,
+              JSON.stringify(card.data),
+              card.position.x,
+              card.position.y,
+              size.width,
+              size.height,
+              JSON.stringify(card.visualStyle ?? {}),
+              card.status
+            ]
+          );
+        }
+
+        const connectionTypeDefinitions = new Map(
+          blueprint.connectionTypes.map((connectionType) => [connectionType.key, connectionType])
+        );
+        for (const connection of blueprint.connections) {
+          const sourceCardId = cardIds.get(connection.sourceCardKey);
+          const targetCardId = cardIds.get(connection.targetCardKey);
+          const connectionTypeId = connectionTypeIds.get(connection.connectionTypeKey);
+          const connectionType = connectionTypeDefinitions.get(connection.connectionTypeKey);
+          if (!sourceCardId || !targetCardId || !connectionTypeId || !connectionType) {
+            throw new Error(`Blueprint connection ${connection.title} has an unknown reference`);
+          }
+          await client.query(
+            `
+              insert into connections (
+                id, workspace_id, board_id, connection_type_id,
+                source_card_id, target_card_id, source_port_key, target_port_key,
+                type, label, title, description, data, visual_style, status
+              ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb, $15)
+            `,
+            [
+              randomUUID(),
+              workspaceId,
+              board.board_id,
+              connectionTypeId,
+              sourceCardId,
+              targetCardId,
+              connection.sourcePortKey,
+              connection.targetPortKey,
+              connection.type,
+              connection.label,
+              connection.title,
+              connection.description,
+              JSON.stringify(connection.data),
+              JSON.stringify(connection.visualStyle ?? connectionType.defaultVisualStyle),
+              connection.status
+            ]
+          );
+        }
+
+        await client.query("commit");
+        return boardSummaryFromRow(board);
       } catch (error) {
         await client.query("rollback");
         throw error;
