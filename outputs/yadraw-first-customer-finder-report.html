@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>First Customer Finder — Yadraw</title>
+  <style>
+    :root{--bg:#090b0f;--panel:#12161d;--panel2:#191f28;--ink:#f5f2ea;--muted:#9ca6b5;--line:#2b3340;--acid:#d9ff63;--blue:#69b7ff;--orange:#ff8f5a;--cyan:#5ee8d0;--radius:18px;--shadow:0 24px 80px rgba(0,0,0,.38)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.3;background:repeating-linear-gradient(135deg,rgba(255,255,255,.018) 0 1px,transparent 1px 12px);mask-image:linear-gradient(#000,transparent 82%)}a{color:inherit}.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:9;background:var(--acid);color:#111;padding:10px}
+    .shell{width:min(1180px,calc(100% - 40px));margin:auto;position:relative}.top{display:flex;justify-content:space-between;align-items:center;padding:22px 0;border-bottom:1px solid var(--line)}.brand{font-weight:850;display:flex;align-items:center;gap:10px}.brand i{width:12px;height:12px;border-radius:50%;background:var(--acid);box-shadow:0 0 22px var(--acid)}.meta{display:flex;gap:8px;align-items:center}.chip,.stage{border:1px solid var(--line);border-radius:999px;padding:7px 10px;color:var(--muted);font:750 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.07em}button{background:var(--ink);color:#111;border:0;border-radius:999px;padding:9px 14px;font:800 13px inherit;cursor:pointer}button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+    .hero{display:grid;grid-template-columns:1.45fr .55fr;gap:36px;align-items:end;padding:72px 0 42px}.eyebrow{color:var(--acid);font:750 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.11em}h1{font-size:clamp(48px,7vw,92px);line-height:.92;letter-spacing:-.065em;margin:13px 0 24px}.verdict{font-size:clamp(18px,2.1vw,25px);color:#dce1e9;max-width:820px;margin:0}.hero-card{background:var(--acid);color:#10120d;padding:26px;border-radius:var(--radius);box-shadow:var(--shadow);transform:rotate(1deg)}.hero-card span{font:800 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}.hero-card strong{display:block;font-size:64px;line-height:1;letter-spacing:-.08em;margin:15px 0 6px}.hero-card p{margin:0;font-weight:700;font-size:13px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:28px}.stats>div{padding:18px;background:var(--panel)}.stats>div+div{border-left:1px solid var(--line)}.stats span,.prospect-grid span,.signal span,.evidence span,blockquote span{display:block;color:var(--muted);font:700 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.stats strong{font-size:17px}
+    .best{display:grid;grid-template-columns:180px 1fr auto;gap:24px;align-items:center;padding:25px;background:var(--orange);color:#1b0f09;border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 72px}.best-label{font:800 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em}.best h2{font-size:clamp(28px,4vw,46px);letter-spacing:-.045em;line-height:1;margin:0 0 8px}.best p{margin:0}.best strong{font-size:44px}
+    .section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:18px}.section-head h2{font-size:clamp(34px,5vw,62px);line-height:.98;letter-spacing:-.055em;margin:0}.section-head p{color:var(--muted);max-width:470px;margin:0}
+    .prospects{display:grid;gap:16px;margin-bottom:76px}.prospect{background:linear-gradient(135deg,var(--panel),#0f1319);border:1px solid var(--line);border-radius:var(--radius);padding:25px;box-shadow:0 12px 38px rgba(0,0,0,.18)}.prospect-head{display:grid;grid-template-columns:54px 1fr 92px;gap:17px;align-items:start}.rank{font:850 24px ui-monospace,monospace;color:var(--acid);padding-top:8px}.identity h3{font-size:29px;letter-spacing:-.04em;margin:6px 0 10px}.stage{display:inline-block}.stage.hot{color:var(--orange);border-color:rgba(255,143,90,.5)}.stage.warm{color:var(--cyan);border-color:rgba(94,232,208,.45)}.score{--score:0;width:88px;height:88px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle,var(--panel) 58%,transparent 60%),conic-gradient(var(--acid) calc(var(--score)*1%),var(--line) 0)}.score strong{font-size:26px;line-height:1}.score small{color:var(--muted)}
+    .signal{margin:21px 0 12px;padding:16px;background:var(--panel2);border-left:4px solid var(--acid)}.signal p{font-size:17px;margin:0}.prospect-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.prospect-grid>div,.evidence>div{border:1px solid var(--line);border-radius:12px;padding:15px;background:rgba(255,255,255,.018)}.prospect-grid p,.evidence p{margin:0}blockquote{margin:12px 0 0;padding:16px;border:1px dashed rgba(217,255,99,.55);border-radius:12px;color:#eaf6c6}details{margin-top:10px}summary{cursor:pointer;color:var(--acid);font-weight:800;padding:10px 0}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:9px}.evidence a{display:inline-block;color:var(--blue);margin-top:8px;word-break:break-word}.metrics{display:grid;gap:8px;margin-top:14px}.metric{display:grid;grid-template-columns:145px 1fr 40px;gap:12px;align-items:center;font-size:13px}.track{height:8px;background:var(--line);border-radius:8px;overflow:hidden}.track i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--acid))}
+    .patterns{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:76px}.pattern{display:grid;grid-template-columns:42px 1fr auto;gap:15px;align-items:start;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.pattern-num{color:var(--acid);font:800 13px ui-monospace,monospace}.pattern h3{margin:0 0 5px}.pattern p{margin:0;color:var(--muted)}.pattern>strong{font-size:30px;color:var(--acid)}
+    .plan{display:grid;grid-template-columns:.8fr 1.2fr;gap:28px;background:var(--acid);color:#111;padding:29px;border-radius:var(--radius);margin-bottom:30px}.plan h2{font-size:38px;line-height:1;letter-spacing:-.045em;margin:10px 0}.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.plan-grid>div{border:1px solid rgba(0,0,0,.24);border-radius:11px;padding:13px}.plan-grid span{display:block;font:750 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}.plan-grid p{margin:0}.limits{border:1px solid var(--line);border-radius:var(--radius);padding:24px;color:var(--muted);margin-bottom:60px}.limits h2{color:var(--ink);margin-top:0}footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding:22px 0 40px;color:var(--muted);font-size:12px}.reveal{animation:rise .4s ease both}@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+    @media(max-width:820px){.shell{width:min(100% - 24px,1180px)}.hero,.plan{grid-template-columns:1fr}.hero{padding-top:44px}.hero-card{transform:none}.stats{grid-template-columns:1fr 1fr}.stats>div+div{border-left:0;border-top:1px solid var(--line)}.best{grid-template-columns:1fr}.prospect-head{grid-template-columns:38px 1fr}.score{grid-column:1/-1}.prospect-grid,.evidence,.patterns,.plan-grid{grid-template-columns:1fr}.meta .chip{display:none}}
+    @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}@media print{body{background:#fff;color:#111}body:before,.top button{display:none}.shell{width:100%}.prospect,.pattern,.limits{background:#fff;color:#111;break-inside:avoid}.prospect-grid span,.signal span,.evidence span,blockquote span{color:#444}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to report</a>
+  <div class="shell">
+    <header class="top"><div class="brand"><i></i> First Customer Finder</div><div class="meta"><span class="chip">Public signals only</span><button type="button" onclick="window.print()">Print / Save PDF</button></div></header>
+    <main id="main">
+      <section class="hero"><div><span class="eyebrow">Early-customer report · 2026-07-15</span><h1>First Customer Finder — Yadraw</h1><p class="verdict">У Yadraw есть достижимый ранний сегмент: пользователи Miro и Obsidian публично просят именно структурированные поля у визуальных карточек и типизированные отношения между объектами. Однако оптимальный первый оффер — не платная корпоративная замена whiteboard, а ручной design-partner пилот для одного реального процесса или knowledge graph. До outreach нужно исправить публичный вход yadraw.com и подготовить короткое демо: проверка сайта 2026-07-15 привела на недоступную board-страницу, а публичного pricing/buying motion нет.</p></div><aside class="hero-card"><span>Qualified prospects</span><strong>10</strong><p>Potential customers based on public signals.</p></aside></section>
+      <section class="stats"><div><span>Product</span><strong><a href="https://yadraw.com" target="_blank" rel="noreferrer">Yadraw — визуальное рабочее пространство со структурированными карточками и типизированными связями</a></strong></div><div><span>Target customer</span><strong>Индивидуальные process/data/solution architects, технические консультанты и knowledge modelers, которым нужны повторно используемые поля карточек и семантика связей на визуальном холсте</strong></div><div><span>High intent</span><strong>7</strong></div><div><span>Average fit score</span><strong>83/100</strong></div></section>
+      <section class="best"><div class="best-label">Highest-confidence prospect</div><div><h2>Marisa B</h2><p>Сигнал от 2025-10-21, менее года на момент исследования, и запрос относится к активному анализу process map.</p></div><strong>93</strong></section>
+      <section><header class="section-head"><h2>People with a reason<br>to care now.</h2><p>Every primary prospect is tied to a public pain, demand, or timing signal. Open the evidence before considering outreach.</p></header><div class="prospects">
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">01</div>
+        <div class="identity">
+          <span class="eyebrow">Public professional/community profile</span>
+          <h3>Marisa B</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:93" aria-label="Fit score 93 out of 100"><strong>93</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Публично попросила process diagram, где каждый activity box содержит одинаковый набор полей для ответственного, используемых систем и выявленных проблем.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: card types и reusable schema fields Yadraw прямо закрывают требование единообразных данных внутри activity cards; typed connections сохраняют структуру процесса.</p></div>
+        <div><span>Why now</span><p>Сигнал от 2025-10-21, менее года на момент исследования, и запрос относится к активному анализу process map.</p></div>
+        <div><span>Suggested channel</span><p>Вежливый ответ в исходной публичной ветке Miro, только если правила сообщества допускают релевантные beta-инструменты</p></div>
+        <div><span>Caution</span><p>Не утверждать, что Yadraw поддерживает swimlanes или совместную работу в реальном времени; сначала подтвердить, что задача всё ещё актуальна.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Hi Marisa — I saw your question about giving every process activity the same fields for owner, systems, and problems. I’m building Yadraw, a beta visual workspace where card types define reusable fields and connections stay structured. Would you be open to a short design-partner test using one of your process maps? I’d like to learn whether the current field and export model actually fits your analysis workflow.</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: в Miro Community задан прямой вопрос о возможности добавить единые custom data fields к объектам процесса; официальный ответ сообщает, что Miro этого не поддерживает и предлагает sticky notes, comments или tags как workaround.</p></div><div><span>Source</span><p>Miro public community question · 2025-10-21</p><a href="https://community.miro.com/ask-the-community-45/process-flow-with-data-fields-26279?sort=mostLiked" target="_blank" rel="noreferrer">process flow with data fields ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">02</div>
+        <div class="identity">
+          <span class="eyebrow">Public professional/community profile</span>
+          <h3>Gabe-Wunderbloom</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:92" aria-label="Fit score 92 out of 100"><strong>92</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>При создании org chart обнаружил, что существующие поля нельзя адаптировать под описания обязанностей, и прямо написал, что начал искать альтернативные решения.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: Yadraw позволяет определить тип карточки роли с полями responsibilities, owner и другими атрибутами, а связи могут описывать подчинение или взаимодействие.</p></div>
+        <div><span>Why now</span><p>Сигнал от 2026-01-21 сочетает свежесть, конкретный текущий проект и switching intent.</p></div>
+        <div><span>Suggested channel</span><p>Ответ в той же публичной Miro thread после проверки правил сообщества</p></div>
+        <div><span>Caution</span><p>Org-chart automation и real-time collaboration отсутствуют; предлагать только ручной pilot, а не полноценную замену Miro.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Hi Gabe — your note about looking for alternatives after finding the org-chart fields fixed caught my attention. Yadraw is a beta canvas where you define reusable card fields, so roles and responsibilities can be modeled as structured data. It does not yet offer real-time collaboration. Would a short design-partner walkthrough against your org-chart use case be useful?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: комментарий в открытой Miro idea thread описывает пройденный шаблонный workflow, 15 минут поиска способа редактировать custom fields и намерение рассмотреть альтернативу.</p></div><div><span>Source</span><p>Miro public idea comment · 2026-01-21</p><a href="https://community.miro.com/ideas/add-custom-fields-to-a-card-4147?sort=mostRecentFirst" target="_blank" rel="noreferrer">Add custom fields to a card — recent org-chart use case ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">03</div>
+        <div class="identity">
+          <span class="eyebrow">Public knowledge-work practitioner</span>
+          <h3>Querulant</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:88" aria-label="Fit score 88 out of 100"><strong>88</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Подробно описал нерешённую потребность в typed links: отношения должны иметь тип, направление, metadata и фильтроваться в graph view.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: semantic ports, typed connections и data on connections в Yadraw близки к требуемой модели отношений, хотя продукт не является Obsidian plugin.</p></div>
+        <div><span>Why now</span><p>Свежий подробный proposal продолжает многолетнюю открытую тему и указывает, что core-проблема остаётся нерешённой.</p></div>
+        <div><span>Suggested channel</span><p>Публичный ответ в Obsidian Forum с явным раскрытием, что Yadraw — отдельный beta-продукт, а не plugin</p></div>
+        <div><span>Caution</span><p>Не позиционировать как замену Obsidian и не обещать Markdown/frontmatter import, backlinks или Dataview integration.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your typed-links proposal maps closely to a problem Yadraw is exploring: cards have schemas, while connections can carry their own semantic type and data. It is a separate beta workspace rather than an Obsidian plugin or importer. Would you be willing to compare one small typed-link model in Yadraw with the workflow you described and tell me where the model breaks down?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: публичный Obsidian feature proposal от 2025-12-27 приводит конкретные типы связей — contradicts, depends-on, follows — и объясняет, почему plugin workarounds не дают единой архитектуры.</p></div><div><span>Source</span><p>Obsidian public feature request · 2025-12-27</p><a href="https://forum.obsidian.md/t/add-support-for-link-types-link-info-link-metadata/6994/216" target="_blank" rel="noreferrer">Typed links and the case for a unified property architecture ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">04</div>
+        <div class="identity">
+          <span class="eyebrow">Public mapping/diagramming practitioner</span>
+          <h3>MikeC</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:88" aria-label="Fit score 88 out of 100"><strong>88</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Запросил key/value metadata и управляемые custom fields на shapes и lines, включая высоту, материал и последующий export данных.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: Yadraw разделяет semantic data и presentation, поддерживает schema-backed cards, данные связей и JSON export — это почти дословно запрошенная модель.</p></div>
+        <div><span>Why now</span><p>Сигнал свежий и содержит конкретный workflow, пригодный для короткого design-partner теста.</p></div>
+        <div><span>Suggested channel</span><p>Ответ в исходной Miro idea thread, если допустим релевантный внешний beta-инструмент</p></div>
+        <div><span>Caution</span><p>Не обещать CAD/floor-plan primitives или CSV parity; проверить, подходит ли generic card model для его фактических объектов.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Hi Mike — your proposal for key/value metadata on both shapes and lines is close to Yadraw’s core model: card types define reusable fields, connections can hold semantic data, and visual styling stays separate from the exported model. Yadraw is still beta and has no Miro import. Would you test one small process or architecture example and tell me whether the data model is useful enough?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: Miro idea от 2025-11-13 описывает metadata на объектах и линиях для process, engineering и architectural design, а также ожидаемый CSV export и field-name reuse.</p></div><div><span>Source</span><p>Miro public idea · 2025-11-13</p><a href="https://community.miro.com/ideas/custom-information-held-per-shape-line-within-a-board-26611" target="_blank" rel="noreferrer">Custom information held per shape/line within a board ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">05</div>
+        <div class="identity">
+          <span class="eyebrow">Public visual data-modeling practitioner</span>
+          <h3>mog grob</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:84" aria-label="Fit score 84 out of 100"><strong>84</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Запросил общую metadata schema для board elements, link/relate, formulas, rollups и разные relationship rules для разных типов линий.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: reusable card schemas, connection types, user JSON и количественные связи Yadraw делают этого автора особенно релевантным design partner для semantic graph model.</p></div>
+        <div><span>Why now</span><p>Сигнал старше года, но детальность и близость к продуктовой модели высоки; Miro thread остаётся открытой.</p></div>
+        <div><span>Suggested channel</span><p>Публичный ответ в исходной Miro idea thread</p></div>
+        <div><span>Caution</span><p>Формулы, rollups, conditional rules и filtering ещё не являются общим готовым продуктовым слоем; не переобещать.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your proposal for a shared metadata schema and different meanings for different line types is unusually close to Yadraw’s model: reusable card schemas plus typed, data-bearing connections. It is still beta and does not yet provide general formulas, filtering, or automation. Would you be open to testing a small relationship model and identifying which missing capability blocks real use?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: Miro idea от 2025-03-14 формулирует database-like layer поверх canvas и прямо описывает typed relationships между card types.</p></div><div><span>Source</span><p>Miro public idea · 2025-03-14</p><a href="https://community.miro.com/ideas/custom-field-manager-and-robust-application-of-tags-metadata-20612" target="_blank" rel="noreferrer">custom field manager and robust application of tags/metadata ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">06</div>
+        <div class="identity">
+          <span class="eyebrow">Public knowledge-graph practitioner</span>
+          <h3>G_ben</h3>
+          <span class="stage warm">Problem aware</span>
+        </div>
+        <div class="score" style="--score:83" aria-label="Fit score 83 out of 100"><strong>83</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Предложил graph view, где nodes отображаются как property-bearing cards, а edges строятся только по выбранным semantic properties.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: Yadraw уже хранит структурированные поля карточек и явные типизированные связи; это даёт тестируемую альтернативную модель для небольшого curated graph.</p></div>
+        <div><span>Why now</span><p>Запрос свежий и находится в активной публичной дискуссии о соединении database-like views с graph view.</p></div>
+        <div><span>Suggested channel</span><p>Ответ в исходной Obsidian Forum thread с disclosure об отдельном продукте</p></div>
+        <div><span>Caution</span><p>Отсутствуют Obsidian integration, automatic graph generation и advanced filtering; квалифицировать только как исследовательский pilot.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your graph-view idea—cards showing selected properties and edges generated from specific relationship properties—is close to the structured graph model in Yadraw. It is a separate beta canvas, not an Obsidian view, and does not import a vault. Would a small manual recreation of one Base help test whether explicit typed connections are useful or too much work?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: комментарий в Obsidian Forum от 2025-10-06 перечисляет card properties, color by property, property-derived edges и filtering/grouping expectations.</p></div><div><span>Source</span><p>Obsidian public feature-request discussion · 2025-10-06</p><a href="https://forum.obsidian.md/t/base-add-a-graph-view-put-graph-view-in-bases-view-menu/104414" target="_blank" rel="noreferrer">Base: Add a Graph View — property-bearing graph cards ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">07</div>
+        <div class="identity">
+          <span class="eyebrow">Public database/architecture practitioner</span>
+          <h3>appsarchitect</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:80" aria-label="Fit score 80 out of 100"><strong>80</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Оценил несколько ERD tools и не нашёл одного решения с SQL input, управляемыми route lines, field labels/cardinality и notes.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: typed cards, explicit ports, editable connection routes и structured data Yadraw покрывают ручную часть архитектурного моделирования, но не SQL reverse engineering.</p></div>
+        <div><span>Why now</span><p>Reddit отображал пост как опубликованный около семи месяцев назад на момент проверки 2026-07-15; автор активно сравнивал инструменты.</p></div>
+        <div><span>Suggested channel</span><p>Короткий публичный комментарий в Reddit thread, если она не архивирована и self-promotion разрешён</p></div>
+        <div><span>Caution</span><p>Ключевой must-have SQL import отсутствует; сначала задать квалифицирующий вопрос, не предлагать продукт как готовый ERD replacement.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your ERD requirements highlight three things Yadraw can test well—structured fields, explicit ports, and manually controlled relationship routes. It does not yet reverse-engineer SQL or generate cardinality automatically. Would a manual greenfield model still be useful, or are SQL import and generated constraints non-negotiable for your workflow?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: свежий Reddit request перечисляет обязательные и дополнительные требования, а ответы подтверждают разрыв между простыми visualizers и дорогими full-featured tools.</p></div><div><span>Source</span><p>Public Reddit request · Date shown as 7 months ago; checked 2026-07-15</p><a href="https://www.reddit.com/r/Database/comments/1ozxngy/erd_diagramming_tool_with_specific_optionsfeatures/" target="_blank" rel="noreferrer">ERD diagramming tool with specific options/features ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">08</div>
+        <div class="identity">
+          <span class="eyebrow">Public decision-mapping practitioner</span>
+          <h3>Winnie Kau</h3>
+          <span class="stage warm">Problem aware</span>
+        </div>
+        <div class="score" style="--score:76" aria-label="Fit score 76 out of 100"><strong>76</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Использует Miro cards для mindmap/decision tree по triage сложных проблем и хочет customizable cards для более организованного представления идей.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: reusable card types, fields и typed connections Yadraw могут структурировать decision nodes и ветви лучше, чем свободный mindmap.</p></div>
+        <div><span>Why now</span><p>Сигнал старше года, но описывает конкретный ongoing use case; актуальность нужно перепроверить.</p></div>
+        <div><span>Suggested channel</span><p>Ответ в той же публичной Miro thread</p></div>
+        <div><span>Caution</span><p>Не обещать mindmap auto-layout или collaboration; спросить, остаётся ли workflow актуальным.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Hi Winnie — I saw your decision-tree use case for triaging complex problems with richer cards. Yadraw is a beta canvas where reusable card types can hold consistent fields and connections stay explicit. Would you be open to recreating one small triage path and telling me whether the added structure helps or just adds setup work?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: публичный Miro comment от 2025-05-08 описывает активный decision-tree workflow и конкретную пользу расширяемых карточек.</p></div><div><span>Source</span><p>Miro public idea comment · 2025-05-08</p><a href="https://community.miro.com/ideas/add-custom-fields-to-a-card-4147?sort=mostRecentFirst" target="_blank" rel="noreferrer">Add custom fields to a card — decision-tree use case ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">09</div>
+        <div class="identity">
+          <span class="eyebrow">Public roadmap/data-export practitioner</span>
+          <h3>James Ferguson</h3>
+          <span class="stage warm">Problem aware</span>
+        </div>
+        <div class="score" style="--score:76" aria-label="Fit score 76 out of 100"><strong>76</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Описал, что подробные данные приходится складывать в description по шаблону, после чего CSV export требует ручного разделения в Excel, а пользователи ломают заголовки и порядок.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: schema fields и JSON export Yadraw прямо устраняют template-header workaround и сохраняют business data отдельно от visual layout.</p></div>
+        <div><span>Why now</span><p>Сигнал очень точный, но старше двух лет; за это время Miro Marketplace получил сторонние custom-card решения, поэтому актуальность существенно неопределённа.</p></div>
+        <div><span>Suggested channel</span><p>Только осторожный публичный follow-up в существующей thread</p></div>
+        <div><span>Caution</span><p>Высокая вероятность, что потребность уже закрыта; не делать pitch до подтверждения текущего состояния.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your example of structured card details collapsing into one description field—and then needing cleanup in Excel—is close to what Yadraw is designed to avoid with schema-backed cards and JSON export. The post is older, so I first wanted to ask: is this still an active roadmap workflow, or did another Miro app solve it?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: публичный Miro comment от 2024-04-26 приводит регулярный roadmap workflow и конкретную стоимость неструктурированных полей при export.</p></div><div><span>Source</span><p>Miro public idea comment · 2024-04-26</p><a href="https://community.miro.com/ideas/add-custom-fields-to-a-card-4147?sort=mostRecentFirst" target="_blank" rel="noreferrer">Add custom fields to a card — structured export use case ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:20%"></i></div><b>1/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">10</div>
+        <div class="identity">
+          <span class="eyebrow">Public database-design helper</span>
+          <h3>4MyRandomQuestions</h3>
+          <span class="stage hot">High intent</span>
+        </div>
+        <div class="score" style="--score:67" aria-label="Fit score 67 out of 100"><strong>67</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Искал промежуточный инструмент между text-first DBML и generic Visio/Lucid: drag-and-drop tables, редактируемые fields и связи для перевода словесной модели в дизайн базы.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Inference: Yadraw может поддержать ручное domain/schema modeling через typed cards and ports, но пока не является специализированным database designer и не генерирует DDL.</p></div>
+        <div><span>Why now</span><p>Reddit показывал дату только как около одного года назад; сигнал допустим, но freshness ниже и требуется повторная квалификация.</p></div>
+        <div><span>Suggested channel</span><p>Публичный комментарий в исходной Reddit thread, если она открыта и правила допускают</p></div>
+        <div><span>Caution</span><p>Пограничный fit и неясная свежесть; квалифицировать одним вопросом и не включать в первую outreach-тройку.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Your search for something between DBML and generic Visio is close to a workflow Yadraw can test: drag-and-drop typed cards with editable fields and explicit ports. It does not generate SQL or enforce database constraints. Would the visual translation/design phase alone still be useful, or is DDL output essential?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Observed: публичный Reddit request описывает конкретный проект для нетехнического участника и явное намерение выбрать другой GUI tool.</p></div><div><span>Source</span><p>Public Reddit request · Exact date unavailable; Reddit showed 1 year ago when checked 2026-07-15</p><a href="https://www.reddit.com/r/DatabaseHelp/comments/1k0ld3h/db_visual_drag_drop_design_tools_preferably_free/" target="_blank" rel="noreferrer">DB (visual, drag &amp; drop) design tools, preferably free? ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:40%"></i></div><b>2/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div></div>
+      </details>
+    </article></div></section>
+      <section><header class="section-head"><h2>Signals that repeat.</h2><p>Patterns across prospects reveal the strongest positioning, workflow, and outreach angles.</p></header><div class="patterns">
+    <article class="pattern reveal"><span class="pattern-num">01</span><div><h3>Карточка должна быть записью, а не просто прямоугольником</h3><p>Пользователи повторяют один запрос: reusable fields, обязательные значения и единая структура для process steps, roles, roadmap items, decision nodes и diagram objects. Основной конкурентный workaround — текстовые шаблоны, tags и comments, которые легко ломаются.</p></div><strong>7×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">02</span><div><h3>Связям нужна собственная семантика</h3><p>Typed links, line metadata, labels, direction и выбор relationship properties появляются в Miro, Obsidian и ERD-запросах. Это сильнее отличает Yadraw от generic whiteboards, чем просто infinite canvas.</p></div><strong>5×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">03</span><div><h3>Рынок разорван между свободным рисунком и строгими данными</h3><p>Люди сравнивают Miro/Visio/Lucid с DBML, plugins, spreadsheets или дорогими специализированными tools. Early wedge Yadraw — ручное моделирование со структурой, не автоматический импорт или workflow execution.</p></div><strong>6×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">04</span><div><h3>Export обнаруживает цену неструктурированных данных</h3><p>Когда diagram details нужно выгрузить или переиспользовать, description blobs и tags превращаются в ручную очистку. JSON export и separation of content/presentation стоит показать в первом demo.</p></div><strong>3×</strong></article></div></section>
+      <section class="plan"><div><span class="eyebrow" style="color:#111">Seven-day manual plan</span><h2>Предлагать не замену Miro/Obsidian, а бесплатный design-partner тест: вручную воспроизвести один небольшой process map или typed-link graph и проверить, полезна ли структура карточек и связей.</h2></div><div class="plan-grid"><div><span>First step</span><p>День 1–2: исправить публичный вход yadraw.com и подготовить 90-секундное демо на process-map примере. Затем вручную обратиться только к Marisa B, Gabe-Wunderbloom и Querulant через исходный публичный контекст, соблюдая правила площадки.</p></div><div><span>Follow-up</span><p>День 3–5: после подтверждения боли создать один tailored board, провести 20-минутный разговор и записать обязательные поля, типы связей, export expectations и блокирующие отсутствующие функции. День 6–7: предложить второй тест только тем, кто реально открыл workspace.</p></div><div><span>Success signal</span><p>За семь дней: 3 problem interviews, 2 созданных test workspaces, 1 design partner, который возвращается к своей доске минимум дважды; никаких массовых сообщений или автоматической рассылки.</p></div><div><span>Research scope</span><p>Standard mode: публичные англоязычные источники; преимущественно сигналы за март 2025 — январь 2026, плюс два более старых высокорелевантных сигнала с явной пометкой о давности; проверено 2026-07-15</p></div></div></section>
+      <section class="limits"><h2>Use this shortlist responsibly</h2><ul><li>Все записи — потенциальные клиенты на основе публичных сигналов, а не подтверждённые покупатели или пользователи Yadraw.</li><li>Публичная проверка https://yadraw.com 2026-07-15 привела на недоступную board-страницу вместо product/onboarding page; outreach до исправления создаст плохое первое впечатление.</li><li>У Yadraw нет публичной цены или подтверждённого buying motion, поэтому исследование оценивает problem/design-partner fit, а не готовность платить.</li><li>В текущем beta отсутствуют real-time collaboration, invitations, Jira/Azure DevOps sync, SQL reverse engineering, general workflow execution и advanced graph filtering; эти ограничения критичны для части shortlist.</li><li>Сигналы сконцентрированы в competitor communities. Любой публичный ответ должен быть прозрачным, немассовым и соответствовать правилам self-promotion конкретной площадки.</li><li>Два сигнала старше 18 месяцев и явно помечены как stale; перед любым pitch нужно спросить, остаётся ли проблема нерешённой.</li><li>Исследование не использовало private profiles, email/phone enrichment, data brokers или чувствительные персональные данные; сообщения не отправлялись.</li></ul></section>
+    </main>
+    <footer><span>Generated by $first-customer-finder</span><span>Outreach is never sent automatically.</span></footer>
+  </div>
+</body>
+</html>
