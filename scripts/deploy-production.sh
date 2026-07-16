@@ -23,7 +23,11 @@ rollback() {
 trap rollback ERR
 
 git fetch origin main
-git reset --hard origin/main
+if ! git reset --hard origin/main; then
+  echo "Production checkout ownership is inconsistent; repairing it before retrying"
+  sudo -n chown -R "$(id -u):$(id -g)" /opt/yadraw
+  git reset --hard origin/main
+fi
 deployment_started=1
 
 if ! grep -q '^INTERNAL_API_SECRET=' .env; then
