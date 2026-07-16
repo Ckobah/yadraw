@@ -1617,6 +1617,16 @@ export function V2BoardCanvas({
     setConnectionCreateError(null);
   }, [selectOnlyCard]);
 
+  const handleStartInlineEditor = useCallback((cardId: string) => {
+    setSelectedCardId(cardId);
+    setInspectedCardId(null);
+    setSelectedConnectionId(null);
+    setVisualEditingCardId(null);
+    setVisualEditingConnectionId(null);
+    setCardActionError(null);
+    setConnectionCreateError(null);
+  }, []);
+
   useEffect(() => {
     if (cardInspectorRequest <= 0) return;
     const nonContainerCards = nodesRef.current.filter(
@@ -2660,8 +2670,9 @@ export function V2BoardCanvas({
             onMoveCardLayer: handleMoveCardLayer,
             onFitContainerToContent: handleFitContainerToContent,
             onResizeCard: handleResizeCard,
+            onUpdateCardBasics: handleUpdateCardBasics,
             onUpdateVisualStyle: handleUpdateVisualStyle,
-            onCloseVisualEditor: () => setVisualEditingCardId(null),
+            onStartInlineEditor: handleStartInlineEditor,
             onConnectorSlotDragStart: handleConnectorSlotDragStart,
             onConnectorSlotDragEnd: handleConnectorSlotDragEnd,
             onLoadAttachments: loadCardAttachments,
@@ -2693,7 +2704,9 @@ export function V2BoardCanvas({
     handleMoveCardLayer,
     handleFitContainerToContent,
     handleResizeCard,
+    handleUpdateCardBasics,
     handleUpdateVisualStyle,
+    handleStartInlineEditor,
     handleConnectorSlotDragStart,
     handleConnectorSlotDragEnd,
     loadCardAttachments,
@@ -3613,6 +3626,7 @@ export function V2BoardCanvas({
         shortcutsBlocked ||
         commandRunningRef.current ||
         isEditableShortcutTarget(event.target) ||
+        document.querySelector(".v2CardInlineEditor") ||
         document.querySelector("[role='dialog'], [aria-modal='true']")
       ) {
         return;

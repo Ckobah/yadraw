@@ -8,12 +8,14 @@ import {
   type NodeProps
 } from "@xyflow/react";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -53,6 +55,8 @@ export type V2CardLayerAction =
   | "bringToFront"
   | "sendToBack";
 
+type V2InlineCardField = "title" | "description";
+
 export type V2CardNodeData = {
   card: V2Card;
   cardType: V2CardType;
@@ -82,8 +86,12 @@ export type V2CardNodeData = {
   ) => Promise<void> | void;
   onFitContainerToContent?: (containerId: string) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
+  onUpdateCardBasics?: (
+    cardId: string,
+    input: { title?: string; description?: string | null }
+  ) => Promise<void>;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
-  onCloseVisualEditor?: () => void;
+  onStartInlineEditor?: (cardId: string) => void;
   onConnectorSlotDragStart?: () => void;
   onConnectorSlotDragEnd?: (moved: boolean) => void;
   onLoadAttachments?: (cardId: string) => Promise<V2CardAttachment[]>;
@@ -583,6 +591,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   const subtitleRef = useRef<HTMLSpanElement>(null);
+  const inlineTitleInputRef = useRef<HTMLInputElement>(null);
+  const inlineDescriptionInputRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const attachmentIndicatorRef = useRef<HTMLDivElement>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
@@ -626,6 +636,18 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     isContainer && (card.title === "Box" || card.title === "Sticky note" || card.title === "Frame")
       ? ""
       : card.title;
+  const canInlineEdit = !card.libraryEntryId && Boolean(data.onUpdateCardBasics);
+  const [inlineField, setInlineField] = useState<V2InlineCardField | null>(null);
+  const [inlineDraft, setInlineDraft] = useState("");
+  const [inlineEditError, setInlineEditError] = useState<string | null>(null);
+  const inlineFieldRef = useRef<V2InlineCardField | null>(null);
+  const inlineDraftRef = useRef("");
+  const inlineSavedValueRef = useRef<{
+    field: V2InlineCardField;
+    value: string;
+  } | null>(null);
+  const inlineSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useRef(true);
   const visualStyle = card.visualStyle ?? {};
   const containerFillOpacity = Math.min(1, Math.max(0.1, visualStyle.fillOpacity ?? 0.72));
   const isLocked = visualStyle.locked === true;
@@ -694,6 +716,88 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     ? "var(--v2-card-accent)"
     : "var(--yd-border-default)";
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const queueInlineSave = useCallback(
+    (field: V2InlineCardField, rawValue: string): Promise<boolean> => {
+      const value = field === "title" ? rawValue.trim() : rawValue;
+      const task = inlineSaveQueueRef.current.then(async () => {
+        if (field === "title" && !value) {
+          if (mountedRef.current && inlineFieldRef.current === field) {
+            setInlineEditError("Title cannot be empty");
+          }
+          return false;
+        }
+        if (
+          inlineSavedValueRef.current?.field === field &&
+          inlineSavedValueRef.current.value === value
+        ) {
+          return true;
+        }
+        if (!data.onUpdateCardBasics || card.libraryEntryId) return false;
+
+        try {
+          await data.onUpdateCardBasics(
+            card.id,
+            field === "title" ? { title: value } : { description: value }
+          );
+          if (inlineSavedValueRef.current?.field === field) {
+            inlineSavedValueRef.current = { field, value };
+          }
+          if (mountedRef.current && inlineFieldRef.current === field) {
+            setInlineEditError(null);
+          }
+          return true;
+        } catch {
+          if (mountedRef.current && inlineFieldRef.current === field) {
+            setInlineEditError("Could not save changes");
+          }
+          return false;
+        }
+      });
+      inlineSaveQueueRef.current = task.then(
+        () => undefined,
+        () => undefined
+      );
+      return task;
+    },
+    [card.id, card.libraryEntryId, data.onUpdateCardBasics]
+  );
+
+  useEffect(() => {
+    if (!inlineField) return;
+    const value = inlineField === "title" ? inlineDraft.trim() : inlineDraft;
+    if (
+      (inlineField === "title" && !value) ||
+      (inlineSavedValueRef.current?.field === inlineField &&
+        inlineSavedValueRef.current.value === value)
+    ) {
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      void queueInlineSave(inlineField, inlineDraft);
+    }, 600);
+    return () => window.clearTimeout(timeout);
+  }, [inlineDraft, inlineField, queueInlineSave]);
+
+  useLayoutEffect(() => {
+    if (inlineField === "title") {
+      inlineTitleInputRef.current?.focus();
+      inlineTitleInputRef.current?.select();
+      return;
+    }
+    if (inlineField === "description") {
+      const editor = inlineDescriptionInputRef.current;
+      editor?.focus();
+      editor?.setSelectionRange(editor.value.length, editor.value.length);
+    }
+  }, [inlineField]);
+
   useLayoutEffect(() => {
     function updateVisibleRows() {
       if (!bodyRef.current || dataPreviewRows.length === 0) {
@@ -702,8 +806,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       }
 
       const bodyHeight = bodyRef.current.clientHeight;
-      const titleHeight = titleRef.current?.offsetHeight ?? 0;
-      const subtitleHeight = subtitleRef.current?.offsetHeight ?? 0;
+      const titleHeight =
+        titleRef.current?.offsetHeight ?? inlineTitleInputRef.current?.offsetHeight ?? 0;
+      const subtitleHeight =
+        subtitleRef.current?.offsetHeight ??
+        inlineDescriptionInputRef.current?.offsetHeight ??
+        0;
       const bodyStyle = window.getComputedStyle(bodyRef.current);
       const bodyGap = Number.parseFloat(bodyStyle.rowGap || bodyStyle.gap || "0") || 0;
       const reservedHeight =
@@ -724,13 +832,19 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     const observer = new ResizeObserver(updateVisibleRows);
     if (bodyRef.current) observer.observe(bodyRef.current);
     if (titleRef.current) observer.observe(titleRef.current);
+    if (inlineTitleInputRef.current) observer.observe(inlineTitleInputRef.current);
     if (subtitleRef.current) observer.observe(subtitleRef.current);
+    if (inlineDescriptionInputRef.current) {
+      observer.observe(inlineDescriptionInputRef.current);
+    }
     return () => observer.disconnect();
   }, [
     card.size.height,
     card.size.width,
     card.title,
     card.description,
+    inlineDraft,
+    inlineField,
     dataPreviewRows,
     visualStyle.fontFamily,
     visualStyle.fontWeight,
@@ -963,6 +1077,78 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
     event.preventDefault();
     event.stopPropagation();
+  }
+
+  function startInlineEdit(
+    event: ReactMouseEvent<HTMLElement>,
+    field: V2InlineCardField
+  ) {
+    if (!canInlineEdit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    data.onStartInlineEditor?.(card.id);
+    const value = field === "title" ? card.title : card.description;
+    inlineFieldRef.current = field;
+    inlineDraftRef.current = value;
+    inlineSavedValueRef.current = { field, value };
+    setInlineField(field);
+    setInlineDraft(value);
+    setInlineEditError(null);
+  }
+
+  function updateInlineDraft(value: string) {
+    inlineDraftRef.current = value;
+    setInlineDraft(value);
+    setInlineEditError(null);
+  }
+
+  function closeInlineEdit() {
+    inlineFieldRef.current = null;
+    setInlineField(null);
+    setInlineEditError(null);
+  }
+
+  async function finishInlineEdit() {
+    const field = inlineFieldRef.current;
+    if (!field) return;
+    const draft = inlineDraftRef.current;
+    const saved = await queueInlineSave(field, draft);
+    if (
+      saved &&
+      inlineFieldRef.current === field &&
+      inlineDraftRef.current === draft
+    ) {
+      closeInlineEdit();
+    }
+  }
+
+  function cancelInlineEdit() {
+    const saved = inlineSavedValueRef.current;
+    if (saved && inlineFieldRef.current === saved.field) {
+      inlineDraftRef.current = saved.value;
+      setInlineDraft(saved.value);
+    }
+    closeInlineEdit();
+  }
+
+  function handleInlineEditorKeyDown(
+    event: ReactKeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    field: V2InlineCardField
+  ) {
+    event.stopPropagation();
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelInlineEdit();
+      return;
+    }
+    if (
+      (field === "title" && event.key === "Enter") ||
+      (field === "description" && event.key === "Enter" && (event.ctrlKey || event.metaKey))
+    ) {
+      event.preventDefault();
+      void finishInlineEdit();
+    }
   }
 
   useEffect(() => {
@@ -1465,22 +1651,80 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           minHeight: 0,
         }}
       >
-        {cardDisplayTitle ? (
+        {inlineField === "title" ? (
+          <input
+            ref={inlineTitleInputRef}
+            className="v2CardInlineEditor v2CardInlineTitleEditor nodrag nopan nowheel"
+            aria-label="Card title"
+            value={inlineDraft}
+            maxLength={240}
+            style={textStyle}
+            onChange={(event) => updateInlineDraft(event.target.value)}
+            onBlur={() => void finishInlineEdit()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleInlineEditorKeyDown(event, "title")}
+          />
+        ) : cardDisplayTitle ? (
           <span
             ref={titleRef}
-            className="v2CardTitle"
+            className={`v2CardTitle${canInlineEdit ? " v2CardInlineEditableText" : ""}`}
             style={textStyle}
+            title={card.libraryEntryId ? "Edit this content in the card library" : undefined}
+            onDoubleClick={canInlineEdit ? (event) => startInlineEdit(event, "title") : undefined}
           >
             {cardDisplayTitle}
           </span>
+        ) : selected && isContainer && canInlineEdit ? (
+          <span
+            ref={titleRef}
+            className="v2CardTitle v2CardInlinePlaceholder v2CardInlineEditableText"
+            onDoubleClick={(event) => startInlineEdit(event, "title")}
+          >
+            Double-click to add title
+          </span>
         ) : null}
-        {cardSummary ? (
+        {inlineField === "description" ? (
+          <textarea
+            ref={inlineDescriptionInputRef}
+            className="v2CardInlineEditor v2CardInlineDescriptionEditor nodrag nopan nowheel"
+            aria-label="Card description"
+            value={inlineDraft}
+            maxLength={10000}
+            style={textStyle}
+            rows={3}
+            onChange={(event) => updateInlineDraft(event.target.value)}
+            onBlur={() => void finishInlineEdit()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => handleInlineEditorKeyDown(event, "description")}
+          />
+        ) : cardSummary ? (
           <span
             ref={subtitleRef}
-            className="v2CardSubtitle"
+            className={`v2CardSubtitle${canInlineEdit ? " v2CardInlineEditableText" : ""}`}
             style={textStyle}
+            title={card.libraryEntryId ? "Edit this content in the card library" : undefined}
+            onDoubleClick={
+              canInlineEdit ? (event) => startInlineEdit(event, "description") : undefined
+            }
           >
             {cardSummary}
+          </span>
+        ) : selected && canInlineEdit ? (
+          <span
+            ref={subtitleRef}
+            className="v2CardSubtitle v2CardInlinePlaceholder v2CardInlineEditableText"
+            onDoubleClick={(event) => startInlineEdit(event, "description")}
+          >
+            Double-click to add description
+          </span>
+        ) : null}
+        {inlineEditError ? (
+          <span className="v2CardInlineEditError" role="alert">
+            {inlineEditError}
           </span>
         ) : null}
         {!isContainer && visibleDataPreviewRows.length > 0 ? (
