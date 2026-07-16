@@ -198,6 +198,40 @@ describe("v2 card API", () => {
     await server.close();
   });
 
+  it("uses variant-specific default container colors", async () => {
+    const { server, seed } = createCardServer();
+
+    const stickyResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/cards`,
+      payload: { container: { variant: "sticky" } }
+    });
+    expect(stickyResponse.statusCode).toBe(201);
+    expect(stickyResponse.json()).toMatchObject({
+      visualStyle: {
+        containerVariant: "sticky",
+        containerTheme: "yellow",
+        fillColor: "#fff7c2"
+      }
+    });
+
+    const frameResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/cards`,
+      payload: { container: { variant: "frame" } }
+    });
+    expect(frameResponse.statusCode).toBe(201);
+    expect(frameResponse.json()).toMatchObject({
+      visualStyle: {
+        containerVariant: "frame",
+        containerTheme: "white",
+        fillColor: "#ffffff"
+      }
+    });
+
+    await server.close();
+  });
+
   it("rejects unknown boards", async () => {
     const { server, seed } = createCardServer();
 

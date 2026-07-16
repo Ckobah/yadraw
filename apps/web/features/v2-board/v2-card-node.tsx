@@ -17,7 +17,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Frame, Lock, MoreHorizontal, Paperclip, Pin, Plus, StickyNote, X } from "lucide-react";
+import { Lock, MoreHorizontal, Paperclip, Pin, Plus, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -594,11 +594,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const isContainer = isV2ContainerCard(card, cardType);
   const containerVariant = getV2ContainerVariant(card);
-  const CardTypeIcon = isContainer
-    ? containerVariant === "frame"
-      ? Frame
-      : StickyNote
-    : getV2CardTypeIcon(cardType);
+  const CardTypeIcon = getV2CardTypeIcon(cardType);
   const storedDataPreviewRows = useMemo(
     () => buildCardDataPreviewRows(card, cardType),
     [card, cardType]
@@ -630,6 +626,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   );
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
   const cardSummary = isContainer ? card.description.trim() : getCardSummary(card);
+  const cardDisplayTitle =
+    isContainer && (card.title === "Sticky note" || card.title === "Frame")
+      ? ""
+      : card.title;
   const visualStyle = card.visualStyle ?? {};
   const isLocked = visualStyle.locked === true;
   const connectorSlots = buildV2ConnectorSlots({
@@ -695,9 +695,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   };
   const cardBorderColor = selected
     ? "var(--v2-card-accent)"
-    : isContainer
-      ? visualStyle.borderColor ?? "var(--yd-border-default)"
-      : "var(--yd-border-default)";
+    : "var(--yd-border-default)";
 
   useLayoutEffect(() => {
     function updateVisibleRows() {
@@ -1040,21 +1038,27 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           ? ` v2ContainerNode v2ContainerNode${containerVariant === "frame" ? "Frame" : "Sticky"}`
           : ""
       }${data.isContainerDropTarget ? " v2ContainerNodeDropTarget" : ""}${
+        data.isVisualEditing ? " v2CardNodeVisualEditing" : ""
+      }${
+        selected ? " v2CardNodeSelected" : ""
+      }${
         isLocked ? " v2CardNodeLocked nopan" : ""
       }`}
       onDoubleClick={handleCardDoubleClick}
       style={{
         display: "flex",
         flexDirection: "column",
-        borderColor: cardBorderColor,
+        borderColor: isContainer ? "transparent" : cardBorderColor,
         backgroundColor: isContainer
-          ? containerVariant === "frame"
-            ? `color-mix(in srgb, ${visualStyle.fillColor ?? "#fff7c2"} 32%, transparent)`
-            : visualStyle.fillColor
+          ? visualStyle.fillColor ?? (containerVariant === "frame" ? "#ffffff" : "#fff7c2")
           : undefined,
-        boxShadow: selected
-          ? "0 0 0 3px var(--v2-card-accent-soft), var(--v2-card-shadow)"
-          : "var(--v2-card-shadow)",
+        boxShadow: isContainer
+          ? selected
+            ? "0 0 0 2px color-mix(in srgb, var(--v2-card-accent) 72%, transparent)"
+            : "var(--v2-card-shadow)"
+          : selected
+            ? "0 0 0 3px var(--v2-card-accent-soft), var(--v2-card-shadow)"
+            : "var(--v2-card-shadow)",
         width: "100%",
         height: "100%",
         ["--v2-card-accent" as string]: accentColor,
@@ -1239,12 +1243,14 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
 
       {/* Compact header (fixed top) */}
       <div className="v2CardHeader">
-        <span className="v2CardTypeIcon" aria-hidden="true">
-          <CardTypeIcon size={17} strokeWidth={2.1} />
-        </span>
-        <span className="v2CardTypeLabel">
-          {isContainer ? (containerVariant === "frame" ? "Frame" : "Sticky note") : cardType.name}
-        </span>
+        {!isContainer ? (
+          <>
+            <span className="v2CardTypeIcon" aria-hidden="true">
+              <CardTypeIcon size={17} strokeWidth={2.1} />
+            </span>
+            <span className="v2CardTypeLabel">{cardType.name}</span>
+          </>
+        ) : null}
         {card.containerId ? (
           <span
             className="v2ContainerPinnedIndicator nodrag nopan"
@@ -1252,15 +1258,6 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
             aria-label={`Attached to ${data.attachedContainerTitle ?? "container"}`}
           >
             <Pin size={12} strokeWidth={2.4} />
-          </span>
-        ) : null}
-        {isContainer ? (
-          <span
-            className="v2ContainerCountIndicator nodrag nopan"
-            title={`${data.attachedCardCount ?? 0} attached · ${data.insideCardCount ?? 0} available inside`}
-          >
-            <Pin size={11} strokeWidth={2.3} />
-            {data.attachedCardCount ?? 0}
           </span>
         ) : null}
         {isLocked ? (
@@ -1493,13 +1490,15 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           minHeight: 0,
         }}
       >
-        <span
-          ref={titleRef}
-          className="v2CardTitle"
-          style={textStyle}
-        >
-          {card.title}
-        </span>
+        {cardDisplayTitle ? (
+          <span
+            ref={titleRef}
+            className="v2CardTitle"
+            style={textStyle}
+          >
+            {cardDisplayTitle}
+          </span>
+        ) : null}
         {cardSummary ? (
           <span
             ref={subtitleRef}

@@ -26,7 +26,19 @@ export function V2ContainerSettings({ card, saveStatus, onUpdateVisualStyle }: P
 
   function updateVariant(nextVariant: V2ContainerVariant) {
     if (nextVariant === variant) return;
-    void onUpdateVisualStyle(card.id, { containerVariant: nextVariant }).catch(() => {});
+    const nextTheme =
+      nextVariant === "frame" && theme === "yellow"
+        ? "white"
+        : nextVariant === "sticky" && theme === "white"
+          ? "yellow"
+          : theme;
+    const appearance = V2_CONTAINER_THEMES[nextTheme];
+    void onUpdateVisualStyle(card.id, {
+      containerVariant: nextVariant,
+      containerTheme: nextTheme,
+      fillColor: appearance.fillColor,
+      borderColor: appearance.borderColor,
+    }).catch(() => {});
   }
 
   function updateTheme(nextTheme: V2ContainerTheme) {

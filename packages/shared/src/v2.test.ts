@@ -697,6 +697,11 @@ describe("v2 API contracts", () => {
       title: "Planning frame"
     });
     expect(
+      v2CreateCardBodySchema.parse({
+        container: { variant: "frame", theme: "white" }
+      })
+    ).toMatchObject({ container: { variant: "frame", theme: "white" } });
+    expect(
       v2UpdateBoardLayoutBodySchema.parse({
         cards: [{ id: cardId, containerId: targetCardId }]
       })

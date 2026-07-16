@@ -2276,13 +2276,16 @@ button:disabled {
 
 .v2ContainerPlacementPreview {
   --v2-create-accent: #b79620;
-  background: rgba(255, 247, 194, 0.76);
+  border: 0;
+  border-radius: 0;
+  background: rgba(255, 247, 194, 0.88);
+  box-shadow: 0 4px 14px rgba(62, 53, 18, 0.12);
 }
 
 .v2ContainerPlacementPreviewFrame {
-  border-width: 2px;
-  border-style: dashed;
-  background: rgba(255, 247, 194, 0.34);
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 3px 14px rgba(16, 24, 40, 0.08);
 }
 
 /* V2 authentication and personal dashboard */
@@ -4101,17 +4104,43 @@ button:disabled {
 }
 
 .v2ContainerNode {
-  --v2-card-shadow: 0 10px 26px rgba(62, 53, 18, 0.12);
-  border-width: 2px;
+  --v2-card-shadow: 0 4px 14px rgba(62, 53, 18, 0.12);
+  border: 0 !important;
+  border-radius: 0;
 }
 
 .v2ContainerNode .v2CardHeader {
-  background: color-mix(in srgb, var(--v2-card-accent-soft) 18%, rgba(255, 255, 255, 0.48));
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 30;
+  min-height: 28px;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.react-flow__node:hover .v2ContainerNode .v2CardHeader,
+.react-flow__node.selected .v2ContainerNode .v2CardHeader,
+.v2ContainerNode.v2CardNodeSelected .v2CardHeader,
+.v2ContainerNode .v2CardHeader:focus-within {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .v2ContainerNode .v2CardBody {
   align-content: start;
   background: transparent;
+  padding: 18px;
+}
+
+.v2ContainerNode .v2CardTitle {
+  font-size: 16px;
+  line-height: 1.3;
+  white-space: normal;
 }
 
 .v2ContainerNode .v2CardSubtitle {
@@ -4123,20 +4152,17 @@ button:disabled {
 }
 
 .v2ContainerNodeFrame {
-  --v2-card-shadow: 0 8px 22px rgba(62, 53, 18, 0.08);
-  border-style: solid;
-  background: color-mix(in srgb, var(--yd-surface-card, #fff) 34%, transparent);
+  --v2-card-shadow: 0 3px 14px rgba(16, 24, 40, 0.08);
 }
 
 .v2ContainerNodeDropTarget {
-  border-color: #8e7416 !important;
   box-shadow: 0 0 0 5px rgba(183, 154, 40, 0.2), 0 16px 38px rgba(62, 53, 18, 0.18) !important;
 }
 
 .v2ContainerNodeDropTarget::after {
   content: "Release to link card";
   position: absolute;
-  top: 52px;
+  top: 12px;
   left: 50%;
   z-index: 5;
   transform: translateX(-50%);
@@ -4912,6 +4938,24 @@ button:disabled {
 
 .v2CardHandleSideBottom {
   bottom: -10px !important;
+}
+
+.v2ContainerNode .v2CardHandle,
+.v2ContainerNode .v2ConnectorSlotLabel {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.react-flow__node:hover .v2ContainerNode .v2CardHandle,
+.v2ContainerNode.v2CardNodeVisualEditing .v2CardHandle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.react-flow__node:hover .v2ContainerNode .v2ConnectorSlotLabel,
+.v2ContainerNode.v2CardNodeVisualEditing .v2ConnectorSlotLabel {
+  opacity: 1;
 }
 
 /* ── V2 card inspector ─────────────────── */

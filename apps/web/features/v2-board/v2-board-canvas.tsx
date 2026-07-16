@@ -2084,7 +2084,7 @@ export function V2BoardCanvas({
       setConnectionCreateError(null);
       try {
         const created = await createV2Card(board.id, {
-          container: { variant, theme: "yellow" },
+          container: { variant, theme: variant === "frame" ? "white" : "yellow" },
           position,
         });
         setNodes((current) => [
@@ -2129,7 +2129,9 @@ export function V2BoardCanvas({
               ? {
                   container: {
                     variant: containerVariant,
-                    theme: card.visualStyle.containerTheme ?? "yellow",
+                    theme:
+                      card.visualStyle.containerTheme ??
+                      (containerVariant === "frame" ? "white" : "yellow"),
                   },
                 }
               : { cardTypeId: card.cardTypeId }),

@@ -59,7 +59,14 @@ export const v2ConnectorSlotSchema = z.object({
 
 export const v2CardTypeKindSchema = z.enum(["entity", "container"]);
 export const v2ContainerVariantSchema = z.enum(["sticky", "frame"]);
-export const v2ContainerThemeSchema = z.enum(["yellow", "blue", "green", "pink", "gray"]);
+export const v2ContainerThemeSchema = z.enum([
+  "yellow",
+  "white",
+  "blue",
+  "green",
+  "pink",
+  "gray"
+]);
 
 export const v2CardVisualStyleSchema = z.object({
   accentKey: z.string().trim().min(1).max(40).optional(),

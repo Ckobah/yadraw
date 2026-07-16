@@ -498,17 +498,13 @@ function ContainerPlacementPreview({
   y: number;
   saving: boolean;
 }) {
-  const Icon = variant === "frame" ? Frame : StickyNote;
   const size = V2_CONTAINER_SIZES[variant];
   return (
     <div
       className={`v2CardPlacementPreview v2ContainerPlacementPreview v2ContainerPlacementPreview${variant === "frame" ? "Frame" : "Sticky"}${saving ? " v2CardPlacementPreviewSaving" : ""}`}
       style={{ left: x, top: y, width: size.width, height: size.height }}
       aria-hidden="true"
-    >
-      <div><Icon size={16} /><strong>{variant === "frame" ? "Frame" : "Sticky note"}</strong></div>
-      <span>Click the canvas to place</span>
-    </div>
+    />
   );
 }
 

@@ -87,6 +87,7 @@ const CONTAINER_CARD_TYPE_KEY = "yadraw_system_container";
 
 const CONTAINER_THEMES = {
   yellow: { fillColor: "#fff7c2", borderColor: "#e4c94f" },
+  white: { fillColor: "#ffffff", borderColor: "#d0d5dd" },
   blue: { fillColor: "#e7f1ff", borderColor: "#78a9e6" },
   green: { fillColor: "#e7f7ea", borderColor: "#78b987" },
   pink: { fillColor: "#fdebf3", borderColor: "#d98cac" },
@@ -1621,7 +1622,9 @@ export function createV2BoardService(
       }
 
       try {
-        const containerTheme = input.container?.theme ?? "yellow";
+        const containerTheme =
+          input.container?.theme ??
+          (input.container?.variant === "frame" ? "white" : "yellow");
         const containerAppearance = CONTAINER_THEMES[containerTheme];
         return await repository.createCard({
           workspaceId: board.workspaceId,

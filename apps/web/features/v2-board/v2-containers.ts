@@ -18,6 +18,7 @@ export const V2_CONTAINER_THEMES: Record<
   { label: string; fillColor: string; borderColor: string }
 > = {
   yellow: { label: "Yellow", fillColor: "#fff7c2", borderColor: "#e4c94f" },
+  white: { label: "White", fillColor: "#ffffff", borderColor: "#d0d5dd" },
   blue: { label: "Blue", fillColor: "#e7f1ff", borderColor: "#78a9e6" },
   green: { label: "Green", fillColor: "#e7f7ea", borderColor: "#78b987" },
   pink: { label: "Pink", fillColor: "#fdebf3", borderColor: "#d98cac" },
@@ -40,13 +41,16 @@ export function getV2ContainerVariant(card: V2Card): V2ContainerVariant {
 }
 
 export function getV2ContainerTheme(card: V2Card): V2ContainerTheme {
-  return card.visualStyle.containerTheme ?? "yellow";
+  return (
+    card.visualStyle.containerTheme ??
+    (getV2ContainerVariant(card) === "frame" ? "white" : "yellow")
+  );
 }
 
 export function isV2CardCenterInsideContainer(container: V2Card, card: V2Card): boolean {
   const left = container.position.x;
   const right = left + container.size.width;
-  const top = container.position.y + 44;
+  const top = container.position.y;
   const bottom = container.position.y + container.size.height;
   const centerX = card.position.x + card.size.width / 2;
   const centerY = card.position.y + card.size.height / 2;
