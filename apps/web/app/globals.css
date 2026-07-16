@@ -2177,6 +2177,40 @@ button:disabled {
   color: var(--yd-accent-purple-text, var(--purple));
 }
 
+.v2BoardHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.v2BoardHeaderAction {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--yd-border-default, var(--line));
+  border-radius: 8px;
+  background: var(--yd-surface-panel, #fff);
+  padding: 0 10px;
+  color: var(--yd-text-secondary, var(--muted-strong));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.v2BoardHeaderAction:hover,
+.v2BoardHeaderAction:focus-visible,
+.v2BoardHomeLink:focus-visible {
+  border-color: var(--yd-accent-purple-border, var(--purple));
+  color: var(--yd-accent-purple-text, var(--purple));
+  outline: 0;
+}
+
 .v2BoardSaveIndicator {
   display: grid;
   width: 14px;
@@ -2225,6 +2259,193 @@ button:disabled {
   --v2-minimap-height: 124px;
   --xy-selection-background-color: rgba(47, 140, 255, 0.1);
   --xy-selection-border: 1px solid var(--yd-graph-connector-selected, #2f8cff);
+}
+
+/* ── V2 contextual board onboarding ────── */
+
+.v2BoardOnboarding {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 24;
+  display: grid;
+  width: min(310px, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid var(--yd-border-default, #d8e0ec);
+  border-radius: 10px;
+  background: var(--yd-surface-panel, #fff);
+  box-shadow: 0 16px 42px rgba(15, 23, 42, 0.14);
+  color: var(--yd-text-primary, #182230);
+  pointer-events: auto;
+}
+
+.v2BoardOnboardingHeader {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--yd-border-subtle, #edf0f4);
+  padding: 8px 10px 8px 14px;
+}
+
+.v2BoardOnboardingHeader > div {
+  display: grid;
+  gap: 2px;
+}
+
+.v2BoardOnboardingHeader strong {
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.v2BoardOnboardingHeader span {
+  color: var(--yd-text-muted, #667085);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.v2BoardOnboardingHeader button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--yd-text-muted, #667085);
+  cursor: pointer;
+}
+
+.v2BoardOnboardingHeader button:hover,
+.v2BoardOnboardingHeader button:focus-visible {
+  background: var(--yd-surface-muted, #f2f4f7);
+  color: var(--yd-text-primary, #182230);
+  outline: 0;
+}
+
+.v2BoardOnboardingSteps {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+}
+
+.v2BoardOnboardingSteps li {
+  display: grid;
+  min-height: 28px;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--yd-text-muted, #667085);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.v2BoardOnboardingSteps li > span:first-child {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--yd-surface-muted, #f2f4f7);
+}
+
+.v2BoardOnboardingSteps li.isCurrent {
+  background: var(--yd-accent-purple-soft, #fbfaff);
+  color: var(--yd-accent-purple-text, #6941c6);
+}
+
+.v2BoardOnboardingSteps li.isCurrent > span:first-child {
+  background: color-mix(in srgb, var(--yd-accent-purple-text, #6941c6) 12%, #fff);
+}
+
+.v2BoardOnboardingSteps li.isComplete {
+  color: #317052;
+}
+
+.v2BoardOnboardingSteps li.isComplete > span:first-child {
+  background: #e9f7ef;
+  color: #237a4b;
+}
+
+.v2BoardOnboardingAction {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  border-top: 1px solid var(--yd-border-subtle, #edf0f4);
+  background: color-mix(in srgb, var(--yd-surface-muted, #f7f8fa) 74%, #fff);
+  padding: 11px 14px 13px;
+}
+
+.v2BoardOnboardingAction p {
+  margin: 0;
+  color: var(--yd-text-secondary, #475467);
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.v2BoardOnboardingAction button,
+.v2BoardOnboardingAction a {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--yd-accent-purple-border, #b9a8e8);
+  border-radius: 7px;
+  background: var(--yd-surface-panel, #fff);
+  padding: 0 10px;
+  color: var(--yd-accent-purple-text, #6941c6);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.v2BoardOnboardingAction button:hover,
+.v2BoardOnboardingAction button:focus-visible,
+.v2BoardOnboardingAction a:hover,
+.v2BoardOnboardingAction a:focus-visible {
+  background: var(--yd-accent-purple-soft, #f5f0ff);
+  outline: 0;
+}
+
+@media (max-width: 620px) {
+  .v2BoardHeader {
+    gap: 8px;
+    padding: 0 8px;
+  }
+
+  .v2BoardMeta,
+  .v2BoardHeaderAction span {
+    display: none;
+  }
+
+  .v2BoardHeaderAction {
+    width: 30px;
+    padding: 0;
+  }
+
+  .v2BoardHomeLink {
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  .v2BoardOnboarding {
+    top: 58px;
+    right: 10px;
+    width: min(310px, calc(100vw - 20px));
+    max-height: calc(100% - 68px);
+    overflow-y: auto;
+  }
 }
 
 .v2CardPlacementActive .react-flow__pane {

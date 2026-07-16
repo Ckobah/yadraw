@@ -10,8 +10,9 @@
 - этап 1: server-controlled `process_map_v1` и `typed_knowledge_graph_v1` реализованы отдельным
   stacked slice с транзакционным созданием board graph, dashboard chooser и новым empty-board
   onboarding;
-- этап 1: contextual hints для первой карточки, первой связи, полей, filters и export остаются
-  следующим slice; prospect validation gate ещё не пройден.
+- этап 1: contextual hints для первой карточки, первой связи, полей и export реализованы отдельным
+  web slice; filter hint будет добавлен вместе с реальным filter UI этапа 3A, чтобы не рекламировать
+  отсутствующую функцию; production и prospect validation gate ещё не пройдены.
 
 Это зонтичный roadmap, а не numbered task из `docs/plan`. Существующая очередь в
 `docs/plan/00_SHARED_EXECUTION_RULES.md` не меняется. Перед реализацией каждый этап нужно
