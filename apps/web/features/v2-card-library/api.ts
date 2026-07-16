@@ -3,6 +3,10 @@ import type {
   V2CardLibraryEntry,
   V2CardLibraryEntryListResponse,
   V2CreateCardLibraryEntryRequest,
+  V2CsvLibraryImportCommitRequest,
+  V2CsvLibraryImportPreview,
+  V2CsvLibraryImportPreviewRequest,
+  V2CsvLibraryImportResult,
   V2ListCardLibraryEntriesQueryRequest,
   V2SetCardLibraryEntryRequest,
   V2UpdateCardLibraryEntryRequest
@@ -21,6 +25,14 @@ function entryUrl(
   libraryEntryId: string
 ): string {
   return `${collectionUrl(workspaceId, cardTypeId)}/${encodeURIComponent(libraryEntryId)}`;
+}
+
+function csvImportUrl(
+  workspaceId: string,
+  cardTypeId: string,
+  action: "preview" | "commit"
+): string {
+  return `${collectionUrl(workspaceId, cardTypeId)}/imports/csv/${action}`;
 }
 
 export async function listV2CardLibraryEntries(
@@ -81,6 +93,38 @@ export async function createV2CardLibraryEntry(
   return readV2JsonResponse<V2CardLibraryEntry>(
     response,
     `Card library entry creation failed with ${response.status}`
+  );
+}
+
+export async function previewV2CsvLibraryImport(
+  workspaceId: string,
+  cardTypeId: string,
+  input: V2CsvLibraryImportPreviewRequest
+): Promise<V2CsvLibraryImportPreview> {
+  const response = await fetch(csvImportUrl(workspaceId, cardTypeId, "preview"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return readV2JsonResponse<V2CsvLibraryImportPreview>(
+    response,
+    `CSV library import preview failed with ${response.status}`
+  );
+}
+
+export async function commitV2CsvLibraryImport(
+  workspaceId: string,
+  cardTypeId: string,
+  input: V2CsvLibraryImportCommitRequest
+): Promise<V2CsvLibraryImportResult> {
+  const response = await fetch(csvImportUrl(workspaceId, cardTypeId, "commit"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return readV2JsonResponse<V2CsvLibraryImportResult>(
+    response,
+    `CSV library import failed with ${response.status}`
   );
 }
 

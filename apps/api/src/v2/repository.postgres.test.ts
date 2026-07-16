@@ -644,4 +644,95 @@ describePostgres("v2 Postgres repository", () => {
       title: changed.title
     });
   });
+
+  it("commits CSV library batches atomically and rejects stale update previews", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const suffix = randomUUID().slice(0, 8);
+    const initialCsv = `Name\nCSV ${suffix}`;
+    const initialPreview = await service.previewCsvLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      { csv: initialCsv }
+    );
+    const initialResult = await service.commitCsvLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      {
+        csv: initialCsv,
+        mapping: initialPreview.mapping,
+        duplicatePolicy: { mode: "create_new" },
+        expectedPreview: {
+          fingerprint: initialPreview.fingerprint,
+          totalRows: initialPreview.totalRows,
+          createRows: initialPreview.createRows,
+          updateRows: initialPreview.updateRows,
+          skippedRows: initialPreview.skippedRows,
+          invalidRows: initialPreview.invalidRows
+        }
+      }
+    );
+    const entry = initialResult.entries[0];
+    expect(entry).toMatchObject({ title: `CSV ${suffix}`, version: 1 });
+
+    const updateCsv = `Name\nCSV ${suffix}`;
+    const updatePolicy = { mode: "update_existing" as const, key: { kind: "title" as const } };
+    const stalePreview = await service.previewCsvLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      { csv: updateCsv, mapping: initialPreview.mapping, duplicatePolicy: updatePolicy }
+    );
+    await service.updateCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      entry!.id,
+      { description: "Concurrent change", expectedVersion: entry!.version }
+    );
+    await expect(
+      service.commitCsvLibraryImport(ownerContext, seedIds.workspace, seedIds.sourceType, {
+        csv: updateCsv,
+        mapping: initialPreview.mapping,
+        duplicatePolicy: updatePolicy,
+        expectedPreview: {
+          fingerprint: stalePreview.fingerprint,
+          totalRows: stalePreview.totalRows,
+          createRows: stalePreview.createRows,
+          updateRows: stalePreview.updateRows,
+          skippedRows: stalePreview.skippedRows,
+          invalidRows: stalePreview.invalidRows
+        }
+      })
+    ).rejects.toMatchObject({ code: "conflict" });
+
+    const freshPreview = await service.previewCsvLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      { csv: updateCsv, mapping: initialPreview.mapping, duplicatePolicy: updatePolicy }
+    );
+    const updated = await service.commitCsvLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      seedIds.sourceType,
+      {
+        csv: updateCsv,
+        mapping: initialPreview.mapping,
+        duplicatePolicy: updatePolicy,
+        expectedPreview: {
+          fingerprint: freshPreview.fingerprint,
+          totalRows: freshPreview.totalRows,
+          createRows: freshPreview.createRows,
+          updateRows: freshPreview.updateRows,
+          skippedRows: freshPreview.skippedRows,
+          invalidRows: freshPreview.invalidRows
+        }
+      }
+    );
+    expect(updated).toMatchObject({ createdCount: 0, updatedCount: 1 });
+    expect(updated.entries[0]).toMatchObject({ version: 3, description: "Concurrent change" });
+  });
 });

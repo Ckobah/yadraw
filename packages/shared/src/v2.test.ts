@@ -21,6 +21,9 @@ import {
   v2CreateCardBodySchema,
   v2CreateBoardBodySchema,
   v2CreateCardLibraryEntryBodySchema,
+  v2CsvLibraryImportCommitBodySchema,
+  v2CsvLibraryImportPreviewBodySchema,
+  v2CsvLibraryImportPreviewSchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
@@ -644,6 +647,12 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.updateCardLibraryEntry.body).toBe(
       v2UpdateCardLibraryEntryBodySchema
     );
+    expect(v2ApiContracts.previewCsvLibraryImport.body).toBe(
+      v2CsvLibraryImportPreviewBodySchema
+    );
+    expect(v2ApiContracts.commitCsvLibraryImport.body).toBe(
+      v2CsvLibraryImportCommitBodySchema
+    );
     expect(v2ApiContracts.setCardLibraryEntry.body).toBe(v2SetCardLibraryEntryBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
@@ -955,6 +964,56 @@ describe("v2 API contracts", () => {
     expect(() =>
       v2SetCardLibraryEntryBodySchema.parse({ libraryEntryId })
     ).toThrow();
+  });
+
+  it("validates strict CSV library import preview and commit contracts", () => {
+    const previewInput = v2CsvLibraryImportPreviewBodySchema.parse({
+      csv: "Name,Supplier code\nNorthwind,NW"
+    });
+    expect(previewInput).toEqual({
+      csv: "Name,Supplier code\nNorthwind,NW",
+      mapping: [],
+      duplicatePolicy: { mode: "create_new" }
+    });
+    expect(() =>
+      v2CsvLibraryImportPreviewBodySchema.parse({ csv: "Name\nNorthwind", filename: "private.csv" })
+    ).toThrow();
+    expect(() =>
+      v2CsvLibraryImportCommitBodySchema.parse({
+        csv: "Name\nNorthwind",
+        mapping: [{ sourceHeader: "Name", target: { kind: "title" } }],
+        expectedPreview: {
+          fingerprint: "not-a-fingerprint",
+          totalRows: 1,
+          createRows: 1,
+          updateRows: 0,
+          skippedRows: 0,
+          invalidRows: 0
+        }
+      })
+    ).toThrow();
+
+    expect(
+      v2CsvLibraryImportPreviewSchema.parse({
+        fingerprint: "a".repeat(64),
+        headers: ["Name"],
+        mapping: [{ sourceHeader: "Name", target: { kind: "title" } }],
+        totalRows: 1,
+        createRows: 1,
+        updateRows: 0,
+        skippedRows: 0,
+        invalidRows: 0,
+        issues: [],
+        previewRows: [
+          {
+            rowNumber: 2,
+            values: { Name: "Northwind" },
+            status: "create",
+            issues: []
+          }
+        ]
+      })
+    ).toMatchObject({ fingerprint: "a".repeat(64), createRows: 1 });
   });
 
   it("parses dry-run requests and results", () => {

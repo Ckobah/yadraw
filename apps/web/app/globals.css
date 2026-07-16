@@ -8891,6 +8891,17 @@ svg.v2ContainerPinUnpinned {
   background: #fef3f2;
 }
 
+.v2CardLibraryImportMessage {
+  margin: 0 0 9px;
+  padding: 8px 10px;
+  border: 1px solid #abefc6;
+  border-radius: 8px;
+  background: #ecfdf3;
+  color: #067647;
+  font-size: 10.5px;
+  font-weight: 680;
+}
+
 .v2CardLibraryTableWrap {
   position: relative;
   min-width: 0;
@@ -9166,12 +9177,406 @@ svg.v2ContainerPinUnpinned {
   .v2CardLibraryToolbarActions {
     grid-column: 1 / -1;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .v2CardLibraryHeading p {
     display: none;
   }
+}
+
+.v2VisuallyHidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  clip-path: inset(50%) !important;
+}
+
+.v2CsvImportOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.v2CsvImportDialog {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(1040px, calc(100vw - 48px));
+  max-height: min(880px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid #d9e0ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.v2CsvImportHeader,
+.v2CsvImportFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.v2CsvImportHeader {
+  border-bottom: 1px solid #e8edf5;
+}
+
+.v2CsvImportHeader > div,
+.v2CsvImportFooter > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.v2CsvImportHeader > div > div {
+  display: grid;
+  gap: 3px;
+}
+
+.v2CsvImportHeader h2,
+.v2CsvImportHeader p,
+.v2CsvImportSectionHeading h3,
+.v2CsvImportSectionHeading p,
+.v2CsvImportWarning,
+.v2CsvImportError,
+.v2CsvImportFooter > span {
+  margin: 0;
+}
+
+.v2CsvImportHeader h2 {
+  color: #1d2939;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.v2CsvImportHeader p,
+.v2CsvImportSectionHeading p,
+.v2CsvImportFooter > span {
+  color: #667085;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.v2CsvImportHeaderIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #175cd3;
+}
+
+.v2CsvImportHeader > button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #667085;
+  cursor: pointer;
+}
+
+.v2CsvImportHeader > button:hover:not(:disabled),
+.v2CsvImportHeader > button:focus-visible:not(:disabled) {
+  background: #f2f4f7;
+  color: #344054;
+  outline: 0;
+}
+
+.v2CsvImportBody {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 18px;
+  background: #f8fafc;
+}
+
+.v2CsvImportFileSection,
+.v2CsvImportSection {
+  border: 1px solid #e4e7ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+}
+
+.v2CsvImportFileSection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2CsvImportFileSection > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.v2CsvImportFileSection strong {
+  overflow: hidden;
+  color: #344054;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CsvImportFileSection span {
+  color: #667085;
+  font-size: 10px;
+}
+
+.v2CsvImportSection {
+  display: grid;
+  gap: 10px;
+}
+
+.v2CsvImportSectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.v2CsvImportSectionHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.v2CsvImportSectionHeading h3 {
+  color: #344054;
+  font-size: 12px;
+}
+
+.v2CsvImportSectionHeading > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #fffaeb;
+  padding: 4px 7px;
+  color: #b54708;
+  font-size: 9.5px;
+  font-weight: 720;
+}
+
+.v2CsvImportMapping {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.v2CsvImportMapping label,
+.v2CsvImportDuplicateControls label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.v2CsvImportMapping label > span,
+.v2CsvImportDuplicateControls label > span {
+  overflow: hidden;
+  color: #475467;
+  font-size: 10px;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CsvImportMapping select,
+.v2CsvImportDuplicateControls select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid #d9e0ec;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 8px;
+  color: #344054;
+  font: inherit;
+  font-size: 11px;
+}
+
+.v2CsvImportMapping small {
+  overflow: hidden;
+  color: #98a2b3;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CsvImportDuplicateControls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.v2CsvImportWarning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #fedf89;
+  border-radius: 7px;
+  background: #fffaeb;
+  padding: 7px 9px;
+  color: #b54708;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.v2CsvImportCounts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.v2CsvImportCounts > span {
+  display: grid;
+  gap: 2px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 8px 10px;
+  color: #667085;
+  font-size: 9.5px;
+  font-weight: 680;
+}
+
+.v2CsvImportCounts strong {
+  color: #344054;
+  font-size: 16px;
+}
+
+.v2CsvImportCounts .v2CsvImportCountInvalid {
+  border-color: #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.v2CsvImportCounts .v2CsvImportCountInvalid strong {
+  color: #b42318;
+}
+
+.v2CsvImportIssues,
+.v2CsvImportError {
+  border: 1px solid #fecdca;
+  border-radius: 8px;
+  background: #fef3f2;
+  padding: 8px 10px;
+  color: #b42318;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.v2CsvImportIssues ul {
+  margin: 5px 0 0;
+  padding-left: 18px;
+}
+
+.v2CsvImportIssues > span {
+  display: block;
+  margin-top: 5px;
+  font-weight: 700;
+}
+
+.v2CsvImportTableWrap {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+}
+
+.v2CsvImportTableWrap table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.v2CsvImportTableWrap th,
+.v2CsvImportTableWrap td {
+  max-width: 180px;
+  overflow: hidden;
+  border-right: 1px solid #eef1f5;
+  border-bottom: 1px solid #eef1f5;
+  padding: 6px 7px;
+  color: #475467;
+  font-size: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CsvImportTableWrap th {
+  position: sticky;
+  top: 0;
+  background: #f8fafc;
+  font-weight: 760;
+}
+
+.v2CsvImportStatus {
+  display: inline-flex;
+  border-radius: 999px;
+  background: #eef4ff;
+  padding: 3px 6px;
+  color: #175cd3;
+  font-size: 9px;
+  font-weight: 760;
+  text-transform: capitalize;
+}
+
+.v2CsvImportStatus-update { background: #f4ebff; color: #6941c6; }
+.v2CsvImportStatus-skipped { background: #f2f4f7; color: #475467; }
+.v2CsvImportStatus-invalid { background: #fef3f2; color: #b42318; }
+
+.v2CsvImportLoading,
+.v2CsvImportEmpty {
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 10px;
+  background: #fff;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.v2CsvImportFooter {
+  border-top: 1px solid #e8edf5;
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .v2CsvImportOverlay { padding: 10px; }
+  .v2CsvImportDialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+  .v2CsvImportHeader,
+  .v2CsvImportFooter { padding: 11px 12px; }
+  .v2CsvImportHeader p,
+  .v2CsvImportFooter > span { display: none; }
+  .v2CsvImportBody { padding: 10px 12px 14px; }
+  .v2CsvImportFileSection { align-items: flex-start; }
+  .v2CsvImportDuplicateControls { grid-template-columns: minmax(0, 1fr); }
+  .v2CsvImportCounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v2CsvImportFooter { justify-content: flex-end; }
 }
 
 .v2CardLibrarySelector {

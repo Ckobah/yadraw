@@ -14,6 +14,7 @@ import {
   ArchiveRestore,
   ArrowLeft,
   AlertTriangle,
+  FileUp,
   LoaderCircle,
   Plus,
   Save,
@@ -37,6 +38,7 @@ import {
   updateV2CardLibraryEntry,
   V2ApiError,
 } from "./api";
+import { V2CsvLibraryImportDialog } from "./v2-csv-library-import-dialog";
 
 type LibraryStatusFilter = "active" | "archived" | "all";
 
@@ -597,6 +599,9 @@ export function V2CardLibraryManager({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const rowHandlesRef = useRef(new Map<string, V2CardLibraryRowHandle>());
 
   const flushRows = useCallback(async (blurActiveEditor = false): Promise<boolean> => {
@@ -622,7 +627,7 @@ export function V2CardLibraryManager({
     if (flushed) onClose();
   }, [flushRows, isSavingAll, isTransitioning, onClose]);
 
-  useDialogFocus(dialogRef, () => { void closeManager(); });
+  useDialogFocus(dialogRef, () => { void closeManager(); }, !importOpen);
 
   useEffect(() => {
     if (!selectedCardType) return;
@@ -650,7 +655,7 @@ export function V2CardLibraryManager({
         if (!controller.signal.aborted) setIsLoading(false);
       });
     return () => controller.abort();
-  }, [searchQuery, selectedCardType, statusFilter]);
+  }, [reloadNonce, searchQuery, selectedCardType, statusFilter]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -690,6 +695,16 @@ export function V2CardLibraryManager({
     setIsSavingAll(true);
     await flushRows(true);
     setIsSavingAll(false);
+  }
+
+  async function openCsvImport() {
+    if (!selectedCardType || isTransitioning || isSavingAll) return;
+    setIsTransitioning(true);
+    const flushed = await flushRows(true);
+    setIsTransitioning(false);
+    if (!flushed) return;
+    setImportMessage(null);
+    setImportOpen(true);
   }
 
   function addRow() {
@@ -743,16 +758,18 @@ export function V2CardLibraryManager({
   const tableMinimumWidth = 620 + (selectedCardType?.schema.fields.length ?? 0) * 180;
 
   return (
-    <div
-      ref={dialogRef}
-      className="v2ModalOverlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Card libraries"
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) void closeManager();
-      }}
-    >
+    <>
+      <div
+        ref={dialogRef}
+        className="v2ModalOverlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Card libraries"
+        aria-hidden={importOpen || undefined}
+        onPointerDown={(event) => {
+          if (event.target === event.currentTarget) void closeManager();
+        }}
+      >
       <section className="v2CardLibraryManager" onPointerDown={(event) => event.stopPropagation()}>
         <header className="v2CardTypeManagerHeader v2CardLibraryHeader">
           <div className="v2CardLibraryHeading">
@@ -831,6 +848,15 @@ export function V2CardLibraryManager({
                   type="button"
                   className="v2SchemaEditButton"
                   disabled={!selectedCardType || isLoading || isTransitioning || isSavingAll}
+                  onClick={() => void openCsvImport()}
+                >
+                  <FileUp size={14} />
+                  <span>Import CSV</span>
+                </button>
+                <button
+                  type="button"
+                  className="v2SchemaEditButton"
+                  disabled={!selectedCardType || isLoading || isTransitioning || isSavingAll}
                   onClick={addRow}
                 >
                   <Plus size={14} />
@@ -849,6 +875,7 @@ export function V2CardLibraryManager({
             </div>
 
             {loadError ? <p className="v2CardLibraryLoadError">{loadError}</p> : null}
+            {importMessage ? <p className="v2CardLibraryImportMessage" role="status">{importMessage}</p> : null}
             <div className="v2CardLibraryTableWrap">
               {selectedCardType ? (
                 <table className="v2CardLibraryTable" style={{ minWidth: tableMinimumWidth }}>
@@ -911,6 +938,20 @@ export function V2CardLibraryManager({
           </main>
         </div>
       </section>
-    </div>
+      </div>
+      {importOpen && selectedCardType ? (
+        <V2CsvLibraryImportDialog
+          cardType={selectedCardType}
+          onClose={() => setImportOpen(false)}
+          onImported={(result) => {
+            setImportOpen(false);
+            setReloadNonce((current) => current + 1);
+            setImportMessage(
+              `Import complete: ${result.createdCount} created, ${result.updatedCount} updated, ${result.skippedCount} skipped.`
+            );
+          }}
+        />
+      ) : null}
+    </>
   );
 }

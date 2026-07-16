@@ -10,8 +10,8 @@ Execute numbered tasks in order unless the user explicitly changes the order.
 | --- | --- | --- |
 | 01-07 | Complete | Do not rerun; inspect their implementation only when a later task depends on it. |
 | 08-10 | Pending | Start with 08 unless the user explicitly reprioritizes a roadmap slice. |
-| 11 | Released | Complete manual/prospect validation on production. |
-| 12 | Implemented locally | Review and release contextual board onboarding as an isolated web slice. |
+| 11-12 | Released | Complete manual/prospect validation on production. |
+| 13 | Released | Validate the transactional CSV library import with a real table and reuse an imported record on a board. |
 
 An audit listed inside a task is pre-flight for its first implementation stage, not a separate Codex run, commit, or PR. Stop after the audit only when it reveals a schema migration, unresolved product decision, or unsafe architectural mismatch.
 

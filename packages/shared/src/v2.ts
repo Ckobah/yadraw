@@ -814,6 +814,127 @@ export const v2CreateCardParamsSchema = z.object({
   boardId: v2UuidSchema
 });
 
+export const v2CsvLibraryImportParamsSchema = z.object({
+  workspaceId: v2UuidSchema,
+  cardTypeId: v2UuidSchema
+});
+
+export const v2CsvLibraryImportColumnTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("ignore") }).strict(),
+  z.object({ kind: z.literal("title") }).strict(),
+  z.object({ kind: z.literal("description") }).strict(),
+  z
+    .object({
+      kind: z.literal("field"),
+      fieldKey: z.string().trim().min(1).max(120)
+    })
+    .strict()
+]);
+
+export const v2CsvLibraryImportColumnMappingSchema = z
+  .object({
+    sourceHeader: z.string().trim().min(1).max(120),
+    target: v2CsvLibraryImportColumnTargetSchema
+  })
+  .strict();
+
+export const v2CsvLibraryImportDuplicateKeySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("title") }).strict(),
+  z
+    .object({
+      kind: z.literal("field"),
+      fieldKey: z.string().trim().min(1).max(120)
+    })
+    .strict()
+]);
+
+export const v2CsvLibraryImportDuplicatePolicySchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("create_new") }).strict(),
+  z
+    .object({
+      mode: z.literal("skip_existing"),
+      key: v2CsvLibraryImportDuplicateKeySchema
+    })
+    .strict(),
+  z
+    .object({
+      mode: z.literal("update_existing"),
+      key: v2CsvLibraryImportDuplicateKeySchema
+    })
+    .strict()
+]);
+
+const v2CsvLibraryImportBaseShape = {
+  csv: z.string().min(1).max(1024 * 1024),
+  duplicatePolicy: v2CsvLibraryImportDuplicatePolicySchema.default({ mode: "create_new" } as const)
+};
+
+export const v2CsvLibraryImportPreviewBodySchema = z
+  .object({
+    ...v2CsvLibraryImportBaseShape,
+    mapping: z.array(v2CsvLibraryImportColumnMappingSchema).max(50).default([])
+  })
+  .strict();
+
+export const v2CsvLibraryImportCommitBodySchema = z
+  .object({
+    ...v2CsvLibraryImportBaseShape,
+    mapping: z.array(v2CsvLibraryImportColumnMappingSchema).min(1).max(50),
+    expectedPreview: z
+      .object({
+        fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+        totalRows: z.number().int().nonnegative(),
+        createRows: z.number().int().nonnegative(),
+        updateRows: z.number().int().nonnegative(),
+        skippedRows: z.number().int().nonnegative(),
+        invalidRows: z.number().int().nonnegative()
+      })
+      .strict()
+  })
+  .strict();
+
+export const v2CsvLibraryImportIssueSchema = z
+  .object({
+    rowNumber: z.number().int().min(2).nullable(),
+    sourceHeader: z.string().nullable(),
+    message: z.string().min(1)
+  })
+  .strict();
+
+export const v2CsvLibraryImportPreviewRowSchema = z
+  .object({
+    rowNumber: z.number().int().min(2),
+    values: z.record(z.string(), z.string()),
+    status: z.enum(["create", "update", "skipped", "invalid"]),
+    issues: z.array(z.string())
+  })
+  .strict();
+
+export const v2CsvLibraryImportPreviewSchema = z
+  .object({
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    headers: z.array(z.string().min(1)).max(50),
+    mapping: z.array(v2CsvLibraryImportColumnMappingSchema).max(50),
+    totalRows: z.number().int().nonnegative(),
+    createRows: z.number().int().nonnegative(),
+    updateRows: z.number().int().nonnegative(),
+    skippedRows: z.number().int().nonnegative(),
+    invalidRows: z.number().int().nonnegative(),
+    issues: z.array(v2CsvLibraryImportIssueSchema),
+    previewRows: z.array(v2CsvLibraryImportPreviewRowSchema).max(10)
+  })
+  .strict();
+
+export const v2CsvLibraryImportResultSchema = z
+  .object({
+    entries: z.array(v2CardLibraryEntrySchema).max(500),
+    totalRows: z.number().int().nonnegative(),
+    createdCount: z.number().int().nonnegative(),
+    updatedCount: z.number().int().nonnegative(),
+    skippedCount: z.number().int().nonnegative()
+  })
+  .strict();
+
 export const v2CreateCardBodySchema = z
   .object({
     cardTypeId: v2UuidSchema.optional(),
@@ -1310,6 +1431,20 @@ export const v2ApiContracts = {
     body: v2CreateCardBodySchema,
     response: v2CardSchema
   },
+  previewCsvLibraryImport: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/imports/csv/preview",
+    params: v2CsvLibraryImportParamsSchema,
+    body: v2CsvLibraryImportPreviewBodySchema,
+    response: v2CsvLibraryImportPreviewSchema
+  },
+  commitCsvLibraryImport: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/imports/csv/commit",
+    params: v2CsvLibraryImportParamsSchema,
+    body: v2CsvLibraryImportCommitBodySchema,
+    response: v2CsvLibraryImportResultSchema
+  },
   updateCard: {
     method: "PATCH",
     path: "/v2/cards/{cardId}",
@@ -1515,6 +1650,14 @@ export type V2SetCardLibraryEntryInput = z.infer<typeof v2SetCardLibraryEntryBod
 export type V2CreateConnectionTypeInput = z.infer<typeof v2CreateConnectionTypeBodySchema>;
 export type V2UpdateConnectionTypeInput = z.infer<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardInput = z.infer<typeof v2CreateCardBodySchema>;
+export type V2CsvLibraryImportColumnTarget = z.infer<typeof v2CsvLibraryImportColumnTargetSchema>;
+export type V2CsvLibraryImportColumnMapping = z.infer<typeof v2CsvLibraryImportColumnMappingSchema>;
+export type V2CsvLibraryImportDuplicateKey = z.infer<typeof v2CsvLibraryImportDuplicateKeySchema>;
+export type V2CsvLibraryImportDuplicatePolicy = z.infer<typeof v2CsvLibraryImportDuplicatePolicySchema>;
+export type V2CsvLibraryImportPreviewInput = z.infer<typeof v2CsvLibraryImportPreviewBodySchema>;
+export type V2CsvLibraryImportCommitInput = z.infer<typeof v2CsvLibraryImportCommitBodySchema>;
+export type V2CsvLibraryImportPreview = z.infer<typeof v2CsvLibraryImportPreviewSchema>;
+export type V2CsvLibraryImportResult = z.infer<typeof v2CsvLibraryImportResultSchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2UpdateBoardLayoutInput = z.infer<typeof v2UpdateBoardLayoutBodySchema>;
 export type V2UpdateBoardLayoutRequest = z.input<typeof v2UpdateBoardLayoutBodySchema>;
@@ -1558,6 +1701,8 @@ export type V2SetCardLibraryEntryRequest = z.input<typeof v2SetCardLibraryEntryB
 export type V2CreateConnectionTypeRequest = z.input<typeof v2CreateConnectionTypeBodySchema>;
 export type V2UpdateConnectionTypeRequest = z.input<typeof v2UpdateConnectionTypeBodySchema>;
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
+export type V2CsvLibraryImportPreviewRequest = z.input<typeof v2CsvLibraryImportPreviewBodySchema>;
+export type V2CsvLibraryImportCommitRequest = z.input<typeof v2CsvLibraryImportCommitBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaRequest = z.input<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;

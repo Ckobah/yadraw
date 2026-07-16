@@ -14,6 +14,8 @@ import {
   type V2CreateLinkedFieldBindingRequest,
   v2CreateCardBodySchema,
   v2CreateCardLibraryEntryBodySchema,
+  v2CsvLibraryImportCommitBodySchema,
+  v2CsvLibraryImportPreviewBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2CreateConnectionTypeBodySchema,
@@ -51,6 +53,10 @@ import {
   type V2CreateCardRequest,
   type V2CreateBoardRequest,
   type V2CreateCardLibraryEntryRequest,
+  type V2CsvLibraryImportCommitRequest,
+  type V2CsvLibraryImportPreview,
+  type V2CsvLibraryImportPreviewRequest,
+  type V2CsvLibraryImportResult,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
   type V2EvaluateCalculationsRequest,
@@ -83,6 +89,12 @@ import type {
   V2Repository
 } from "./repository.js";
 import type { GetObjectResult, V2ObjectStorage } from "./storage.js";
+import {
+  fingerprintV2CsvLibraryImportPlan,
+  parseV2CsvLibraryImport,
+  prepareV2CsvLibraryImport,
+  V2CsvLibraryImportError
+} from "./csv-library-import.js";
 
 export const V2_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const CONTAINER_CARD_TYPE_KEY = "yadraw_system_container";
@@ -186,6 +198,18 @@ export type V2BoardService = {
     cardTypeId: string,
     input: V2CreateCardLibraryEntryRequest
   ): Promise<V2CardLibraryEntry>;
+  previewCsvLibraryImport(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2CsvLibraryImportPreviewRequest
+  ): Promise<V2CsvLibraryImportPreview>;
+  commitCsvLibraryImport(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2CsvLibraryImportCommitRequest
+  ): Promise<V2CsvLibraryImportResult>;
   updateCardLibraryEntry(
     context: RequestContext,
     workspaceId: string,
@@ -721,6 +745,100 @@ export function createV2BoardService(
       updateCardLibraryEntry: repository.updateCardLibraryEntry.bind(repository),
       deleteCardLibraryEntry: repository.deleteCardLibraryEntry.bind(repository),
       setCardLibraryEntry: repository.setCardLibraryEntry.bind(repository)
+    };
+  }
+
+  function requireCsvLibraryImportRepository() {
+    if (!repository.previewCsvLibraryImport || !repository.commitCsvLibraryImport) {
+      throw new V2ServiceError("conflict", "CSV library import is not available");
+    }
+    return {
+      preview: repository.previewCsvLibraryImport.bind(repository),
+      commit: repository.commitCsvLibraryImport.bind(repository)
+    };
+  }
+
+  async function buildCsvLibraryImportPreview(
+    workspaceId: string,
+    cardType: V2CardType,
+    input: import("@yadraw/shared").V2CsvLibraryImportPreviewInput
+  ): Promise<{
+    preview: V2CsvLibraryImportPreview;
+    validRows: ReturnType<typeof prepareV2CsvLibraryImport>["rows"];
+  }> {
+    let parsedCsv: ReturnType<typeof parseV2CsvLibraryImport>;
+    try {
+      parsedCsv = parseV2CsvLibraryImport(input.csv);
+    } catch (error) {
+      if (error instanceof V2CsvLibraryImportError) validationFailed(error.message);
+      throw error;
+    }
+
+    const prepared = prepareV2CsvLibraryImport(
+      parsedCsv,
+      input.mapping,
+      cardType,
+      input.duplicatePolicy
+    );
+    const validationInvalidRows = new Set(prepared.invalidRowNumbers);
+    const validRows = prepared.rows.filter(
+      (row) => !validationInvalidRows.has(row.rowNumber)
+    );
+    const plan = await requireCsvLibraryImportRepository().preview({
+      workspaceId,
+      cardTypeId: cardType.id,
+      rows: validRows,
+      duplicatePolicy: input.duplicatePolicy
+    });
+    const issues = [...prepared.issues];
+    const invalidRows = new Set(validationInvalidRows);
+    for (const operation of plan.operations) {
+      if (operation.kind !== "invalid") continue;
+      invalidRows.add(operation.row.rowNumber);
+      issues.push({
+        rowNumber: operation.row.rowNumber,
+        sourceHeader: null,
+        message: operation.message
+      });
+    }
+    const operationByRow = new Map(
+      plan.operations.map((operation) => [operation.row.rowNumber, operation])
+    );
+    const previewRows = prepared.rows.slice(0, 10).map((row) => {
+      const operation = operationByRow.get(row.rowNumber);
+      const status: V2CsvLibraryImportPreview["previewRows"][number]["status"] = invalidRows.has(row.rowNumber)
+        ? "invalid"
+        : operation?.kind === "create"
+          ? "create"
+          : operation?.kind === "update"
+            ? "update"
+            : operation?.kind === "skipped"
+              ? "skipped"
+              : "invalid";
+      return {
+        rowNumber: row.rowNumber,
+        values: row.values,
+        status,
+        issues: issues
+          .filter((issue) => issue.rowNumber === row.rowNumber)
+          .map((issue) => issue.message)
+      };
+    });
+
+    return {
+      preview: {
+        fingerprint: fingerprintV2CsvLibraryImportPlan(plan, input.duplicatePolicy),
+        headers: parsedCsv.headers,
+        mapping: prepared.mapping,
+        totalRows: prepared.rows.length,
+        createRows: plan.createRows,
+        updateRows: plan.updateRows,
+        skippedRows: plan.skippedRows,
+        invalidRows: invalidRows.size,
+        issues,
+        previewRows
+      },
+      validRows
     };
   }
 
@@ -1283,6 +1401,78 @@ export function createV2BoardService(
         ...parsedInput.data
       });
       return decorateCardLibraryEntry(entry, cardType);
+    },
+
+    async previewCsvLibraryImport(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2CsvLibraryImportPreviewBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid CSV library import payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      if (cardType.kind === "container") {
+        conflict("Container cards do not use library entries");
+      }
+      return (await buildCsvLibraryImportPreview(workspaceId, cardType, parsedInput.data)).preview;
+    },
+
+    async commitCsvLibraryImport(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2CsvLibraryImportCommitBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid CSV library import payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) {
+        notFound("Card type not found");
+      }
+      if (cardType.kind === "container") {
+        conflict("Container cards do not use library entries");
+      }
+
+      const { expectedPreview, ...previewInput } = parsedInput.data;
+      const current = await buildCsvLibraryImportPreview(
+        workspaceId,
+        cardType,
+        previewInput
+      );
+      const preview = current.preview;
+      const previewChanged =
+        preview.fingerprint !== expectedPreview.fingerprint ||
+        preview.totalRows !== expectedPreview.totalRows ||
+        preview.createRows !== expectedPreview.createRows ||
+        preview.updateRows !== expectedPreview.updateRows ||
+        preview.skippedRows !== expectedPreview.skippedRows ||
+        preview.invalidRows !== expectedPreview.invalidRows;
+      if (previewChanged) {
+        conflict("The library changed after preview. Review the refreshed import and try again.");
+      }
+      if (preview.invalidRows > 0 || preview.issues.length > 0) {
+        validationFailed("Resolve every CSV import issue before committing");
+      }
+
+      const result = await requireCsvLibraryImportRepository().commit({
+        workspaceId,
+        cardTypeId,
+        rows: current.validRows,
+        duplicatePolicy: previewInput.duplicatePolicy,
+        expectedFingerprint: expectedPreview.fingerprint
+      });
+      if (result.status === "preview_conflict") {
+        conflict("The library changed during import. Preview it again before retrying.");
+      }
+      return {
+        entries: result.entries.map((entry) => decorateCardLibraryEntry(entry, cardType)),
+        totalRows: preview.totalRows,
+        createdCount: result.createdCount,
+        updatedCount: result.updatedCount,
+        skippedCount: result.skippedCount
+      };
     },
 
     async updateCardLibraryEntry(
