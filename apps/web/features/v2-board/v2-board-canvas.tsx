@@ -119,6 +119,13 @@ type Props = {
   initialCalculationEvaluation: V2CalculationEvaluation | null;
   onSaveStatusChange?: (status: SaveStatus) => void;
   cardPickerRequest?: number;
+  cardInspectorRequest?: number;
+  onContentCountsChange?: (counts: {
+    cardCount: number;
+    connectionCount: number;
+  }) => void;
+  onCardDataSaved?: () => void;
+  onEditorOpenChange?: (open: boolean) => void;
 };
 
 type CardAction = "duplicate" | "delete" | "layer" | "membership";
@@ -574,7 +581,11 @@ export function V2BoardCanvas({
   boardDetail,
   initialCalculationEvaluation,
   onSaveStatusChange,
-  cardPickerRequest = 0
+  cardPickerRequest = 0,
+  cardInspectorRequest = 0,
+  onContentCountsChange,
+  onCardDataSaved,
+  onEditorOpenChange,
 }: Props) {
   const {
     board,
@@ -715,6 +726,28 @@ export function V2BoardCanvas({
   const cardAttachmentsCacheRef = useRef(cardAttachmentsByCardId);
   const attachmentRequestsRef = useRef(new Map<string, Promise<V2CardAttachment[]>>());
   const pendingCardContentSavesRef = useRef(new Map<string, Set<Promise<void>>>());
+  const currentCardCount = nodes.length;
+  const currentConnectionCount = connectionRecords.length;
+  const isEditorOpen = Boolean(
+    inspectedCardId ||
+    inspectedConnectionId ||
+    visualEditingCardId ||
+    visualEditingConnectionId ||
+    isCardTypeManagerOpen ||
+    isConnectionTypeManagerOpen ||
+    previewedAttachment
+  );
+
+  useEffect(() => {
+    onContentCountsChange?.({
+      cardCount: currentCardCount,
+      connectionCount: currentConnectionCount,
+    });
+  }, [currentCardCount, currentConnectionCount, onContentCountsChange]);
+
+  useEffect(() => {
+    onEditorOpenChange?.(isEditorOpen);
+  }, [isEditorOpen, onEditorOpenChange]);
 
   const beginCardContentSave = useCallback((cardId: string): (() => void) => {
     let resolveSave: (() => void) | null = null;
@@ -1509,6 +1542,7 @@ export function V2BoardCanvas({
         await updateV2CardData(cardId, data);
         setCalculationRefreshNonce((current) => current + 1);
         setSaveStatus("saved");
+        onCardDataSaved?.();
       } catch (err) {
         console.error("Failed to save card data:", err);
         if (previous) {
@@ -1534,7 +1568,7 @@ export function V2BoardCanvas({
         finishCardContentSave();
       }
     },
-    [beginCardContentSave, setNodes]
+    [beginCardContentSave, onCardDataSaved, setNodes]
   );
 
   const handleSetCardLibraryEntry = useCallback(
@@ -1582,6 +1616,17 @@ export function V2BoardCanvas({
     setCardActionError(null);
     setConnectionCreateError(null);
   }, [selectOnlyCard]);
+
+  useEffect(() => {
+    if (cardInspectorRequest <= 0) return;
+    const nonContainerCards = nodesRef.current.filter(
+      (node) => !isV2ContainerCard(node.data.card, node.data.cardType)
+    );
+    const firstEditableCard =
+      nonContainerCards.find((node) => node.data.card.libraryEntryId === null) ??
+      nonContainerCards[0];
+    if (firstEditableCard) handleStartVisualEditor(firstEditableCard.id);
+  }, [cardInspectorRequest, handleStartVisualEditor]);
 
   const handleConnectorSlotDragStart = useCallback(() => {
     ignoreNextPaneClickRef.current = true;
