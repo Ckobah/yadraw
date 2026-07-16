@@ -1,6 +1,6 @@
 "use client";
 
-import { Database, Frame, StickyNote, X } from "lucide-react";
+import { Database, Square, X } from "lucide-react";
 import type {
   V2Card,
   V2CardAttachment,
@@ -24,7 +24,7 @@ import { V2CardCalculatedSection } from "./v2-card-calculated-section";
 import { V2CardLibrarySelector } from "../v2-card-library/v2-card-library-selector";
 import { V2ContainerSettings } from "./v2-container-settings";
 import { V2ContainerCardsSection } from "./v2-container-cards-section";
-import { getV2ContainerVariant, isV2ContainerCard } from "./v2-containers";
+import { isV2ContainerCard } from "./v2-containers";
 
 type V2CardInspectorProps = {
   card: V2Card;
@@ -43,7 +43,7 @@ type V2CardInspectorProps = {
   calculationError: string | null;
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
-  membershipPending: boolean;
+  fitPending: boolean;
   actionError: string | null;
   attachments: V2CardAttachment[] | undefined;
   attachmentsLoading: boolean;
@@ -56,8 +56,7 @@ type V2CardInspectorProps = {
     data: Record<string, unknown>
   ) => Promise<void>;
   onUpdateVisualStyle: (cardId: string, patch: V2CardVisualStyle) => Promise<void>;
-  onAttachContainerCards: (containerId: string, cardIds: string[]) => Promise<void>;
-  onDetachContainerCards: (containerId: string, cardIds: string[]) => Promise<void>;
+  onFitContainerToContent: (containerId: string) => Promise<void>;
   onSetLibraryEntry: (
     cardId: string,
     libraryEntryId: string | null,
@@ -95,15 +94,14 @@ export function V2CardInspector({
   calculationError,
   saveStatus,
   pendingAction,
-  membershipPending,
+  fitPending,
   actionError,
   attachments,
   attachmentsLoading,
   onUpdateCardBasics,
   onUpdateCardData,
   onUpdateVisualStyle,
-  onAttachContainerCards,
-  onDetachContainerCards,
+  onFitContainerToContent,
   onSetLibraryEntry,
   onManageCardType,
   onCreateLinkedFieldBinding,
@@ -119,12 +117,10 @@ export function V2CardInspector({
   const accentColor = getV2CardTypeAccentColor(cardType);
   const actionsDisabled = pendingAction !== null;
   const isContainer = isV2ContainerCard(card, cardType);
-  const containerVariant = getV2ContainerVariant(card);
-  const HeaderIcon = isContainer
-    ? containerVariant === "frame"
-      ? Frame
-      : StickyNote
-    : Database;
+  const HeaderIcon = isContainer ? Square : Database;
+  const containerContentCount = isContainer
+    ? allCards.filter((candidate) => candidate.containerId === card.id).length
+    : 0;
 
   function handleDuplicateClick() {
     if (actionsDisabled) return;
@@ -149,9 +145,9 @@ export function V2CardInspector({
           <HeaderIcon size={18} strokeWidth={2.1} />
         </span>
         <div className="v2InspectorHeaderText">
-          <span>{isContainer ? "Container" : "Card"}</span>
-          <strong title={isContainer ? containerVariant : cardType?.name}>
-            {isContainer ? (containerVariant === "frame" ? "Frame" : "Sticky note") : cardType?.name ?? "Unknown type"}
+          <span>{isContainer ? "Box" : "Card"}</span>
+          <strong title={isContainer ? "Box" : cardType?.name}>
+            {isContainer ? "Box" : cardType?.name ?? "Unknown type"}
           </strong>
         </div>
         <V2InspectorActionMenu
@@ -190,15 +186,15 @@ export function V2CardInspector({
             <V2ContainerSettings
               card={card}
               saveStatus={saveStatus}
+              contentCount={containerContentCount}
+              fitPending={fitPending}
               onUpdateVisualStyle={onUpdateVisualStyle}
+              onFitToContent={onFitContainerToContent}
             />
             <V2ContainerCardsSection
               container={card}
               allCards={allCards}
               cardTypes={cardTypes}
-              pending={membershipPending}
-              onAttachCards={onAttachContainerCards}
-              onDetachCards={onDetachContainerCards}
             />
           </>
         ) : (

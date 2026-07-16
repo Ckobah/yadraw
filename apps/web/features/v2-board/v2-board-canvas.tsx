@@ -25,7 +25,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { Bot, Pin, Play } from "lucide-react";
+import { Bot, Play } from "lucide-react";
 import type {
   V2BoardDetail,
   V2Card,
@@ -36,7 +36,6 @@ import type {
   V2ConnectionVisualStyle,
   V2CardType,
   V2CardVisualStyle,
-  V2ContainerVariant,
   V2DryRunResult,
   V2LinkedFieldBinding,
 } from "@yadraw/shared";
@@ -65,6 +64,7 @@ import {
   createV2ConnectionType,
   createV2Card,
   updateV2BoardLayout,
+  updateV2CardGeometry,
   updateV2CardSize,
   updateV2CardVisualStyle,
   updateV2CardBasics,
@@ -106,7 +106,8 @@ import {
 import type { SaveStatus } from "./v2-card-inspector-helpers";
 import {
   buildV2ContainerFallbackType,
-  getV2CardsInsideContainer,
+  getExpandedV2BoxGeometry,
+  getV2BoxFitGeometry,
   isV2CardCenterInsideContainer,
   isV2ContainerCard,
   isV2ContainerType,
@@ -128,21 +129,19 @@ type CardActionError = {
   message: string;
 } | null;
 
-type ContainerMembershipSuggestion = {
-  cardId: string;
-  previousContainerId: string | null;
-  nextContainerId: string | null;
-};
-
 type GroupDragSnapshot = {
   draggedNodeId: string;
+  directlyMovedCardIds: Set<string>;
   positions: Map<string, { x: number; y: number }>;
   manualConnections: V2Connection[];
 };
 
-type CardPositionUpdate = {
+type CardLayoutUpdate = {
   cardId: string;
-  position: { x: number; y: number };
+  position?: V2Card["position"];
+  size?: V2Card["size"];
+  zIndex?: number;
+  containerId?: string | null;
 };
 
 type ConnectionVisualStyleUpdate = {
@@ -615,20 +614,10 @@ export function V2BoardCanvas({
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
   const [movementSaveError, setMovementSaveError] = useState<string | null>(null);
   const [containerDropTargetId, setContainerDropTargetId] = useState<string | null>(null);
-  const [containerMembershipSuggestion, setContainerMembershipSuggestion] =
-    useState<ContainerMembershipSuggestion | null>(null);
   const [editorCommandError, setEditorCommandError] = useState<string | null>(null);
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
   const [isDryRunRunning, setIsDryRunRunning] = useState(false);
-  useEffect(() => {
-    if (!containerMembershipSuggestion) return;
-    const dismissSuggestion = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContainerMembershipSuggestion(null);
-    };
-    window.addEventListener("keydown", dismissSuggestion);
-    return () => window.removeEventListener("keydown", dismissSuggestion);
-  }, [containerMembershipSuggestion]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isCardTypeManagerOpen, setIsCardTypeManagerOpen] = useState(false);
   const [cardTypeManagerInitialId, setCardTypeManagerInitialId] = useState<string | null>(null);
@@ -646,6 +635,10 @@ export function V2BoardCanvas({
   const pendingCardSelectionRef = useRef<string[] | null>(null);
   const lastInteractedCardIdRef = useRef<string | null>(null);
   const groupDragSnapshotRef = useRef<GroupDragSnapshot | null>(null);
+  const initialBoxMembershipSyncRef = useRef(false);
+  const reconcileBoxContentsRef = useRef<(
+    projection?: { cardId: string; size: V2Card["size"] }
+  ) => Promise<void>>(async () => {});
   const clipboardRef = useRef<V2ClipboardPayload | null>(null);
   const clipboardPasteCountRef = useRef(0);
   const clipboardPasteBlockedRef = useRef(false);
@@ -997,15 +990,6 @@ export function V2BoardCanvas({
     () => new Map(nodes.map((node) => [node.id, node.data.card])),
     [nodes]
   );
-  const suggestedMembershipCard = containerMembershipSuggestion
-    ? cardById.get(containerMembershipSuggestion.cardId) ?? null
-    : null;
-  const suggestedPreviousContainer = containerMembershipSuggestion?.previousContainerId
-    ? cardById.get(containerMembershipSuggestion.previousContainerId) ?? null
-    : null;
-  const suggestedNextContainer = containerMembershipSuggestion?.nextContainerId
-    ? cardById.get(containerMembershipSuggestion.nextContainerId) ?? null
-    : null;
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedCardId) ?? null,
     [nodes, selectedCardId]
@@ -1246,6 +1230,7 @@ export function V2BoardCanvas({
       setSaveStatus("saving");
       try {
         await updateV2CardSize(cardId, nextSize);
+        await reconcileBoxContentsRef.current({ cardId, size: nextSize });
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to save card size:", err);
@@ -1259,7 +1244,20 @@ export function V2BoardCanvas({
     ({ nodes: selectedNodes }: OnSelectionChangeParams<V2CardNode, Edge>) => {
       const pendingCardIds = pendingCardSelectionRef.current;
       pendingCardSelectionRef.current = null;
-      const cardIds = pendingCardIds ?? selectedNodes.map((node) => node.id);
+      const rawCardIds = pendingCardIds ?? selectedNodes.map((node) => node.id);
+      const cardIds = [...rawCardIds];
+      const cardIdSet = new Set(cardIds);
+      for (const cardId of rawCardIds) {
+        const selectedNode = nodesRef.current.find((node) => node.id === cardId);
+        if (!selectedNode || !isV2ContainerCard(selectedNode.data.card, selectedNode.data.cardType)) {
+          continue;
+        }
+        for (const memberNode of nodesRef.current) {
+          if (memberNode.data.card.containerId !== cardId || cardIdSet.has(memberNode.id)) continue;
+          cardIdSet.add(memberNode.id);
+          cardIds.push(memberNode.id);
+        }
+      }
       const selectedIdSet = new Set(cardIds);
       const retainedIds = selectedCardIdsRef.current.filter((id) => selectedIdSet.has(id));
       const retainedIdSet = new Set(retainedIds);
@@ -1294,11 +1292,21 @@ export function V2BoardCanvas({
   const handleNodeClick = useCallback(
     (event: ReactMouseEvent, node: V2CardNode) => {
       lastInteractedCardIdRef.current = node.id;
+      const groupCardIds = isV2ContainerCard(node.data.card, node.data.cardType)
+        ? [
+            ...nodesRef.current
+              .filter((candidate) => candidate.data.card.containerId === node.id)
+              .map((candidate) => candidate.id),
+            node.id,
+          ]
+        : [node.id];
       if (event.ctrlKey || event.metaKey) {
         const currentCardIds = selectedCardIdsRef.current;
-        const nextCardIds = currentCardIds.includes(node.id)
-          ? currentCardIds.filter((id) => id !== node.id)
-          : [...currentCardIds, node.id];
+        const groupIdSet = new Set(groupCardIds);
+        const wholeGroupSelected = groupCardIds.every((id) => currentCardIds.includes(id));
+        const nextCardIds = wholeGroupSelected
+          ? currentCardIds.filter((id) => !groupIdSet.has(id))
+          : [...currentCardIds, ...groupCardIds.filter((id) => !currentCardIds.includes(id))];
         pendingCardSelectionRef.current = nextCardIds;
         selectedCardIdsRef.current = nextCardIds;
         setSelectedCardIds(nextCardIds);
@@ -1308,7 +1316,8 @@ export function V2BoardCanvas({
           return nextCardIds.at(-1) ?? null;
         });
       } else {
-        selectOnlyCard(node.id);
+        if (groupCardIds.length > 1) selectCards(groupCardIds);
+        else selectOnlyCard(node.id);
       }
       setSelectedConnectionId(null);
       setInspectedConnectionId(null);
@@ -1317,7 +1326,7 @@ export function V2BoardCanvas({
       setMovementSaveError(null);
       setInspectedCardId(null);
     },
-    [selectOnlyCard]
+    [selectCards, selectOnlyCard]
   );
 
   const handleUpdateVisualStyle = useCallback(
@@ -1797,7 +1806,7 @@ export function V2BoardCanvas({
             };
           })
         );
-        setMovementSaveError("Container membership could not be saved. The previous layout was restored.");
+        setMovementSaveError("Box contents could not be saved. The previous layout was restored.");
         setSaveStatus("error");
         throw error;
       }
@@ -1818,10 +1827,10 @@ export function V2BoardCanvas({
       try {
         await applyContainerMembership(assignments);
       } catch (error) {
-        console.error("Failed to update container membership:", error);
+        console.error("Failed to update Box contents:", error);
         setCardActionError({
           cardId: ownerCardId,
-          message: "Could not update the attached cards.",
+          message: "Could not update the Box contents.",
         });
         throw error;
       } finally {
@@ -1832,79 +1841,149 @@ export function V2BoardCanvas({
     [applyContainerMembership]
   );
 
-  const handleAttachCardsInside = useCallback(
-    async (containerId: string) => {
-      const containerNode = nodesRef.current.find((node) => node.id === containerId);
-      if (!containerNode || !isV2ContainerCard(containerNode.data.card, containerNode.data.cardType)) return;
-      const runtimeTypeMap = new Map(
-        nodesRef.current.map((node) => [node.data.cardType.id, node.data.cardType])
+  const applyBoxGeometry = useCallback(
+    async (boxId: string, geometry: Pick<V2Card, "position" | "size">) => {
+      const previous = nodesRef.current.find((node) => node.id === boxId)?.data.card;
+      if (!previous) return;
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === boxId
+            ? {
+                ...node,
+                position: geometry.position,
+                style: {
+                  ...node.style,
+                  width: geometry.size.width,
+                  height: geometry.size.height,
+                },
+                data: {
+                  ...node.data,
+                  card: {
+                    ...node.data.card,
+                    position: geometry.position,
+                    size: geometry.size,
+                  },
+                },
+              }
+            : node
+        )
       );
-      const candidates = getV2CardsInsideContainer(
-        containerNode.data.card,
-        nodesRef.current.map((node) => node.data.card),
-        runtimeTypeMap
-      ).filter((card) => !card.containerId);
-      await runContainerMembershipAction(
-        containerId,
-        candidates.map((card) => ({ cardId: card.id, containerId }))
-      );
+      setSaveStatus("saving");
+      try {
+        await updateV2CardGeometry(boxId, geometry);
+        setMovementSaveError(null);
+        setSaveStatus("saved");
+      } catch (error) {
+        setNodes((current) =>
+          current.map((node) =>
+            node.id === boxId
+              ? {
+                  ...node,
+                  position: previous.position,
+                  style: {
+                    ...node.style,
+                    width: previous.size.width,
+                    height: previous.size.height,
+                  },
+                  data: { ...node.data, card: previous },
+                }
+              : node
+          )
+        );
+        setMovementSaveError("Box size could not be saved.");
+        setSaveStatus("error");
+        throw error;
+      }
     },
-    [runContainerMembershipAction]
+    [setNodes]
   );
 
-  const handleAttachContainerCards = useCallback(
-    async (containerId: string, cardIds: string[]) => {
-      await runContainerMembershipAction(
-        containerId,
-        cardIds.map((cardId) => ({ cardId, containerId }))
-      );
+  const handleFitContainerToContent = useCallback(
+    async (boxId: string) => {
+      if (cardActionLockRef.current) return;
+      const boxNode = nodesRef.current.find((node) => node.id === boxId);
+      if (!boxNode || !isV2ContainerCard(boxNode.data.card, boxNode.data.cardType)) return;
+      const contentCards = nodesRef.current
+        .filter((node) => node.data.card.containerId === boxId)
+        .map((node) => node.data.card);
+      const nextGeometry = getV2BoxFitGeometry(contentCards);
+      if (!nextGeometry) return;
+      const previousGeometry = {
+        position: { ...boxNode.data.card.position },
+        size: { ...boxNode.data.card.size },
+      };
+      const pending = { cardId: boxId, action: "membership" as const };
+      cardActionLockRef.current = pending;
+      setPendingCardAction(pending);
+      setCardActionError(null);
+      try {
+        await runEditorCommand({
+          label: "Fit Box to content",
+          execute: () => applyBoxGeometry(boxId, nextGeometry),
+          undo: () => applyBoxGeometry(boxId, previousGeometry),
+        });
+      } finally {
+        cardActionLockRef.current = null;
+        setPendingCardAction(null);
+      }
     },
-    [runContainerMembershipAction]
+    [applyBoxGeometry, runEditorCommand]
   );
 
-  const handleDetachContainerCards = useCallback(
-    async (containerId: string, cardIds: string[]) => {
-      await runContainerMembershipAction(
-        containerId,
-        cardIds.map((cardId) => ({ cardId, containerId: null }))
-      );
-    },
-    [runContainerMembershipAction]
-  );
+  const reconcileBoxContents = useCallback(async (
+    projection?: { cardId: string; size: V2Card["size"] }
+  ) => {
+    const currentNodes = nodesRef.current.map((node) =>
+      projection?.cardId === node.id
+        ? {
+            ...node,
+            style: { ...node.style, width: projection.size.width, height: projection.size.height },
+            data: {
+              ...node.data,
+              card: { ...node.data.card, size: projection.size },
+            },
+          }
+        : node
+    );
+    const assignments = currentNodes.flatMap((node) => {
+      if (isV2ContainerCard(node.data.card, node.data.cardType)) return [];
+      const nextContainerId = findContainerDropTarget(node, currentNodes)?.id ?? null;
+      return nextContainerId === (node.data.card.containerId ?? null)
+        ? []
+        : [{ cardId: node.id, containerId: nextContainerId }];
+    });
 
-  const handleDetachAllCards = useCallback(
-    async (containerId: string) => {
-      const assignments = nodesRef.current
-        .filter((node) => node.data.card.containerId === containerId)
-        .map((node) => ({ cardId: node.id, containerId: null }));
-      await runContainerMembershipAction(containerId, assignments);
-    },
-    [runContainerMembershipAction]
-  );
-
-  const handleDetachFromContainer = useCallback(
-    async (cardId: string) => {
-      const card = nodesRef.current.find((node) => node.id === cardId)?.data.card;
-      if (!card?.containerId) return;
-      await runContainerMembershipAction(cardId, [{ cardId, containerId: null }]);
-    },
-    [runContainerMembershipAction]
-  );
-
-  const handleApplyContainerMembershipSuggestion = useCallback(async () => {
-    const suggestion = containerMembershipSuggestion;
-    if (!suggestion || cardActionLockRef.current) return;
-    try {
-      await runContainerMembershipAction(suggestion.cardId, [
-        { cardId: suggestion.cardId, containerId: suggestion.nextContainerId },
-      ]);
-      setContainerMembershipSuggestion((current) =>
-        current === suggestion ? null : current
-      );
-    } catch {
-      // Keep the suggestion visible so the user can retry or dismiss it.
+    if (assignments.length > 0) {
+      await runContainerMembershipAction(assignments[0]!.cardId, assignments);
     }
-  }, [containerMembershipSuggestion, runContainerMembershipAction]);
+    const assignmentById = new Map(
+      assignments.map((assignment) => [assignment.cardId, assignment.containerId])
+    );
+    const projectedCards = currentNodes.map((node) => ({
+        ...node.data.card,
+        containerId: assignmentById.has(node.id)
+          ? assignmentById.get(node.id) ?? null
+          : node.data.card.containerId ?? null,
+    }));
+    for (const boxNode of currentNodes) {
+      if (!isV2ContainerCard(boxNode.data.card, boxNode.data.cardType)) continue;
+      const content = projectedCards.filter((card) => card.containerId === boxNode.id);
+      const geometry = getExpandedV2BoxGeometry(boxNode.data.card, content);
+      if (geometry) await applyBoxGeometry(boxNode.id, geometry);
+    }
+  }, [applyBoxGeometry, runContainerMembershipAction]);
+
+  useEffect(() => {
+    reconcileBoxContentsRef.current = reconcileBoxContents;
+  }, [reconcileBoxContents]);
+
+  useEffect(() => {
+    if (initialBoxMembershipSyncRef.current) return;
+    initialBoxMembershipSyncRef.current = true;
+    void reconcileBoxContents().catch((error) => {
+      console.error("Failed to synchronize Box contents:", error);
+    });
+  }, [reconcileBoxContents]);
 
   const applyDeletedCardIds = useCallback(
     (cardIds: string[], invalidateHistory = false) => {
@@ -1912,14 +1991,6 @@ export function V2BoardCanvas({
       if (invalidateHistory) clearEditorHistory();
       groupDragSnapshotRef.current = null;
       setContainerDropTargetId((current) => (current && deletedIds.has(current) ? null : current));
-      setContainerMembershipSuggestion((current) =>
-        current &&
-        (deletedIds.has(current.cardId) ||
-          (current.previousContainerId !== null && deletedIds.has(current.previousContainerId)) ||
-          (current.nextContainerId !== null && deletedIds.has(current.nextContainerId)))
-          ? null
-          : current
-      );
       setNodes((current) =>
         current
           .filter((node) => !deletedIds.has(node.id))
@@ -1991,7 +2062,7 @@ export function V2BoardCanvas({
           : "";
       const containerWarning =
         attachedCount > 0
-          ? ` ${attachedCount} attached card${attachedCount === 1 ? "" : "s"} will stay on the board and be detached.`
+          ? ` ${attachedCount} card${attachedCount === 1 ? "" : "s"} inside will stay on the board.`
           : "";
       if (
         !window.confirm(
@@ -2078,14 +2149,15 @@ export function V2BoardCanvas({
     [board.id, board.workspaceId, cardTypeMap, selectOnlyCard, setNodes]
   );
 
-  const handleCreateContainer = useCallback(
-    async (variant: V2ContainerVariant, position: { x: number; y: number }) => {
+  const handleCreateBox = useCallback(
+    async (position: { x: number; y: number }) => {
       setSaveStatus("saving");
       setConnectionCreateError(null);
       try {
         const created = await createV2Card(board.id, {
-          container: { variant, theme: variant === "frame" ? "white" : "yellow" },
+          container: { variant: "box", theme: "yellow" },
           position,
+          visualStyle: { fillOpacity: 0.72 },
         });
         setNodes((current) => [
           ...current,
@@ -2098,7 +2170,7 @@ export function V2BoardCanvas({
         setVisualEditingConnectionId(null);
         setSaveStatus("saved");
       } catch (error) {
-        console.error("Failed to create container:", error);
+        console.error("Failed to create Box:", error);
         setSaveStatus("error");
         throw error;
       }
@@ -2481,9 +2553,6 @@ export function V2BoardCanvas({
   // ── Sync dynamic state into node data ────────────────────────────
   useEffect(() => {
     const previewCards = nodesRef.current.map((node) => node.data.card);
-    const runtimeTypeMap = new Map(
-      nodesRef.current.map((node) => [node.data.cardType.id, node.data.cardType])
-    );
     const layerBlocks = buildCardLayerBlocks(nodesRef.current);
     const layerBlockIndexByCardId = new Map<string, number>();
     layerBlocks.forEach((block, index) => {
@@ -2495,11 +2564,6 @@ export function V2BoardCanvas({
       nds.map((node) => {
         const layerIndex = layerBlockIndexByCardId.get(node.id) ?? 0;
         const isContainer = isV2ContainerCard(node.data.card, node.data.cardType);
-        const cardsInside = isContainer
-          ? getV2CardsInsideContainer(node.data.card, previewCards, runtimeTypeMap).filter(
-              (card) => !card.containerId
-            )
-          : [];
         const attachedCards = isContainer
           ? previewCards.filter((card) => card.containerId === node.id)
           : [];
@@ -2522,7 +2586,6 @@ export function V2BoardCanvas({
             cardActionError: cardActionError?.cardId === node.id ? cardActionError.message : null,
             canMoveBackward: layerIndex > 0,
             canMoveForward: layerIndex < layerBlocks.length - 1,
-            insideCardCount: cardsInside.length,
             attachedCardCount: attachedCards.length,
             attachedContainerTitle: attachedContainer?.title ?? null,
             isContainerDropTarget: containerDropTargetId === node.id,
@@ -2532,9 +2595,7 @@ export function V2BoardCanvas({
             onDuplicateCard: handleDuplicateCard,
             onDeleteCard: handleDeleteCard,
             onMoveCardLayer: handleMoveCardLayer,
-            onAttachCardsInside: handleAttachCardsInside,
-            onDetachAllCards: handleDetachAllCards,
-            onDetachFromContainer: handleDetachFromContainer,
+            onFitContainerToContent: handleFitContainerToContent,
             onResizeCard: handleResizeCard,
             onUpdateVisualStyle: handleUpdateVisualStyle,
             onCloseVisualEditor: () => setVisualEditingCardId(null),
@@ -2567,9 +2628,7 @@ export function V2BoardCanvas({
     handleDuplicateCard,
     handleDeleteCard,
     handleMoveCardLayer,
-    handleAttachCardsInside,
-    handleDetachAllCards,
-    handleDetachFromContainer,
+    handleFitContainerToContent,
     handleResizeCard,
     handleUpdateVisualStyle,
     handleConnectorSlotDragStart,
@@ -2687,15 +2746,24 @@ export function V2BoardCanvas({
     [connectionTypeManagerSourceConnectionId, handleCreateConnectionType, handleUpdateConnection]
   );
 
-  const applyMovement = useCallback(
+  const applyLayoutUpdates = useCallback(
     async (
-      positions: CardPositionUpdate[],
+      cardUpdates: CardLayoutUpdate[],
       connectionStyles: ConnectionVisualStyleUpdate[]
     ) => {
-      const previousPositions = new Map(
+      const previousCards = new Map(
         nodesRef.current
-          .filter((node) => positions.some((update) => update.cardId === node.id))
-          .map((node) => [node.id, { ...node.data.card.position }])
+          .filter((node) => cardUpdates.some((update) => update.cardId === node.id))
+          .map((node) => [
+            node.id,
+            {
+              position: { ...node.data.card.position },
+              size: { ...node.data.card.size },
+              containerId: node.data.card.containerId ?? null,
+              zIndex: node.zIndex,
+              visualStyle: node.data.card.visualStyle,
+            },
+          ])
       );
       const previousConnections = new Map(
         connectionRecordsRef.current
@@ -2704,31 +2772,36 @@ export function V2BoardCanvas({
           )
           .map((connection) => [connection.id, connection])
       );
-      const positionById = new Map(
-        positions.map(({ cardId, position }) => [cardId, position])
-      );
+      const updateById = new Map(cardUpdates.map((update) => [update.cardId, update]));
       setNodes((current) => {
         let changed = false;
         const next = current.map((currentNode) => {
-          const position = positionById.get(currentNode.id);
-          if (!position) return currentNode;
-          if (
-            currentNode.position.x === position.x &&
-            currentNode.position.y === position.y &&
-            currentNode.data.card.position.x === position.x &&
-            currentNode.data.card.position.y === position.y
-          ) {
-            return currentNode;
-          }
+          const update = updateById.get(currentNode.id);
+          if (!update) return currentNode;
+          const position = update.position ?? currentNode.data.card.position;
+          const size = update.size ?? currentNode.data.card.size;
+          const hasContainerUpdate = Object.prototype.hasOwnProperty.call(update, "containerId");
+          const containerId = hasContainerUpdate
+            ? update.containerId ?? null
+            : currentNode.data.card.containerId ?? null;
+          const zIndex = update.zIndex ?? currentNode.zIndex;
           changed = true;
           return {
             ...currentNode,
             position,
+            zIndex,
+            style: { ...currentNode.style, width: size.width, height: size.height },
             data: {
               ...currentNode.data,
               card: {
                 ...currentNode.data.card,
                 position,
+                size,
+                containerId,
+                visualStyle:
+                  update.zIndex === undefined
+                    ? currentNode.data.card.visualStyle
+                    : { ...currentNode.data.card.visualStyle, zIndex: update.zIndex },
               },
             },
           };
@@ -2756,7 +2829,15 @@ export function V2BoardCanvas({
       setSaveStatus("saving");
       try {
         await updateV2BoardLayout(board.id, {
-          cards: positions.map(({ cardId, position }) => ({ id: cardId, position })),
+          cards: cardUpdates.map((update) => ({
+            id: update.cardId,
+            ...(update.position ? { position: update.position } : {}),
+            ...(update.size ? { size: update.size } : {}),
+            ...(update.zIndex !== undefined ? { zIndex: update.zIndex } : {}),
+            ...(Object.prototype.hasOwnProperty.call(update, "containerId")
+              ? { containerId: update.containerId ?? null }
+              : {}),
+          })),
           connections: connectionStyles.map(({ connectionId, visualStyle }) => ({
             id: connectionId,
             visualStyle
@@ -2767,9 +2848,28 @@ export function V2BoardCanvas({
       } catch (error) {
         setNodes((current) =>
           current.map((node) => {
-            const position = previousPositions.get(node.id);
-            return position
-              ? { ...node, position, data: { ...node.data, card: { ...node.data.card, position } } }
+            const previous = previousCards.get(node.id);
+            return previous
+              ? {
+                  ...node,
+                  position: previous.position,
+                  zIndex: previous.zIndex,
+                  style: {
+                    ...node.style,
+                    width: previous.size.width,
+                    height: previous.size.height,
+                  },
+                  data: {
+                    ...node.data,
+                    card: {
+                      ...node.data.card,
+                      position: previous.position,
+                      size: previous.size,
+                      containerId: previous.containerId,
+                      visualStyle: previous.visualStyle,
+                    },
+                  },
+                }
               : node;
           })
         );
@@ -2783,7 +2883,7 @@ export function V2BoardCanvas({
           })
         );
         setMovementSaveError(
-          "Movement could not be saved. The previous layout was restored."
+          "Box layout could not be saved. The previous layout was restored."
         );
         setSaveStatus("error");
         throw error;
@@ -2795,7 +2895,6 @@ export function V2BoardCanvas({
   const handleNodeDragStart = useCallback<OnNodeDrag<V2CardNode>>(
     (_event, node, draggedNodes) => {
       setContainerDropTargetId(null);
-      setContainerMembershipSuggestion(null);
       const directlyMovingNodes = (draggedNodes.length > 0 ? draggedNodes : [node]).filter(
         (movingNode) => !isCardLocked(movingNode.data.card)
       );
@@ -2818,6 +2917,7 @@ export function V2BoardCanvas({
       const movedCardIds = new Set(movingNodes.map((movingNode) => movingNode.id));
       groupDragSnapshotRef.current = {
         draggedNodeId: node.id,
+        directlyMovedCardIds: new Set(directlyMovingNodes.map((movingNode) => movingNode.id)),
         positions: new Map(
           movingNodes.map((movingNode) => [
             movingNode.id,
@@ -2917,22 +3017,6 @@ export function V2BoardCanvas({
       };
       if (delta.x === 0 && delta.y === 0) return;
 
-      if (
-        snapshot.positions.size === 1 &&
-        !isV2ContainerCard(node.data.card, node.data.cardType)
-      ) {
-        const dropTarget = findContainerDropTarget(node, nodesRef.current);
-        const previousContainerId = node.data.card.containerId ?? null;
-        const nextContainerId = dropTarget?.id ?? null;
-        if (previousContainerId !== nextContainerId) {
-          setContainerMembershipSuggestion({
-            cardId: node.id,
-            previousContainerId,
-            nextContainerId,
-          });
-        }
-      }
-
       const finalPositionById = new Map(
         draggedNodes.map((draggedNode) => [
           draggedNode.id,
@@ -2961,20 +3045,121 @@ export function V2BoardCanvas({
           visualStyle: connection.visualStyle,
         }));
 
+      const nextUpdateById = new Map<string, CardLayoutUpdate>();
+      const previousUpdateById = new Map<string, CardLayoutUpdate>();
+      const mergeUpdate = (
+        target: Map<string, CardLayoutUpdate>,
+        cardId: string,
+        patch: Omit<CardLayoutUpdate, "cardId">
+      ) => {
+        target.set(cardId, { ...target.get(cardId), cardId, ...patch });
+      };
+      movedPositions.forEach((update) => mergeUpdate(nextUpdateById, update.cardId, {
+        position: update.position,
+      }));
+      previousPositions.forEach((update) => mergeUpdate(previousUpdateById, update.cardId, {
+        position: update.position,
+      }));
+
+      const movedPositionById = new Map(
+        movedPositions.map((update) => [update.cardId, update.position])
+      );
+      const projectedNodes = nodesRef.current.map((currentNode) => {
+        const position = movedPositionById.get(currentNode.id) ?? currentNode.data.card.position;
+        return {
+          ...currentNode,
+          position,
+          data: {
+            ...currentNode.data,
+            card: { ...currentNode.data.card, position },
+          },
+        };
+      });
+      const membershipById = new Map<string, string | null>();
+      const boxesToExpand = new Set<string>();
+      const movedBox = projectedNodes.some(
+        (candidate) =>
+          snapshot.directlyMovedCardIds.has(candidate.id) &&
+          isV2ContainerCard(candidate.data.card, candidate.data.cardType)
+      );
+      const spatialCardIds = movedBox
+        ? projectedNodes
+            .filter((candidate) => !isV2ContainerCard(candidate.data.card, candidate.data.cardType))
+            .map((candidate) => candidate.id)
+        : [...snapshot.directlyMovedCardIds];
+      for (const cardId of spatialCardIds) {
+        const projectedNode = projectedNodes.find((candidate) => candidate.id === cardId);
+        if (!projectedNode || isV2ContainerCard(projectedNode.data.card, projectedNode.data.cardType)) {
+          continue;
+        }
+        const nextContainerId = findContainerDropTarget(projectedNode, projectedNodes)?.id ?? null;
+        if (nextContainerId) boxesToExpand.add(nextContainerId);
+        if (nextContainerId !== (projectedNode.data.card.containerId ?? null)) {
+          membershipById.set(cardId, nextContainerId);
+          mergeUpdate(nextUpdateById, cardId, { containerId: nextContainerId });
+          mergeUpdate(previousUpdateById, cardId, {
+            containerId: projectedNode.data.card.containerId ?? null,
+          });
+        }
+      }
+
+      const proposedNodes = projectedNodes.map((projectedNode) => {
+        if (!membershipById.has(projectedNode.id)) return projectedNode;
+        return {
+          ...projectedNode,
+          data: {
+            ...projectedNode.data,
+            card: {
+              ...projectedNode.data.card,
+              containerId: membershipById.get(projectedNode.id) ?? null,
+            },
+          },
+        };
+      });
+
+      for (const boxId of boxesToExpand) {
+        const boxNode = proposedNodes.find((candidate) => candidate.id === boxId);
+        if (!boxNode) continue;
+        const contentCards = proposedNodes
+          .filter((candidate) => candidate.data.card.containerId === boxId)
+          .map((candidate) => candidate.data.card);
+        const expandedGeometry = getExpandedV2BoxGeometry(boxNode.data.card, contentCards);
+        if (!expandedGeometry) continue;
+        mergeUpdate(nextUpdateById, boxId, expandedGeometry);
+        const previousPosition = snapshot.positions.get(boxId) ?? boxNode.data.card.position;
+        mergeUpdate(previousUpdateById, boxId, {
+          position: previousPosition,
+          size: boxNode.data.card.size,
+        });
+      }
+
+      if (membershipById.size > 0) {
+        const ordered = buildCardLayerBlocks(proposedNodes).flatMap((block) => block.nodes);
+        ordered.forEach((orderedNode, index) => {
+          mergeUpdate(nextUpdateById, orderedNode.id, { zIndex: index + 1 });
+          mergeUpdate(previousUpdateById, orderedNode.id, {
+            zIndex: nodesRef.current.find((candidate) => candidate.id === orderedNode.id)?.zIndex ?? 0,
+          });
+        });
+      }
+
+      const nextLayoutUpdates = [...nextUpdateById.values()];
+      const previousLayoutUpdates = [...previousUpdateById.values()];
+
       const movementCommand: V2EditorCommand = {
         label: "Move cards",
-        execute: () => applyMovement(movedPositions, manualRouteUpdates),
-        undo: () => applyMovement(previousPositions, previousManualRouteStyles),
+        execute: () => applyLayoutUpdates(nextLayoutUpdates, manualRouteUpdates),
+        undo: () => applyLayoutUpdates(previousLayoutUpdates, previousManualRouteStyles),
       };
       if (commandRunningRef.current) {
-        void applyMovement(movedPositions, manualRouteUpdates).catch((error) => {
+        void applyLayoutUpdates(nextLayoutUpdates, manualRouteUpdates).catch((error) => {
           console.error("Failed to save grouped card positions:", error);
         });
         return;
       }
       void runEditorCommand(movementCommand);
     },
-    [applyMovement, runEditorCommand]
+    [applyLayoutUpdates, runEditorCommand]
   );
 
   const handleNodesChange = useCallback(
@@ -3636,7 +3821,7 @@ export function V2BoardCanvas({
           workspaceId={board.workspaceId}
           cardTypes={entityCardTypes}
           onCreateCard={handleCreateCard}
-          onCreateContainer={handleCreateContainer}
+          onCreateBox={handleCreateBox}
           onManageCardTypes={handleOpenCardTypeManager}
           connectorControl={
             <V2ConnectionTypeToolbar
@@ -3700,12 +3885,7 @@ export function V2BoardCanvas({
           maskColor="rgba(0,0,0,0.08)"
         />
         {(editorCommandError ?? movementSaveError ?? connectionCreateError) ? (
-          <div
-            className={`v2CanvasConnectionError${
-              containerMembershipSuggestion ? " v2CanvasConnectionErrorRaised" : ""
-            }`}
-            role="status"
-          >
+          <div className="v2CanvasConnectionError" role="status">
             {editorCommandError ?? movementSaveError ?? connectionCreateError}
           </div>
         ) : null}
@@ -3735,57 +3915,6 @@ export function V2BoardCanvas({
           />
         ) : null}
       </ReactFlow>
-      {containerMembershipSuggestion && suggestedMembershipCard ? (
-        <div className="v2ContainerDropSuggestion" role="status" aria-live="polite">
-          <span className="v2ContainerDropSuggestionIcon" aria-hidden="true">
-            <Pin size={16} strokeWidth={2.3} />
-          </span>
-          <span className="v2ContainerDropSuggestionText">
-            <strong>
-              {containerMembershipSuggestion.nextContainerId
-                ? containerMembershipSuggestion.previousContainerId
-                  ? `Move to ${suggestedNextContainer?.title ?? "container"}?`
-                  : `Attach to ${suggestedNextContainer?.title ?? "container"}?`
-                : `Detach from ${suggestedPreviousContainer?.title ?? "container"}?`}
-            </strong>
-            <small
-              className={
-                cardActionError?.cardId === containerMembershipSuggestion.cardId
-                  ? "v2ContainerDropSuggestionError"
-                  : undefined
-              }
-              title={suggestedMembershipCard.title}
-            >
-              {cardActionError?.cardId === containerMembershipSuggestion.cardId
-                ? cardActionError.message
-                : suggestedMembershipCard.title}
-            </small>
-          </span>
-          <button
-            type="button"
-            className="v2ContainerDropSuggestionDismiss"
-            disabled={pendingCardAction?.action === "membership"}
-            onClick={() => setContainerMembershipSuggestion(null)}
-          >
-            Not now
-          </button>
-          <button
-            type="button"
-            className="v2ContainerDropSuggestionConfirm"
-            disabled={pendingCardAction !== null}
-            onClick={() => void handleApplyContainerMembershipSuggestion()}
-          >
-            {pendingCardAction?.cardId === containerMembershipSuggestion.cardId &&
-            pendingCardAction.action === "membership"
-              ? "Updating…"
-              : containerMembershipSuggestion.nextContainerId
-                ? containerMembershipSuggestion.previousContainerId
-                  ? "Move"
-                  : "Attach"
-                : "Detach"}
-          </button>
-        </div>
-      ) : null}
       {inspectedCard ? (
         <V2CardInspector
           card={inspectedCard}
@@ -3810,7 +3939,7 @@ export function V2BoardCanvas({
               ? pendingCardAction.action
               : null
           }
-          membershipPending={
+          fitPending={
             pendingCardAction?.cardId === inspectedCard.id &&
             pendingCardAction.action === "membership"
           }
@@ -3818,8 +3947,7 @@ export function V2BoardCanvas({
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onUpdateVisualStyle={handleUpdateVisualStyle}
-          onAttachContainerCards={handleAttachContainerCards}
-          onDetachContainerCards={handleDetachContainerCards}
+          onFitContainerToContent={handleFitContainerToContent}
           onSetLibraryEntry={handleSetCardLibraryEntry}
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}

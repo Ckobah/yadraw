@@ -1125,6 +1125,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       input.cards.forEach((update, index) => {
         const card = cards[index]!;
         if (update.position) card.position = cloneJson(update.position);
+        if (update.size) card.size = cloneJson(update.size);
         if (update.zIndex !== undefined) {
           card.visualStyle = { ...card.visualStyle, zIndex: update.zIndex };
         }
@@ -1154,15 +1155,14 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
           !deletedCardTypeIds.has(cardType.id)
       );
       if (existing) {
-        if (existing.kind === "container") return cloneJson(existing);
         const timestamp = nowIso();
         existing.kind = "container";
-        existing.name = "Container";
-        existing.description = "Sticky notes and frames";
+        existing.name = "Box";
+        existing.description = "Spatial group for cards";
         existing.defaultData = {};
         existing.schema = { fields: [] };
         existing.defaultVisualStyle = {};
-        existing.defaultSize = { width: 320, height: 220 };
+        existing.defaultSize = { width: 480, height: 320 };
         existing.ports = buildMemoryCardTypePorts(
           workspaceId,
           existing.id,
@@ -1183,12 +1183,12 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         workspaceId,
         key: "yadraw_system_container",
         kind: "container",
-        name: "Container",
-        description: "Sticky notes and frames",
+        name: "Box",
+        description: "Spatial group for cards",
         defaultData: {},
         schema: { fields: [] },
         defaultVisualStyle: {},
-        defaultSize: { width: 320, height: 220 },
+        defaultSize: { width: 480, height: 320 },
         ports: buildMemoryCardTypePorts(
           workspaceId,
           cardTypeId,
@@ -2822,6 +2822,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               update cards
               set position_x = coalesce($3::numeric, position_x),
                   position_y = coalesce($4::numeric, position_y),
+                  width = coalesce($8::numeric, width),
+                  height = coalesce($9::numeric, height),
                   visual_style = case
                     when $5::integer is null then visual_style
                     else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
@@ -2840,7 +2842,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               update.position?.y ?? null,
               update.zIndex ?? null,
               Object.prototype.hasOwnProperty.call(update, "containerId"),
-              update.containerId ?? null
+              update.containerId ?? null,
+              update.size?.width ?? null,
+              update.size?.height ?? null
             ]
           );
           if ((result.rowCount ?? 0) !== 1) {
@@ -2900,9 +2904,9 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               workspace_id, key, kind, name, description, default_data,
               schema, default_visual_style, default_width, default_height
             ) values (
-              $1, 'yadraw_system_container', 'container', 'Container',
-              'Sticky notes and frames', '{}'::jsonb, '{"fields":[]}'::jsonb,
-              '{}'::jsonb, 320, 220
+              $1, 'yadraw_system_container', 'container', 'Box',
+              'Spatial group for cards', '{}'::jsonb, '{"fields":[]}'::jsonb,
+              '{}'::jsonb, 480, 320
             )
             on conflict (workspace_id, key) where deleted_at is null
             do update set

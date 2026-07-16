@@ -45,7 +45,7 @@ import {
 } from "./v2-linked-fields";
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
-import { getV2ContainerVariant, isV2ContainerCard } from "./v2-containers";
+import { isV2ContainerCard } from "./v2-containers";
 
 export type V2CardLayerAction =
   | "bringForward"
@@ -69,7 +69,6 @@ export type V2CardNodeData = {
   cardActionError?: string | null;
   canMoveForward?: boolean;
   canMoveBackward?: boolean;
-  insideCardCount?: number;
   attachedCardCount?: number;
   attachedContainerTitle?: string | null;
   isContainerDropTarget?: boolean;
@@ -81,9 +80,7 @@ export type V2CardNodeData = {
     cardId: string,
     action: V2CardLayerAction
   ) => Promise<void> | void;
-  onAttachCardsInside?: (containerId: string) => Promise<void> | void;
-  onDetachAllCards?: (containerId: string) => Promise<void> | void;
-  onDetachFromContainer?: (cardId: string) => Promise<void> | void;
+  onFitContainerToContent?: (containerId: string) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateVisualStyle?: (cardId: string, patch: V2CardVisualStyle) => Promise<void> | void;
   onCloseVisualEditor?: () => void;
@@ -593,7 +590,6 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const isContainer = isV2ContainerCard(card, cardType);
-  const containerVariant = getV2ContainerVariant(card);
   const CardTypeIcon = getV2CardTypeIcon(cardType);
   const storedDataPreviewRows = useMemo(
     () => buildCardDataPreviewRows(card, cardType),
@@ -627,10 +623,11 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
   const cardSummary = isContainer ? card.description.trim() : getCardSummary(card);
   const cardDisplayTitle =
-    isContainer && (card.title === "Sticky note" || card.title === "Frame")
+    isContainer && (card.title === "Box" || card.title === "Sticky note" || card.title === "Frame")
       ? ""
       : card.title;
   const visualStyle = card.visualStyle ?? {};
+  const containerFillOpacity = Math.min(1, Math.max(0.1, visualStyle.fillOpacity ?? 0.72));
   const isLocked = visualStyle.locked === true;
   const connectorSlots = buildV2ConnectorSlots({
     visualStyle,
@@ -1035,7 +1032,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       ref={articleRef}
       className={`v2CardNode${
         isContainer
-          ? ` v2ContainerNode v2ContainerNode${containerVariant === "frame" ? "Frame" : "Sticky"}`
+          ? " v2ContainerNode"
           : ""
       }${data.isContainerDropTarget ? " v2ContainerNodeDropTarget" : ""}${
         data.isVisualEditing ? " v2CardNodeVisualEditing" : ""
@@ -1050,7 +1047,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         flexDirection: "column",
         borderColor: isContainer ? "transparent" : cardBorderColor,
         backgroundColor: isContainer
-          ? visualStyle.fillColor ?? (containerVariant === "frame" ? "#ffffff" : "#fff7c2")
+          ? `color-mix(in srgb, ${visualStyle.fillColor ?? "#fff7c2"} ${Math.round(containerFillOpacity * 100)}%, transparent)`
           : undefined,
         boxShadow: isContainer
           ? selected
@@ -1254,8 +1251,8 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
         {card.containerId ? (
           <span
             className="v2ContainerPinnedIndicator nodrag nopan"
-            title={`Attached to ${data.attachedContainerTitle ?? "container"}`}
-            aria-label={`Attached to ${data.attachedContainerTitle ?? "container"}`}
+            title={`Inside ${data.attachedContainerTitle ?? "Box"}`}
+            aria-label={`Inside ${data.attachedContainerTitle ?? "Box"}`}
           >
             <Pin size={12} strokeWidth={2.4} />
           </span>
@@ -1380,32 +1377,10 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
                   <button
                     type="button"
                     role="menuitem"
-                    disabled={data.isCardActionPending || (data.insideCardCount ?? 0) === 0}
-                    onClick={() => runMenuAction(() => data.onAttachCardsInside?.(card.id))}
-                  >
-                    {data.pendingCardAction === "membership"
-                      ? "Updating…"
-                      : `Attach cards inside (${data.insideCardCount ?? 0})`}
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
                     disabled={data.isCardActionPending || (data.attachedCardCount ?? 0) === 0}
-                    onClick={() => runMenuAction(() => data.onDetachAllCards?.(card.id))}
+                    onClick={() => runMenuAction(() => data.onFitContainerToContent?.(card.id))}
                   >
-                    Detach all cards
-                  </button>
-                  <div className="v2CardActionMenuSeparator" role="separator" />
-                </>
-              ) : card.containerId ? (
-                <>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={data.isCardActionPending}
-                    onClick={() => runMenuAction(() => data.onDetachFromContainer?.(card.id))}
-                  >
-                    {data.pendingCardAction === "membership" ? "Detaching…" : "Detach from container"}
+                    {data.pendingCardAction === "membership" ? "Fitting…" : "Fit to content"}
                   </button>
                   <div className="v2CardActionMenuSeparator" role="separator" />
                 </>

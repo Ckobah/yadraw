@@ -1046,7 +1046,7 @@ export function createV2BoardService(
           const container = cardById.get(containerId);
           if (!container) validationFailed("Container card is not on this board");
           if (typeById.get(container.cardTypeId)?.kind !== "container") {
-            validationFailed("Container membership must reference a frame or sticky note");
+            validationFailed("Container membership must reference a box");
           }
           if (typeById.get(child.cardTypeId)?.kind === "container") {
             validationFailed("Nested containers are not supported");
@@ -1593,14 +1593,14 @@ export function createV2BoardService(
         validationFailed("Card type does not belong to the board workspace");
       }
       if (!input.container && cardType.kind === "container") {
-        conflict("Use the container creation mode for frames and sticky notes");
+        conflict("Use the Box creation mode");
       }
       if (
         !input.container &&
         (input.visualStyle?.containerVariant !== undefined ||
           input.visualStyle?.containerTheme !== undefined)
       ) {
-        validationFailed("Container appearance is reserved for frames and sticky notes");
+        validationFailed("Box appearance is reserved for Box cards");
       }
 
       let libraryEntry: V2CardLibraryEntry | null = null;
@@ -1635,21 +1635,25 @@ export function createV2BoardService(
           title:
             libraryEntry?.title ??
             input.title ??
-            (input.container?.variant === "frame"
-              ? "Frame"
-              : input.container
-                ? "Sticky note"
-                : cardType.name),
+            (input.container?.variant === "box"
+              ? "Box"
+              : input.container?.variant === "frame"
+                ? "Frame"
+                : input.container
+                  ? "Sticky note"
+                  : cardType.name),
           description: libraryEntry?.description ?? input.description ?? "",
           data: cloneJson(libraryEntry?.data ?? input.data ?? {}),
           position: input.position ?? { x: 0, y: 0 },
           size:
             input.size ??
-            (input.container?.variant === "frame"
-              ? { width: 720, height: 480 }
-              : input.container
-                ? { width: 320, height: 220 }
-                : cardType.defaultSize),
+            (input.container?.variant === "box"
+              ? { width: 480, height: 320 }
+              : input.container?.variant === "frame"
+                ? { width: 720, height: 480 }
+                : input.container
+                  ? { width: 320, height: 220 }
+                  : cardType.defaultSize),
           visualStyle: cloneJson(
             input.container
               ? {
@@ -1704,7 +1708,7 @@ export function createV2BoardService(
       ) {
         const cardType = await repository.getCardType(existing.cardTypeId);
         if (cardType?.kind !== "container") {
-          validationFailed("Container appearance is reserved for frames and sticky notes");
+          validationFailed("Box appearance is reserved for Box cards");
         }
       }
       if (

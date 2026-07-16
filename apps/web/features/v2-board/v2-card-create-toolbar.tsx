@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ChevronDown, Database, Frame, LoaderCircle, Plus, Search, StickyNote } from "lucide-react";
+import { ArrowLeft, ChevronDown, Database, LoaderCircle, Plus, Search, Square } from "lucide-react";
 import { useReactFlow } from "@xyflow/react";
 import type {
   V2CardLibraryEntry,
   V2CardType,
   V2CardTypePort,
-  V2ContainerVariant,
   V2Position,
 } from "@yadraw/shared";
 import { listV2CardLibraryEntries } from "../v2-card-library/api";
@@ -21,11 +20,7 @@ type PendingPlacement = {
   cardType: V2CardType;
   libraryEntryId: string | null;
   title: string;
-} | {
-  kind: "container";
-  variant: V2ContainerVariant;
-  title: string;
-};
+} | { kind: "box" };
 
 type V2CardCreateToolbarProps = {
   workspaceId: string;
@@ -36,7 +31,7 @@ type V2CardCreateToolbarProps = {
     libraryEntryId: string | null
   ) => Promise<void>;
   onManageCardTypes: (cardTypeId?: string | null) => void;
-  onCreateContainer: (variant: V2ContainerVariant, position: V2Position) => Promise<void>;
+  onCreateBox: (position: V2Position) => Promise<void>;
   connectorControl?: ReactNode;
 };
 
@@ -45,7 +40,7 @@ export function V2CardCreateToolbar({
   cardTypes,
   onCreateCard,
   onManageCardTypes,
-  onCreateContainer,
+  onCreateBox,
   connectorControl,
 }: V2CardCreateToolbarProps) {
   const { screenToFlowPosition } = useReactFlow();
@@ -166,7 +161,7 @@ export function V2CardCreateToolbar({
       const center = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       const size = pendingPlacement.kind === "card"
         ? pendingPlacement.cardType.defaultSize
-        : V2_CONTAINER_SIZES[pendingPlacement.variant];
+        : V2_CONTAINER_SIZES.box;
       const position: V2Position = {
         x: center.x - size.width / 2,
         y: center.y - size.height / 2,
@@ -179,13 +174,13 @@ export function V2CardCreateToolbar({
             position,
             pendingPlacement.libraryEntryId
           )
-        : onCreateContainer(pendingPlacement.variant, position);
+        : onCreateBox(position);
       void createPromise
         .then(() => setPendingPlacement(null))
         .catch(() =>
           setError(
-            pendingPlacement.kind === "container"
-              ? "Could not create container"
+            pendingPlacement.kind === "box"
+              ? "Could not create Box"
               : "Could not create card"
           )
         )
@@ -207,7 +202,7 @@ export function V2CardCreateToolbar({
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isCreating, onCreateCard, onCreateContainer, pendingPlacement, screenToFlowPosition]);
+  }, [isCreating, onCreateBox, onCreateCard, pendingPlacement, screenToFlowPosition]);
 
   function chooseCardType(cardType: V2CardType) {
     setCreationCardType(cardType);
@@ -234,16 +229,9 @@ export function V2CardCreateToolbar({
     setError(null);
   }
 
-  function beginContainerPlacement(
-    variant: V2ContainerVariant,
-    event: ReactMouseEvent<HTMLButtonElement>
-  ) {
+  function beginBoxPlacement(event: ReactMouseEvent<HTMLButtonElement>) {
     setCursorPosition({ x: event.clientX, y: event.clientY });
-    setPendingPlacement({
-      kind: "container",
-      variant,
-      title: variant === "frame" ? "Frame" : "Sticky note",
-    });
+    setPendingPlacement({ kind: "box" });
     setIsOpen(false);
     setError(null);
   }
@@ -289,21 +277,12 @@ export function V2CardCreateToolbar({
         </button>
         <button
           type="button"
-          className="v2CreateToolbarButton v2CreateToolbarUtilityButton"
-          onClick={(event) => beginContainerPlacement("sticky", event)}
+          className="v2CreateToolbarButton"
+          onClick={beginBoxPlacement}
           disabled={isCreating}
         >
-          <StickyNote size={15} strokeWidth={2.2} />
-          <span>Sticky</span>
-        </button>
-        <button
-          type="button"
-          className="v2CreateToolbarButton v2CreateToolbarUtilityButton"
-          onClick={(event) => beginContainerPlacement("frame", event)}
-          disabled={isCreating}
-        >
-          <Frame size={15} strokeWidth={2.2} />
-          <span>Frame</span>
+          <Square size={15} strokeWidth={2.2} />
+          <span>Box</span>
         </button>
         {connectorControl}
       </div>
@@ -473,8 +452,7 @@ export function V2CardCreateToolbar({
                 saving={isCreating}
               />
             ) : (
-              <ContainerPlacementPreview
-                variant={pendingPlacement.variant}
+              <BoxPlacementPreview
                 x={cursorPosition.x}
                 y={cursorPosition.y}
                 saving={isCreating}
@@ -487,21 +465,19 @@ export function V2CardCreateToolbar({
   );
 }
 
-function ContainerPlacementPreview({
-  variant,
+function BoxPlacementPreview({
   x,
   y,
   saving,
 }: {
-  variant: V2ContainerVariant;
   x: number;
   y: number;
   saving: boolean;
 }) {
-  const size = V2_CONTAINER_SIZES[variant];
+  const size = V2_CONTAINER_SIZES.box;
   return (
     <div
-      className={`v2CardPlacementPreview v2ContainerPlacementPreview v2ContainerPlacementPreview${variant === "frame" ? "Frame" : "Sticky"}${saving ? " v2CardPlacementPreviewSaving" : ""}`}
+      className={`v2CardPlacementPreview v2ContainerPlacementPreview${saving ? " v2CardPlacementPreviewSaving" : ""}`}
       style={{ left: x, top: y, width: size.width, height: size.height }}
       aria-hidden="true"
     />

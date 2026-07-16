@@ -9,9 +9,12 @@ export const V2_CONTAINER_SIZES: Record<
   V2ContainerVariant,
   { width: number; height: number }
 > = {
+  box: { width: 480, height: 320 },
   sticky: { width: 320, height: 220 },
   frame: { width: 720, height: 480 },
 };
+
+export const V2_BOX_CONTENT_PADDING = 24;
 
 export const V2_CONTAINER_THEMES: Record<
   V2ContainerTheme,
@@ -37,7 +40,7 @@ export function isV2ContainerCard(
 }
 
 export function getV2ContainerVariant(card: V2Card): V2ContainerVariant {
-  return card.visualStyle.containerVariant ?? "sticky";
+  return card.visualStyle.containerVariant ?? "box";
 }
 
 export function getV2ContainerTheme(card: V2Card): V2ContainerTheme {
@@ -57,17 +60,59 @@ export function isV2CardCenterInsideContainer(container: V2Card, card: V2Card): 
   return centerX >= left && centerX <= right && centerY >= top && centerY <= bottom;
 }
 
-export function getV2CardsInsideContainer(
-  container: V2Card,
+export type V2BoxGeometry = Pick<V2Card, "position" | "size">;
+
+function getContentBounds(cards: V2Card[], padding: number): V2BoxGeometry | null {
+  if (cards.length === 0) return null;
+  const left = Math.min(...cards.map((card) => card.position.x)) - padding;
+  const top = Math.min(...cards.map((card) => card.position.y)) - padding;
+  const right = Math.max(...cards.map((card) => card.position.x + card.size.width)) + padding;
+  const bottom = Math.max(...cards.map((card) => card.position.y + card.size.height)) + padding;
+  return {
+    position: { x: left, y: top },
+    size: {
+      width: Math.max(220, right - left),
+      height: Math.max(160, bottom - top),
+    },
+  };
+}
+
+export function getV2BoxFitGeometry(
   cards: V2Card[],
-  cardTypeById: Map<string, V2CardType>
-): V2Card[] {
-  return cards.filter((card) => {
-    if (card.id === container.id || isV2ContainerCard(card, cardTypeById.get(card.cardTypeId))) {
-      return false;
-    }
-    return isV2CardCenterInsideContainer(container, card);
-  });
+  padding = V2_BOX_CONTENT_PADDING
+): V2BoxGeometry | null {
+  return getContentBounds(cards, padding);
+}
+
+export function getExpandedV2BoxGeometry(
+  box: V2Card,
+  cards: V2Card[],
+  padding = V2_BOX_CONTENT_PADDING
+): V2BoxGeometry | null {
+  const contentBounds = getContentBounds(cards, padding);
+  if (!contentBounds) return null;
+  const left = Math.min(box.position.x, contentBounds.position.x);
+  const top = Math.min(box.position.y, contentBounds.position.y);
+  const right = Math.max(
+    box.position.x + box.size.width,
+    contentBounds.position.x + contentBounds.size.width
+  );
+  const bottom = Math.max(
+    box.position.y + box.size.height,
+    contentBounds.position.y + contentBounds.size.height
+  );
+  if (
+    left === box.position.x &&
+    top === box.position.y &&
+    right === box.position.x + box.size.width &&
+    bottom === box.position.y + box.size.height
+  ) {
+    return null;
+  }
+  return {
+    position: { x: left, y: top },
+    size: { width: right - left, height: bottom - top },
+  };
 }
 
 export function buildV2ContainerFallbackType(
@@ -79,8 +124,8 @@ export function buildV2ContainerFallbackType(
     workspaceId,
     key: "yadraw_system_container",
     kind: "container",
-    name: "Container",
-    description: "Sticky notes and frames",
+    name: "Box",
+    description: "Spatial group for cards",
     defaultData: {},
     schema: { fields: [] },
     defaultVisualStyle: {},

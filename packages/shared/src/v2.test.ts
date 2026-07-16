@@ -668,13 +668,13 @@ describe("v2 API contracts", () => {
     expect(
       v2UpdateBoardLayoutBodySchema.parse({
         cards: [
-          { id: cardId, zIndex: 2 },
+          { id: cardId, size: { width: 480, height: 320 }, zIndex: 2 },
           { id: cardTypeId, zIndex: 1 }
         ]
       })
     ).toMatchObject({
       cards: [
-        { id: cardId, zIndex: 2 },
+        { id: cardId, size: { width: 480, height: 320 }, zIndex: 2 },
         { id: cardTypeId, zIndex: 1 }
       ]
     });
@@ -698,9 +698,24 @@ describe("v2 API contracts", () => {
     });
     expect(
       v2CreateCardBodySchema.parse({
+        container: { variant: "box", theme: "yellow" },
+        visualStyle: { fillOpacity: 0.55 }
+      })
+    ).toMatchObject({
+      container: { variant: "box", theme: "yellow" },
+      visualStyle: { fillOpacity: 0.55 }
+    });
+    expect(
+      v2CreateCardBodySchema.parse({
         container: { variant: "frame", theme: "white" }
       })
     ).toMatchObject({ container: { variant: "frame", theme: "white" } });
+    expect(() =>
+      v2CreateCardBodySchema.parse({
+        container: { variant: "box" },
+        visualStyle: { fillOpacity: 0.05 }
+      })
+    ).toThrow();
     expect(
       v2UpdateBoardLayoutBodySchema.parse({
         cards: [{ id: cardId, containerId: targetCardId }]

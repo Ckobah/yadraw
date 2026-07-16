@@ -58,7 +58,7 @@ export const v2ConnectorSlotSchema = z.object({
 });
 
 export const v2CardTypeKindSchema = z.enum(["entity", "container"]);
-export const v2ContainerVariantSchema = z.enum(["sticky", "frame"]);
+export const v2ContainerVariantSchema = z.enum(["box", "sticky", "frame"]);
 export const v2ContainerThemeSchema = z.enum([
   "yellow",
   "white",
@@ -73,6 +73,7 @@ export const v2CardVisualStyleSchema = z.object({
   accentColor: z.string().min(1).max(32).optional(),
   iconKey: z.string().trim().min(1).max(40).optional(),
   fillColor: z.string().min(1).max(32).optional(),
+  fillOpacity: z.number().min(0.1).max(1).optional(),
   borderColor: z.string().min(1).max(32).optional(),
   fontFamily: z.string().min(1).max(80).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
@@ -889,6 +890,7 @@ export const v2UpdateBoardLayoutBodySchema = z
           .object({
             id: v2UuidSchema,
             position: v2PositionSchema.optional(),
+            size: v2SizeSchema.optional(),
             zIndex: z.number().int().min(0).max(10000).optional(),
             containerId: v2UuidSchema.nullable().optional()
           })
@@ -896,6 +898,7 @@ export const v2UpdateBoardLayoutBodySchema = z
           .refine(
             (card) =>
               card.position !== undefined ||
+              card.size !== undefined ||
               card.zIndex !== undefined ||
               Object.prototype.hasOwnProperty.call(card, "containerId"),
             {

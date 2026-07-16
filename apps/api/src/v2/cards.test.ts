@@ -42,6 +42,7 @@ describe("v2 card API", () => {
       cards: cards.map((card, index) => ({
         id: card.id,
         position: { x: card.position.x + 80 + index, y: card.position.y + 40 },
+        ...(index === 0 ? { size: { width: 480, height: 320 } } : {}),
         zIndex: cards.length - index
       })),
       connections: [
@@ -68,6 +69,10 @@ describe("v2 card API", () => {
     expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.position).toEqual(
       payload.cards[0]!.position
     );
+    expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.size).toEqual({
+      width: 480,
+      height: 320
+    });
     expect(detail?.cards.find((card) => card.id === cards[0]!.id)?.visualStyle).toMatchObject({
       zIndex: payload.cards[0]!.zIndex
     });
@@ -200,6 +205,26 @@ describe("v2 card API", () => {
 
   it("uses variant-specific default container colors", async () => {
     const { server, seed } = createCardServer();
+
+    const boxResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/cards`,
+      payload: {
+        container: { variant: "box" },
+        visualStyle: { fillOpacity: 0.55 }
+      }
+    });
+    expect(boxResponse.statusCode).toBe(201);
+    expect(boxResponse.json()).toMatchObject({
+      title: "Box",
+      size: { width: 480, height: 320 },
+      visualStyle: {
+        containerVariant: "box",
+        containerTheme: "yellow",
+        fillColor: "#fff7c2",
+        fillOpacity: 0.55
+      }
+    });
 
     const stickyResponse = await server.inject({
       method: "POST",

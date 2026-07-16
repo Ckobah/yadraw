@@ -73,6 +73,32 @@ export async function updateV2CardSize(
   }
 }
 
+export async function updateV2CardGeometry(
+  cardId: string,
+  input: {
+    position: { x: number; y: number };
+    size: { width: number; height: number };
+  }
+): Promise<void> {
+  const response = await fetch(`/v2/actions/cards/${encodeURIComponent(cardId)}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    let body: unknown;
+    try { body = await response.json(); } catch { /* ignore */ }
+    throw new V2ApiError(
+      response.status,
+      `Geometry update failed with ${response.status}`,
+      body
+    );
+  }
+}
+
 export async function updateV2CardVisualStyle(
   cardId: string,
   visualStyle: V2CardVisualStyle
