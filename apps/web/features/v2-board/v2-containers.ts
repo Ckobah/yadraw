@@ -39,6 +39,10 @@ export function isV2ContainerCard(
   return isV2ContainerType(cardType) || card.visualStyle.containerVariant !== undefined;
 }
 
+export function isV2CardPinnedToContainer(card: V2Card): boolean {
+  return Boolean(card.containerId) && card.visualStyle.containerPinned !== false;
+}
+
 export function getV2ContainerVariant(card: V2Card): V2ContainerVariant {
   return card.visualStyle.containerVariant ?? "box";
 }

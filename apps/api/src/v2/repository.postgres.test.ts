@@ -533,11 +533,12 @@ describePostgres("v2 Postgres repository", () => {
 
     await expect(
       service.updateBoardLayout(ownerContext, seedIds.board, {
-        cards: [{ id: child.id, containerId: container.id }]
+        cards: [{ id: child.id, containerId: container.id, containerPinned: false }]
       })
     ).resolves.toEqual({ updatedCards: 1, updatedConnections: 0 });
     await expect(repository.getCard(child.id)).resolves.toMatchObject({
-      containerId: container.id
+      containerId: container.id,
+      visualStyle: { containerPinned: false }
     });
 
     const detail = await repository.getBoardDetail(seedIds.board);

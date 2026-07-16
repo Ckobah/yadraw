@@ -44,6 +44,7 @@ type V2CardInspectorProps = {
   saveStatus: SaveStatus;
   pendingAction: "duplicate" | "delete" | null;
   fitPending: boolean;
+  containerPinPendingCardIds: ReadonlySet<string>;
   actionError: string | null;
   attachments: V2CardAttachment[] | undefined;
   attachmentsLoading: boolean;
@@ -57,6 +58,7 @@ type V2CardInspectorProps = {
   ) => Promise<void>;
   onUpdateVisualStyle: (cardId: string, patch: V2CardVisualStyle) => Promise<void>;
   onFitContainerToContent: (containerId: string) => Promise<void>;
+  onSetContainerPinned: (cardIds: string[], pinned: boolean) => Promise<void>;
   onSetLibraryEntry: (
     cardId: string,
     libraryEntryId: string | null,
@@ -95,6 +97,7 @@ export function V2CardInspector({
   saveStatus,
   pendingAction,
   fitPending,
+  containerPinPendingCardIds,
   actionError,
   attachments,
   attachmentsLoading,
@@ -102,6 +105,7 @@ export function V2CardInspector({
   onUpdateCardData,
   onUpdateVisualStyle,
   onFitContainerToContent,
+  onSetContainerPinned,
   onSetLibraryEntry,
   onManageCardType,
   onCreateLinkedFieldBinding,
@@ -195,6 +199,8 @@ export function V2CardInspector({
               container={card}
               allCards={allCards}
               cardTypes={cardTypes}
+              pinPendingCardIds={containerPinPendingCardIds}
+              onSetContainerPinned={onSetContainerPinned}
             />
           </>
         ) : (

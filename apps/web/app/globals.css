@@ -4577,6 +4577,25 @@ button:disabled {
 
 .v2ContainerPinnedIndicator {
   width: 22px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.v2ContainerPinnedIndicator:hover:not(:disabled),
+.v2ContainerPinnedIndicator:focus-visible:not(:disabled) {
+  outline: 0;
+  background: color-mix(in srgb, #fff 92%, transparent);
+}
+
+.v2ContainerPinnedIndicator:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.v2ContainerPinUnpinned > svg,
+svg.v2ContainerPinUnpinned {
+  transform: rotate(45deg);
+  transform-origin: center;
 }
 
 .v2ContainerCountIndicator {
@@ -5890,6 +5909,18 @@ button:disabled {
   color: var(--v2-inspector-accent);
   font-size: 10.5px;
   font-weight: 800;
+  cursor: pointer;
+}
+
+.v2ContainerCardsCount:hover:not(:disabled),
+.v2ContainerCardsCount:focus-visible:not(:disabled) {
+  border-color: color-mix(in srgb, var(--v2-inspector-accent) 52%, #e4e7f0);
+  outline: 0;
+}
+
+.v2ContainerCardsCount:disabled {
+  cursor: default;
+  opacity: 0.48;
 }
 
 .v2ContainerCardsGroup {
@@ -6011,6 +6042,19 @@ button:disabled {
   background: #fff;
   color: #667085;
   cursor: pointer;
+}
+
+.v2ContainerCardRow > .v2ContainerCardRowPin {
+  width: 24px;
+  height: 24px;
+  border-color: transparent;
+  background: color-mix(in srgb, var(--v2-inspector-accent) 9%, #fff);
+  color: var(--v2-inspector-accent);
+}
+
+.v2ContainerCardRow > .v2ContainerCardRowPin.v2ContainerPinUnpinned {
+  background: #f8fafc;
+  color: #98a2b3;
 }
 
 .v2ContainerCardRow > button:hover:not(:disabled),

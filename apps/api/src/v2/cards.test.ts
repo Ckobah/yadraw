@@ -183,6 +183,28 @@ describe("v2 card API", () => {
       containerId: container.id
     });
 
+    const unpinResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: { cards: [{ id: child.id, containerPinned: false }] }
+    });
+    expect(unpinResponse.statusCode).toBe(200);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({
+      containerId: container.id,
+      visualStyle: { containerPinned: false }
+    });
+
+    const repinResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/boards/${seed.board.id}/layout`,
+      payload: { cards: [{ id: child.id, containerPinned: true }] }
+    });
+    expect(repinResponse.statusCode).toBe(200);
+    await expect(repository.getCard(child.id)).resolves.toMatchObject({
+      containerId: container.id,
+      visualStyle: { containerPinned: true }
+    });
+
     const ordinaryParentResponse = await server.inject({
       method: "PATCH",
       url: `/v2/boards/${seed.board.id}/layout`,

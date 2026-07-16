@@ -84,12 +84,16 @@ export const v2CardVisualStyleSchema = z.object({
   bodyVerticalAlign: z.enum(["top", "center", "bottom"]).optional(),
   locked: z.boolean().optional(),
   zIndex: z.number().int().min(0).max(10000).optional(),
+  containerPinned: z.boolean().optional(),
   containerVariant: v2ContainerVariantSchema.optional(),
   containerTheme: v2ContainerThemeSchema.optional(),
   connectorSlots: z.array(v2ConnectorSlotSchema).optional()
 });
 
-const v2CardTypeDefaultVisualStyleSchema = v2CardVisualStyleSchema.omit({ zIndex: true });
+const v2CardTypeDefaultVisualStyleSchema = v2CardVisualStyleSchema.omit({
+  zIndex: true,
+  containerPinned: true
+});
 
 export const v2ConnectionMarkerSchema = z.enum([
   "none",
@@ -908,6 +912,7 @@ export const v2UpdateBoardLayoutBodySchema = z
             position: v2PositionSchema.optional(),
             size: v2SizeSchema.optional(),
             zIndex: z.number().int().min(0).max(10000).optional(),
+            containerPinned: z.boolean().optional(),
             containerId: v2UuidSchema.nullable().optional()
           })
           .strict()
@@ -916,6 +921,7 @@ export const v2UpdateBoardLayoutBodySchema = z
               card.position !== undefined ||
               card.size !== undefined ||
               card.zIndex !== undefined ||
+              card.containerPinned !== undefined ||
               Object.prototype.hasOwnProperty.call(card, "containerId"),
             {
             message: "At least one card layout change is required"

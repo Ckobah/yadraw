@@ -671,13 +671,23 @@ describe("v2 API contracts", () => {
     expect(
       v2UpdateBoardLayoutBodySchema.parse({
         cards: [
-          { id: cardId, size: { width: 480, height: 320 }, zIndex: 2 },
+          {
+            id: cardId,
+            size: { width: 480, height: 320 },
+            zIndex: 2,
+            containerPinned: false
+          },
           { id: cardTypeId, zIndex: 1 }
         ]
       })
     ).toMatchObject({
       cards: [
-        { id: cardId, size: { width: 480, height: 320 }, zIndex: 2 },
+        {
+          id: cardId,
+          size: { width: 480, height: 320 },
+          zIndex: 2,
+          containerPinned: false
+        },
         { id: cardTypeId, zIndex: 1 }
       ]
     });
@@ -1305,7 +1315,8 @@ describe("v2CardSchema with visualStyle", () => {
         fontWeight: "700",
         fontStyle: "italic",
         textDecoration: "underline",
-        zIndex: 4
+        zIndex: 4,
+        containerPinned: false
       }
     });
     expect(card.visualStyle).toEqual({
@@ -1315,7 +1326,8 @@ describe("v2CardSchema with visualStyle", () => {
       fontWeight: "700",
       fontStyle: "italic",
       textDecoration: "underline",
-      zIndex: 4
+      zIndex: 4,
+      containerPinned: false
     });
   });
 

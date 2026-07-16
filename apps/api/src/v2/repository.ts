@@ -1136,6 +1136,12 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         if (update.zIndex !== undefined) {
           card.visualStyle = { ...card.visualStyle, zIndex: update.zIndex };
         }
+        if (update.containerPinned !== undefined) {
+          card.visualStyle = {
+            ...card.visualStyle,
+            containerPinned: update.containerPinned
+          };
+        }
         if (Object.prototype.hasOwnProperty.call(update, "containerId")) {
           card.containerId = update.containerId ?? null;
         }
@@ -3067,8 +3073,20 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
                   width = coalesce($8::numeric, width),
                   height = coalesce($9::numeric, height),
                   visual_style = case
-                    when $5::integer is null then visual_style
-                    else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
+                    when $10::boolean is null then
+                      case
+                        when $5::integer is null then visual_style
+                        else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
+                      end
+                    else jsonb_set(
+                      case
+                        when $5::integer is null then visual_style
+                        else jsonb_set(visual_style, '{zIndex}', to_jsonb($5::integer), true)
+                      end,
+                      '{containerPinned}',
+                      to_jsonb($10::boolean),
+                      true
+                    )
                   end,
                   container_id = case
                     when $6::boolean then $7::uuid
@@ -3086,7 +3104,8 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
               Object.prototype.hasOwnProperty.call(update, "containerId"),
               update.containerId ?? null,
               update.size?.width ?? null,
-              update.size?.height ?? null
+              update.size?.height ?? null,
+              update.containerPinned ?? null
             ]
           );
           if ((result.rowCount ?? 0) !== 1) {

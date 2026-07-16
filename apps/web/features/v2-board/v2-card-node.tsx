@@ -47,7 +47,10 @@ import {
 } from "./v2-linked-fields";
 import { getV2CardTypeIcon } from "./v2-card-type-icons";
 import { resolveCardTypeAccentKey } from "./v2-theme-tokens";
-import { isV2ContainerCard } from "./v2-containers";
+import {
+  isV2CardPinnedToContainer,
+  isV2ContainerCard,
+} from "./v2-containers";
 
 export type V2CardLayerAction =
   | "bringForward"
@@ -74,7 +77,7 @@ export type V2CardNodeData = {
   canMoveForward?: boolean;
   canMoveBackward?: boolean;
   attachedCardCount?: number;
-  attachedContainerTitle?: string | null;
+  isContainerPinPending?: boolean;
   isContainerDropTarget?: boolean;
   isVisualEditing?: boolean;
   onStartVisualEditor?: (cardId: string) => void;
@@ -85,6 +88,7 @@ export type V2CardNodeData = {
     action: V2CardLayerAction
   ) => Promise<void> | void;
   onFitContainerToContent?: (containerId: string) => Promise<void> | void;
+  onSetContainerPinned?: (cardIds: string[], pinned: boolean) => Promise<void> | void;
   onResizeCard?: (cardId: string, size: { width: number; height: number }) => void;
   onUpdateCardBasics?: (
     cardId: string,
@@ -600,6 +604,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const accentKey = resolveCardTypeAccentKey(cardType);
   const accentColor = `var(--yd-accent-${accentKey}-solid)`;
   const isContainer = isV2ContainerCard(card, cardType);
+  const isContainerPinned = isV2CardPinnedToContainer(card);
   const CardTypeIcon = getV2CardTypeIcon(cardType);
   const storedDataPreviewRows = useMemo(
     () => buildCardDataPreviewRows(card, cardType),
@@ -1435,13 +1440,26 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           </>
         ) : null}
         {card.containerId ? (
-          <span
-            className="v2ContainerPinnedIndicator nodrag nopan"
-            title={`Inside ${data.attachedContainerTitle ?? "Box"}`}
-            aria-label={`Inside ${data.attachedContainerTitle ?? "Box"}`}
+          <button
+            type="button"
+            className={`v2ContainerPinnedIndicator nodrag nopan${
+              isContainerPinned ? "" : " v2ContainerPinUnpinned"
+            }`}
+            title={isContainerPinned ? "Unpin from Box" : "Pin to Box"}
+            aria-label={isContainerPinned ? "Unpin from Box" : "Pin to Box"}
+            aria-pressed={isContainerPinned}
+            disabled={data.isContainerPinPending || !data.onSetContainerPinned}
+            onPointerDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void Promise.resolve(
+                data.onSetContainerPinned?.([card.id], !isContainerPinned)
+              ).catch(() => {});
+            }}
           >
             <Pin size={12} strokeWidth={2.4} />
-          </span>
+          </button>
         ) : null}
         {isLocked ? (
           <span

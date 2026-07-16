@@ -110,6 +110,7 @@ import {
   getExpandedV2BoxGeometry,
   getV2BoxFitGeometry,
   isV2CardCenterInsideContainer,
+  isV2CardPinnedToContainer,
   isV2ContainerCard,
   isV2ContainerType,
 } from "./v2-containers";
@@ -150,6 +151,7 @@ type CardLayoutUpdate = {
   position?: V2Card["position"];
   size?: V2Card["size"];
   zIndex?: number;
+  containerPinned?: boolean;
   containerId?: string | null;
 };
 
@@ -639,6 +641,9 @@ export function V2BoardCanvas({
   const [connectionCreateError, setConnectionCreateError] = useState<string | null>(null);
   const [movementSaveError, setMovementSaveError] = useState<string | null>(null);
   const [containerDropTargetId, setContainerDropTargetId] = useState<string | null>(null);
+  const [containerPinPendingCardIds, setContainerPinPendingCardIds] = useState(
+    () => new Set<string>()
+  );
   const [editorCommandError, setEditorCommandError] = useState<string | null>(null);
   const [dryRunResult, setDryRunResult] = useState<V2DryRunResult | null>(null);
   const [dryRunError, setDryRunError] = useState<string | null>(null);
@@ -656,6 +661,7 @@ export function V2BoardCanvas({
   const [linkedFieldBindingsError, setLinkedFieldBindingsError] = useState<string | null>(null);
   const [linkedFieldBindingsLoading, setLinkedFieldBindingsLoading] = useState(false);
   const cardActionLockRef = useRef<PendingCardAction>(null);
+  const containerPinActionLockRef = useRef(false);
   const selectedCardIdsRef = useRef(selectedCardIds);
   const pendingCardSelectionRef = useRef<string[] | null>(null);
   const lastInteractedCardIdRef = useRef<string | null>(null);
@@ -1166,7 +1172,7 @@ export function V2BoardCanvas({
       nodes
         .map((node) => {
           const { card } = node.data;
-          return `${card.id}:${card.containerId ?? ""}:${card.position.x}:${card.position.y}:${card.size.width}:${card.size.height}`;
+          return `${card.id}:${card.containerId ?? ""}:${card.visualStyle.containerPinned !== false}:${card.position.x}:${card.position.y}:${card.size.width}:${card.size.height}`;
         })
         .join("|"),
     [nodes]
@@ -1307,7 +1313,11 @@ export function V2BoardCanvas({
           continue;
         }
         for (const memberNode of nodesRef.current) {
-          if (memberNode.data.card.containerId !== cardId || cardIdSet.has(memberNode.id)) continue;
+          if (
+            memberNode.data.card.containerId !== cardId ||
+            !isV2CardPinnedToContainer(memberNode.data.card) ||
+            cardIdSet.has(memberNode.id)
+          ) continue;
           cardIdSet.add(memberNode.id);
           cardIds.push(memberNode.id);
         }
@@ -1349,7 +1359,11 @@ export function V2BoardCanvas({
       const groupCardIds = isV2ContainerCard(node.data.card, node.data.cardType)
         ? [
             ...nodesRef.current
-              .filter((candidate) => candidate.data.card.containerId === node.id)
+              .filter(
+                (candidate) =>
+                  candidate.data.card.containerId === node.id &&
+                  isV2CardPinnedToContainer(candidate.data.card)
+              )
               .map((candidate) => candidate.id),
             node.id,
           ]
@@ -1830,7 +1844,13 @@ export function V2BoardCanvas({
           ...node,
           data: {
             ...node.data,
-            card: { ...node.data.card, containerId },
+            card: {
+              ...node.data.card,
+              containerId,
+              visualStyle: containerId
+                ? { ...node.data.card.visualStyle, containerPinned: true }
+                : node.data.card.visualStyle,
+            },
           },
         };
       });
@@ -1840,7 +1860,10 @@ export function V2BoardCanvas({
         id: node.id,
         zIndex: layerById.get(node.id) ?? 1,
         ...(assignmentById.has(node.id)
-          ? { containerId: assignmentById.get(node.id) ?? null }
+          ? {
+              containerId: assignmentById.get(node.id) ?? null,
+              ...(assignmentById.get(node.id) ? { containerPinned: true } : {}),
+            }
           : {}),
       }));
 
@@ -1851,6 +1874,11 @@ export function V2BoardCanvas({
           const containerId = hasAssignment
             ? assignmentById.get(node.id) ?? null
             : node.data.card.containerId ?? null;
+          const visualStyle = {
+            ...node.data.card.visualStyle,
+            zIndex,
+            ...(hasAssignment && containerId ? { containerPinned: true } : {}),
+          };
           return {
             ...node,
             zIndex,
@@ -1859,7 +1887,7 @@ export function V2BoardCanvas({
               card: {
                 ...node.data.card,
                 containerId,
-                visualStyle: { ...node.data.card.visualStyle, zIndex },
+                visualStyle,
               },
             },
           };
@@ -2013,6 +2041,132 @@ export function V2BoardCanvas({
     [applyBoxGeometry, runEditorCommand]
   );
 
+  const applyContainerPinState = useCallback(
+    async (updates: Array<{ cardId: string; pinned: boolean }>) => {
+      if (updates.length === 0) return;
+      const pinnedById = new Map(
+        updates.map(({ cardId, pinned }) => [cardId, pinned])
+      );
+      const previousVisualStyles = new Map(
+        nodesRef.current
+          .filter((node) => pinnedById.has(node.id))
+          .map((node) => [node.id, node.data.card.visualStyle])
+      );
+
+      setNodes((current) =>
+        current.map((node) => {
+          const pinned = pinnedById.get(node.id);
+          if (pinned === undefined) return node;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              card: {
+                ...node.data.card,
+                visualStyle: {
+                  ...node.data.card.visualStyle,
+                  containerPinned: pinned,
+                },
+              },
+            },
+          };
+        })
+      );
+
+      setSaveStatus("saving");
+      try {
+        await updateV2BoardLayout(board.id, {
+          cards: updates.map(({ cardId, pinned }) => ({
+            id: cardId,
+            containerPinned: pinned,
+          })),
+          connections: [],
+        });
+        setMovementSaveError(null);
+        setSaveStatus("saved");
+      } catch (error) {
+        setNodes((current) =>
+          current.map((node) => {
+            const visualStyle = previousVisualStyles.get(node.id);
+            return visualStyle
+              ? {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    card: { ...node.data.card, visualStyle },
+                  },
+                }
+              : node;
+          })
+        );
+        setMovementSaveError("Box pin state could not be saved. The previous state was restored.");
+        setSaveStatus("error");
+        throw error;
+      }
+    },
+    [board.id, setNodes]
+  );
+
+  const handleSetContainerPinned = useCallback(
+    async (cardIds: string[], pinned: boolean) => {
+      if (containerPinActionLockRef.current) return;
+      const uniqueIds = [...new Set(cardIds)];
+      const targetNodes = uniqueIds.flatMap((cardId) => {
+        const node = nodesRef.current.find((candidate) => candidate.id === cardId);
+        return node?.data.card.containerId ? [node] : [];
+      });
+      const changedNodes = targetNodes.filter(
+        (node) => isV2CardPinnedToContainer(node.data.card) !== pinned
+      );
+      if (changedNodes.length === 0) return;
+
+      const nextUpdates = changedNodes.map((node) => ({ cardId: node.id, pinned }));
+      const previousUpdates = changedNodes.map((node) => ({
+        cardId: node.id,
+        pinned: isV2CardPinnedToContainer(node.data.card),
+      }));
+      const pendingIds = new Set(changedNodes.map((node) => node.id));
+      const previousSelection = selectedCardIdsRef.current;
+      let selectionChanged = false;
+
+      if (!pinned) {
+        const selectedIds = new Set(previousSelection);
+        const nextSelection = previousSelection.filter((selectedId) => {
+          if (!pendingIds.has(selectedId)) return true;
+          const containerId = changedNodes.find((node) => node.id === selectedId)?.data.card.containerId;
+          return !containerId || !selectedIds.has(containerId);
+        });
+        if (nextSelection.length !== previousSelection.length) {
+          selectionChanged = true;
+          selectedCardIdsRef.current = nextSelection;
+          setSelectedCardIds(nextSelection);
+          setSelectedCardId((current) =>
+            current && nextSelection.includes(current) ? current : nextSelection.at(-1) ?? null
+          );
+        }
+      }
+
+      containerPinActionLockRef.current = true;
+      setContainerPinPendingCardIds(pendingIds);
+      try {
+        const succeeded = await runEditorCommand({
+          label: pinned ? "Pin cards to Box" : "Unpin cards from Box",
+          execute: () => applyContainerPinState(nextUpdates),
+          undo: () => applyContainerPinState(previousUpdates),
+        });
+        if (!succeeded && selectionChanged) {
+          selectedCardIdsRef.current = previousSelection;
+          setSelectedCardIds(previousSelection);
+          setSelectedCardId(previousSelection.at(-1) ?? null);
+        }
+      } finally {
+        containerPinActionLockRef.current = false;
+        setContainerPinPendingCardIds(new Set());
+      }
+    },
+    [applyContainerPinState, runEditorCommand]
+  );
+
   const reconcileBoxContents = useCallback(async (
     projection?: { cardId: string; size: V2Card["size"] }
   ) => {
@@ -2030,6 +2184,10 @@ export function V2BoardCanvas({
     );
     const assignments = currentNodes.flatMap((node) => {
       if (isV2ContainerCard(node.data.card, node.data.cardType)) return [];
+      if (
+        node.data.card.containerId &&
+        !isV2CardPinnedToContainer(node.data.card)
+      ) return [];
       const nextContainerId = findContainerDropTarget(node, currentNodes)?.id ?? null;
       return nextContainerId === (node.data.card.containerId ?? null)
         ? []
@@ -2043,14 +2201,42 @@ export function V2BoardCanvas({
       assignments.map((assignment) => [assignment.cardId, assignment.containerId])
     );
     const projectedCards = currentNodes.map((node) => ({
-        ...node.data.card,
-        containerId: assignmentById.has(node.id)
-          ? assignmentById.get(node.id) ?? null
-          : node.data.card.containerId ?? null,
+      ...node.data.card,
+      containerId: assignmentById.has(node.id)
+        ? assignmentById.get(node.id) ?? null
+        : node.data.card.containerId ?? null,
+      visualStyle:
+        assignmentById.has(node.id) && assignmentById.get(node.id)
+          ? { ...node.data.card.visualStyle, containerPinned: true }
+          : node.data.card.visualStyle,
     }));
+    const boxesToExpand = new Set(
+      assignments.flatMap((assignment) =>
+        assignment.containerId ? [assignment.containerId] : []
+      )
+    );
+    if (projection) {
+      const projectedNode = currentNodes.find((node) => node.id === projection.cardId);
+      if (projectedNode) {
+        if (isV2ContainerCard(projectedNode.data.card, projectedNode.data.cardType)) {
+          boxesToExpand.add(projectedNode.id);
+        } else if (
+          projectedNode.data.card.containerId &&
+          isV2CardPinnedToContainer(projectedNode.data.card)
+        ) {
+          boxesToExpand.add(projectedNode.data.card.containerId);
+        }
+      }
+    }
     for (const boxNode of currentNodes) {
-      if (!isV2ContainerCard(boxNode.data.card, boxNode.data.cardType)) continue;
-      const content = projectedCards.filter((card) => card.containerId === boxNode.id);
+      if (
+        !boxesToExpand.has(boxNode.id) ||
+        !isV2ContainerCard(boxNode.data.card, boxNode.data.cardType)
+      ) continue;
+      const content = projectedCards.filter(
+        (card) =>
+          card.containerId === boxNode.id && isV2CardPinnedToContainer(card)
+      );
       const geometry = getExpandedV2BoxGeometry(boxNode.data.card, content);
       if (geometry) await applyBoxGeometry(boxNode.id, geometry);
     }
@@ -2641,8 +2827,6 @@ export function V2BoardCanvas({
     layerBlocks.forEach((block, index) => {
       block.nodes.forEach((node) => layerBlockIndexByCardId.set(node.id, index));
     });
-    const cardByRuntimeId = new Map(previewCards.map((card) => [card.id, card]));
-
     setNodes((nds) =>
       nds.map((node) => {
         const layerIndex = layerBlockIndexByCardId.get(node.id) ?? 0;
@@ -2650,9 +2834,6 @@ export function V2BoardCanvas({
         const attachedCards = isContainer
           ? previewCards.filter((card) => card.containerId === node.id)
           : [];
-        const attachedContainer = node.data.card.containerId
-          ? cardByRuntimeId.get(node.data.card.containerId)
-          : null;
         return {
           ...node,
           data: {
@@ -2670,7 +2851,7 @@ export function V2BoardCanvas({
             canMoveBackward: layerIndex > 0,
             canMoveForward: layerIndex < layerBlocks.length - 1,
             attachedCardCount: attachedCards.length,
-            attachedContainerTitle: attachedContainer?.title ?? null,
+            isContainerPinPending: containerPinPendingCardIds.has(node.id),
             isContainerDropTarget: containerDropTargetId === node.id,
             connectedPortKeys: Array.from(connectedPortKeyMap.get(node.id) ?? []),
             isVisualEditing: visualEditingCardId === node.id,
@@ -2679,6 +2860,7 @@ export function V2BoardCanvas({
             onDeleteCard: handleDeleteCard,
             onMoveCardLayer: handleMoveCardLayer,
             onFitContainerToContent: handleFitContainerToContent,
+            onSetContainerPinned: handleSetContainerPinned,
             onResizeCard: handleResizeCard,
             onUpdateCardBasics: handleUpdateCardBasics,
             onUpdateVisualStyle: handleUpdateVisualStyle,
@@ -2707,12 +2889,14 @@ export function V2BoardCanvas({
     visualEditingCardId,
     pendingCardAction,
     cardActionError,
+    containerPinPendingCardIds,
     connectedPortKeyMap,
     handleStartVisualEditor,
     handleDuplicateCard,
     handleDeleteCard,
     handleMoveCardLayer,
     handleFitContainerToContent,
+    handleSetContainerPinned,
     handleResizeCard,
     handleUpdateCardBasics,
     handleUpdateVisualStyle,
@@ -2871,6 +3055,15 @@ export function V2BoardCanvas({
             ? update.containerId ?? null
             : currentNode.data.card.containerId ?? null;
           const zIndex = update.zIndex ?? currentNode.zIndex;
+          const hasPinUpdate = update.containerPinned !== undefined;
+          const visualStyle =
+            update.zIndex === undefined && !hasPinUpdate
+              ? currentNode.data.card.visualStyle
+              : {
+                  ...currentNode.data.card.visualStyle,
+                  ...(update.zIndex !== undefined ? { zIndex: update.zIndex } : {}),
+                  ...(hasPinUpdate ? { containerPinned: update.containerPinned } : {}),
+                };
           changed = true;
           return {
             ...currentNode,
@@ -2884,10 +3077,7 @@ export function V2BoardCanvas({
                 position,
                 size,
                 containerId,
-                visualStyle:
-                  update.zIndex === undefined
-                    ? currentNode.data.card.visualStyle
-                    : { ...currentNode.data.card.visualStyle, zIndex: update.zIndex },
+                visualStyle,
               },
             },
           };
@@ -2920,6 +3110,9 @@ export function V2BoardCanvas({
             ...(update.position ? { position: update.position } : {}),
             ...(update.size ? { size: update.size } : {}),
             ...(update.zIndex !== undefined ? { zIndex: update.zIndex } : {}),
+            ...(update.containerPinned !== undefined
+              ? { containerPinned: update.containerPinned }
+              : {}),
             ...(Object.prototype.hasOwnProperty.call(update, "containerId")
               ? { containerId: update.containerId ?? null }
               : {}),
@@ -2994,7 +3187,10 @@ export function V2BoardCanvas({
       for (const movingNode of directlyMovingNodes) {
         if (!isV2ContainerCard(movingNode.data.card, movingNode.data.cardType)) continue;
         for (const attachedNode of nodesRef.current) {
-          if (attachedNode.data.card.containerId === movingNode.id) {
+          if (
+            attachedNode.data.card.containerId === movingNode.id &&
+            isV2CardPinnedToContainer(attachedNode.data.card)
+          ) {
             movingNodeById.set(attachedNode.id, attachedNode);
           }
         }
@@ -3178,13 +3374,27 @@ export function V2BoardCanvas({
         if (!projectedNode || isV2ContainerCard(projectedNode.data.card, projectedNode.data.cardType)) {
           continue;
         }
+        if (
+          movedBox &&
+          !snapshot.directlyMovedCardIds.has(cardId) &&
+          projectedNode.data.card.containerId &&
+          !isV2CardPinnedToContainer(projectedNode.data.card)
+        ) {
+          continue;
+        }
         const nextContainerId = findContainerDropTarget(projectedNode, projectedNodes)?.id ?? null;
         if (nextContainerId) boxesToExpand.add(nextContainerId);
         if (nextContainerId !== (projectedNode.data.card.containerId ?? null)) {
           membershipById.set(cardId, nextContainerId);
-          mergeUpdate(nextUpdateById, cardId, { containerId: nextContainerId });
+          mergeUpdate(nextUpdateById, cardId, {
+            containerId: nextContainerId,
+            ...(nextContainerId ? { containerPinned: true } : {}),
+          });
           mergeUpdate(previousUpdateById, cardId, {
             containerId: projectedNode.data.card.containerId ?? null,
+            ...(nextContainerId
+              ? { containerPinned: isV2CardPinnedToContainer(projectedNode.data.card) }
+              : {}),
           });
         }
       }
@@ -3198,6 +3408,9 @@ export function V2BoardCanvas({
             card: {
               ...projectedNode.data.card,
               containerId: membershipById.get(projectedNode.id) ?? null,
+              visualStyle: membershipById.get(projectedNode.id)
+                ? { ...projectedNode.data.card.visualStyle, containerPinned: true }
+                : projectedNode.data.card.visualStyle,
             },
           },
         };
@@ -3207,7 +3420,11 @@ export function V2BoardCanvas({
         const boxNode = proposedNodes.find((candidate) => candidate.id === boxId);
         if (!boxNode) continue;
         const contentCards = proposedNodes
-          .filter((candidate) => candidate.data.card.containerId === boxId)
+          .filter(
+            (candidate) =>
+              candidate.data.card.containerId === boxId &&
+              isV2CardPinnedToContainer(candidate.data.card)
+          )
           .map((candidate) => candidate.data.card);
         const expandedGeometry = getExpandedV2BoxGeometry(boxNode.data.card, contentCards);
         if (!expandedGeometry) continue;
@@ -4046,11 +4263,13 @@ export function V2BoardCanvas({
             pendingCardAction?.cardId === inspectedCard.id &&
             pendingCardAction.action === "membership"
           }
+          containerPinPendingCardIds={containerPinPendingCardIds}
           actionError={cardActionError?.cardId === inspectedCard.id ? cardActionError.message : null}
           onUpdateCardBasics={handleUpdateCardBasics}
           onUpdateCardData={handleUpdateCardData}
           onUpdateVisualStyle={handleUpdateVisualStyle}
           onFitContainerToContent={handleFitContainerToContent}
+          onSetContainerPinned={handleSetContainerPinned}
           onSetLibraryEntry={handleSetCardLibraryEntry}
           onCreateLinkedFieldBinding={handleCreateLinkedFieldBinding}
           onUpdateLinkedFieldBinding={handleUpdateLinkedFieldBinding}
