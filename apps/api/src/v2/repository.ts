@@ -438,11 +438,12 @@ function cardTypePortFromRow(row: QueryResultRow): V2CardTypePort {
 }
 
 function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2CardType {
+  const kind = row.kind === "container" ? "container" : "entity";
   return v2CardTypeSchema.parse({
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     key: String(row.key),
-    kind: row.kind === "container" ? "container" : "entity",
+    kind,
     name: String(row.name),
     description: String(row.description ?? ""),
     defaultData: asObject(row.default_data),
@@ -452,7 +453,7 @@ function cardTypeFromRow(row: QueryResultRow, ports: V2CardTypePort[] = []): V2C
       width: Number(row.default_width),
       height: Number(row.default_height)
     },
-    ports,
+    ports: kind === "container" ? [] : ports,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at)
   });
@@ -995,6 +996,12 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
     );
   }
 
+  function resolveMemoryCardType(cardType: V2CardType): V2CardType {
+    return cardType.kind === "container"
+      ? { ...cardType, ports: [] }
+      : cardType;
+  }
+
   function buildMemoryCardTypePorts(
     workspaceId: string,
     cardTypeId: string,
@@ -1057,7 +1064,9 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         workspace: state.workspace,
         project: state.project,
         board: state.board,
-        cardTypes: state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)),
+        cardTypes: state.cardTypes
+          .filter((cardType) => !deletedCardTypeIds.has(cardType.id))
+          .map(resolveMemoryCardType),
         connectionTypes: state.connectionTypes.filter(
           (connectionType) => !deletedConnectionTypeIds.has(connectionType.id)
         ),
@@ -1157,7 +1166,11 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async listCardTypes(workspaceId) {
       if (workspaceId !== state.workspace.id) return [];
-      return cloneJson(state.cardTypes.filter((cardType) => !deletedCardTypeIds.has(cardType.id)));
+      return cloneJson(
+        state.cardTypes
+          .filter((cardType) => !deletedCardTypeIds.has(cardType.id))
+          .map(resolveMemoryCardType)
+      );
     },
 
     async ensureContainerCardType(workspaceId) {
@@ -1176,15 +1189,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         existing.schema = { fields: [] };
         existing.defaultVisualStyle = {};
         existing.defaultSize = { width: 480, height: 320 };
-        existing.ports = buildMemoryCardTypePorts(
-          workspaceId,
-          existing.id,
-          [
-            { key: "in", label: "In", direction: "input", dataType: "json", required: false, sortOrder: 0 },
-            { key: "out", label: "Out", direction: "output", dataType: "json", required: false, sortOrder: 1 }
-          ],
-          timestamp
-        );
+        existing.ports = [];
         existing.updatedAt = timestamp;
         return cloneJson(existing);
       }
@@ -1202,15 +1207,7 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         schema: { fields: [] },
         defaultVisualStyle: {},
         defaultSize: { width: 480, height: 320 },
-        ports: buildMemoryCardTypePorts(
-          workspaceId,
-          cardTypeId,
-          [
-            { key: "in", label: "In", direction: "input", dataType: "json", required: false, sortOrder: 0 },
-            { key: "out", label: "Out", direction: "output", dataType: "json", required: false, sortOrder: 1 }
-          ],
-          timestamp
-        ),
+        ports: [],
         createdAt: timestamp,
         updatedAt: timestamp
       });
@@ -1220,7 +1217,8 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
 
     async getCardType(cardTypeId) {
       if (deletedCardTypeIds.has(cardTypeId)) return null;
-      return cloneJson(state.cardTypes.find((cardType) => cardType.id === cardTypeId) ?? null);
+      const cardType = state.cardTypes.find((candidate) => candidate.id === cardTypeId);
+      return cloneJson(cardType ? resolveMemoryCardType(cardType) : null);
     },
 
     async listConnectionTypes(workspaceId) {
@@ -3188,36 +3186,15 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         const cardTypeId = String(row.id);
         await client.query(
           `
-            insert into card_type_ports (
-              workspace_id, card_type_id, key, label, direction,
-              data_type, required, sort_order
-            ) values
-              ($1, $2, 'in', 'In', 'input', 'json', false, 0),
-              ($1, $2, 'out', 'Out', 'output', 'json', false, 1)
-            on conflict (card_type_id, direction, key) where deleted_at is null
-            do update set label = excluded.label, updated_at = now()
-          `,
-          [workspaceId, cardTypeId]
-        );
-        await client.query(
-          `
             update card_type_ports
             set deleted_at = now(), updated_at = now()
             where card_type_id = $1
               and deleted_at is null
-              and not (
-                (direction = 'input' and key = 'in') or
-                (direction = 'output' and key = 'out')
-              )
           `,
           [cardTypeId]
         );
-        const ports = await client.query(
-          `select * from card_type_ports where card_type_id = $1 and deleted_at is null order by sort_order, id`,
-          [cardTypeId]
-        );
         await client.query("commit");
-        return cardTypeFromRow(row, ports.rows.map(cardTypePortFromRow));
+        return cardTypeFromRow(row, []);
       } catch (error) {
         await client.query("rollback");
         throw error;

@@ -144,7 +144,17 @@ describe("v2 card API", () => {
       payload: {
         container: { variant: "frame", theme: "blue" },
         title: "Supplier group",
-        position: { x: 80, y: 120 }
+        position: { x: 80, y: 120 },
+        visualStyle: {
+          connectorSlots: [
+            {
+              id: "box-output",
+              type: "output",
+              side: "right",
+              offset: 0.5
+            }
+          ]
+        }
       }
     });
     expect(createResponse.statusCode).toBe(201);
@@ -166,11 +176,21 @@ describe("v2 card API", () => {
       .toMatchObject({
         kind: "container",
         key: "yadraw_system_container",
-        ports: [
-          expect.objectContaining({ key: "in", direction: "input" }),
-          expect.objectContaining({ key: "out", direction: "output" })
-        ]
+        ports: []
       });
+    expect(container.visualStyle).not.toHaveProperty("connectorSlots");
+
+    const connectionToBoxResponse = await server.inject({
+      method: "POST",
+      url: `/v2/boards/${seed.board.id}/connections`,
+      payload: {
+        sourceCardId: container.id,
+        targetCardId: seed.connections[0]!.targetCardId,
+        sourcePortKey: "box-output",
+        targetPortKey: seed.connections[0]!.targetPortKey
+      }
+    });
+    expect(connectionToBoxResponse.statusCode).toBe(400);
 
     const child = seed.cards[0]!;
     const attachResponse = await server.inject({

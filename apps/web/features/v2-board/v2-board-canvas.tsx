@@ -234,6 +234,7 @@ function isValidHandle(
   direction: "input" | "output"
 ): boolean {
   if (!card || !cardType) return false;
+  if (cardType.kind === "container") return false;
   return buildV2ConnectorSlots({
     visualStyle: card.visualStyle,
     ports: cardType.ports,

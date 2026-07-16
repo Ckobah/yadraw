@@ -656,10 +656,12 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   const visualStyle = card.visualStyle ?? {};
   const containerFillOpacity = Math.min(1, Math.max(0.1, visualStyle.fillOpacity ?? 0.72));
   const isLocked = visualStyle.locked === true;
-  const connectorSlots = buildV2ConnectorSlots({
-    visualStyle,
-    ports: cardType.ports,
-  });
+  const connectorSlots = isContainer
+    ? []
+    : buildV2ConnectorSlots({
+        visualStyle,
+        ports: cardType.ports,
+      });
   const connectorSlotSourceKey = JSON.stringify(
     connectorSlots.map((slot) => ({
       id: slot.id,
@@ -702,6 +704,41 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     }))
   );
   const connectedPortKeys = new Set(data.connectedPortKeys ?? []);
+  const containerCompatibilityHandles: Array<{
+    key: string;
+    id: string;
+    type: "source" | "target";
+    position: Position;
+  }> = [];
+  if (isContainer) {
+    const compatibilityHandleKeys = new Set<string>();
+    for (const connection of data.allConnections ?? []) {
+      if (connection.sourceCardId === card.id) {
+        const key = `source:${connection.sourcePortKey}`;
+        if (!compatibilityHandleKeys.has(key)) {
+          compatibilityHandleKeys.add(key);
+          containerCompatibilityHandles.push({
+            key,
+            id: connection.sourcePortKey,
+            type: "source",
+            position: Position.Right,
+          });
+        }
+      }
+      if (connection.targetCardId === card.id) {
+        const key = `target:${connection.targetPortKey}`;
+        if (!compatibilityHandleKeys.has(key)) {
+          compatibilityHandleKeys.add(key);
+          containerCompatibilityHandles.push({
+            key,
+            id: connection.targetPortKey,
+            type: "target",
+            position: Position.Left,
+          });
+        }
+      }
+    }
+  }
   const typeChooserSlot =
     data.isVisualEditing && typeChooserSlotId
       ? renderedConnectorSlots.find((slot) => slot.id === typeChooserSlotId) ?? null
@@ -1011,7 +1048,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   }
 
   function handleOuterPerimeterDoubleClick(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!data.isVisualEditing) return;
+    if (!data.isVisualEditing || isContainer) return;
     event.preventDefault();
     event.stopPropagation();
     setTypeChooserSlotId(null);
@@ -1282,11 +1319,11 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           });
         }}
       />
-      {data.isVisualEditing && slotEditorError ? (
+      {data.isVisualEditing && !isContainer && slotEditorError ? (
         <p className="v2ConnectorSlotMessage nodrag">{slotEditorError}</p>
       ) : null}
 
-      {data.isVisualEditing ? (
+      {data.isVisualEditing && !isContainer ? (
         <>
           {(["top", "right", "bottom", "left"] as const).map((side) => (
             <div
@@ -1341,6 +1378,17 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
           />
         ));
       })}
+
+      {containerCompatibilityHandles.map((handle) => (
+        <Handle
+          key={handle.key}
+          type={handle.type}
+          position={handle.position}
+          id={handle.id}
+          isConnectable={false}
+          className="v2ContainerCompatibilityHandle"
+        />
+      ))}
 
       {renderedConnectorSlots.map((slot) => {
         const label = slot.label?.trim();

@@ -291,6 +291,14 @@ function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function withoutConnectorSlots(
+  visualStyle: V2Card["visualStyle"]
+): V2Card["visualStyle"] {
+  const sanitized = { ...visualStyle };
+  delete sanitized.connectorSlots;
+  return sanitized;
+}
+
 function requireV2Uuid(value: string, label: string): void {
   if (!v2UuidSchema.safeParse(value).success) validationFailed(`Invalid ${label}`);
 }
@@ -477,6 +485,7 @@ function isValidConnectionPort(
   portKey: string,
   role: ConnectionSlotRole
 ): boolean {
+  if (cardType.kind === "container") return false;
   const semanticDirection = role === "source" ? "output" : "input";
   const semanticPort = cardType.ports.find(
     (port) => port.direction === semanticDirection && port.key === portKey
@@ -1677,7 +1686,7 @@ export function createV2BoardService(
             input.container
               ? {
                   ...containerAppearance,
-                  ...(input.visualStyle ?? {}),
+                  ...withoutConnectorSlots(input.visualStyle ?? {}),
                   containerVariant: input.container.variant,
                   containerTheme,
                   zIndex: input.visualStyle?.zIndex ?? 0
@@ -1715,19 +1724,26 @@ export function createV2BoardService(
 
     async updateCard(context, cardId, rawInput) {
       const input = v2UpdateCardBodySchema.parse(rawInput);
+      let normalizedInput: V2UpdateCardRequest = input;
       const existing = await repository.getCard(cardId);
       if (!existing) {
         notFound("Card not found");
       }
       await authorizeWorkspace(context, existing.workspaceId, "write");
-      if (
-        input.visualStyle &&
-        (input.visualStyle.containerVariant !== undefined ||
-          input.visualStyle.containerTheme !== undefined)
-      ) {
+      if (input.visualStyle) {
         const cardType = await repository.getCardType(existing.cardTypeId);
-        if (cardType?.kind !== "container") {
+        if (
+          (input.visualStyle.containerVariant !== undefined ||
+            input.visualStyle.containerTheme !== undefined) &&
+          cardType?.kind !== "container"
+        ) {
           validationFailed("Box appearance is reserved for Box cards");
+        }
+        if (cardType?.kind === "container") {
+          normalizedInput = {
+            ...input,
+            visualStyle: withoutConnectorSlots(input.visualStyle)
+          };
         }
       }
       if (
@@ -1738,7 +1754,7 @@ export function createV2BoardService(
           "Linked card content is managed by its library entry. Replace or unlink the entry first."
         );
       }
-      const card = await repository.updateCard(cardId, input);
+      const card = await repository.updateCard(cardId, normalizedInput);
       if (!card) {
         notFound("Card not found");
       }

@@ -543,7 +543,7 @@ describePostgres("v2 Postgres repository", () => {
 
     const detail = await repository.getBoardDetail(seedIds.board);
     expect(detail?.cardTypes.find((cardType) => cardType.id === container.cardTypeId))
-      .toMatchObject({ kind: "container", key: "yadraw_system_container" });
+      .toMatchObject({ kind: "container", key: "yadraw_system_container", ports: [] });
 
     await service.deleteCard(ownerContext, container.id);
     await expect(repository.getCard(child.id)).resolves.toMatchObject({ containerId: null });

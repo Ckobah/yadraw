@@ -4598,6 +4598,15 @@ svg.v2ContainerPinUnpinned {
   transform-origin: center;
 }
 
+.v2ContainerCompatibilityHandle {
+  width: 1px !important;
+  height: 1px !important;
+  border: 0 !important;
+  background: transparent !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 .v2ContainerCountIndicator {
   min-width: 30px;
   padding: 0 7px;
@@ -5392,24 +5401,6 @@ svg.v2ContainerPinUnpinned {
 
 .v2CardHandleSideBottom {
   bottom: -10px !important;
-}
-
-.v2ContainerNode .v2CardHandle,
-.v2ContainerNode .v2ConnectorSlotLabel {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.14s ease;
-}
-
-.react-flow__node:hover .v2ContainerNode .v2CardHandle,
-.v2ContainerNode.v2CardNodeVisualEditing .v2CardHandle {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.react-flow__node:hover .v2ContainerNode .v2ConnectorSlotLabel,
-.v2ContainerNode.v2CardNodeVisualEditing .v2ConnectorSlotLabel {
-  opacity: 1;
 }
 
 /* ── V2 card inspector ─────────────────── */
