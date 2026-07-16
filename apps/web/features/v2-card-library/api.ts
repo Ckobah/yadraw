@@ -32,7 +32,7 @@ function csvImportUrl(
   cardTypeId: string,
   action: "preview" | "commit"
 ): string {
-  return `${collectionUrl(workspaceId, cardTypeId)}/imports/csv/${action}`;
+  return `${collectionUrl(workspaceId, cardTypeId)}?csvImport=${action}`;
 }
 
 export async function listV2CardLibraryEntries(
