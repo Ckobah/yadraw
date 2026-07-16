@@ -15,6 +15,7 @@ type Props = {
 
 export function V2BoardPage({ boardDetail, initialCalculationEvaluation }: Props) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [cardPickerRequest, setCardPickerRequest] = useState(0);
   const { board, cards, connections } = boardDetail;
   const cardCount = cards.length;
   const connCount = connections.length;
@@ -64,12 +65,18 @@ export function V2BoardPage({ boardDetail, initialCalculationEvaluation }: Props
 
       {/* Canvas area */}
       <div className="v2BoardCanvasArea">
-        {cardCount === 0 ? <V2BoardEmptyState /> : null}
+        {cardCount === 0 ? (
+          <V2BoardEmptyState
+            workspaceId={board.workspaceId}
+            onStartBlank={() => setCardPickerRequest((request) => request + 1)}
+          />
+        ) : null}
         <ReactFlowProvider>
           <V2BoardCanvas
             boardDetail={boardDetail}
             initialCalculationEvaluation={initialCalculationEvaluation}
             onSaveStatusChange={setSaveStatus}
+            cardPickerRequest={cardPickerRequest}
           />
         </ReactFlowProvider>
       </div>

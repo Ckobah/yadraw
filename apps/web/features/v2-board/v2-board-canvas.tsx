@@ -118,6 +118,7 @@ type Props = {
   boardDetail: V2BoardDetail;
   initialCalculationEvaluation: V2CalculationEvaluation | null;
   onSaveStatusChange?: (status: SaveStatus) => void;
+  cardPickerRequest?: number;
 };
 
 type CardAction = "duplicate" | "delete" | "layer" | "membership";
@@ -572,7 +573,8 @@ function getMiniMapNodeColor(node: V2CardNode): string {
 export function V2BoardCanvas({
   boardDetail,
   initialCalculationEvaluation,
-  onSaveStatusChange
+  onSaveStatusChange,
+  cardPickerRequest = 0
 }: Props) {
   const {
     board,
@@ -3850,6 +3852,7 @@ export function V2BoardCanvas({
         <V2CardCreateToolbar
           workspaceId={board.workspaceId}
           cardTypes={entityCardTypes}
+          openRequest={cardPickerRequest}
           onCreateCard={handleCreateCard}
           onCreateBox={handleCreateBox}
           onManageCardTypes={handleOpenCardTypeManager}

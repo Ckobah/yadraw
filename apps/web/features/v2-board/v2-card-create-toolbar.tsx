@@ -25,6 +25,7 @@ type PendingPlacement = {
 type V2CardCreateToolbarProps = {
   workspaceId: string;
   cardTypes: V2CardType[];
+  openRequest?: number;
   onCreateCard: (
     cardType: V2CardType,
     position: V2Position,
@@ -38,6 +39,7 @@ type V2CardCreateToolbarProps = {
 export function V2CardCreateToolbar({
   workspaceId,
   cardTypes,
+  openRequest = 0,
   onCreateCard,
   onManageCardTypes,
   onCreateBox,
@@ -85,6 +87,19 @@ export function V2CardCreateToolbar({
     return () =>
       document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (openRequest <= 0) return;
+    setCreationCardType(null);
+    setQuery("");
+    setLibraryQueryInput("");
+    setLibraryQuery("");
+    setLibraryEntries([]);
+    setLibraryNextCursor(null);
+    setLibraryError(null);
+    setError(null);
+    setIsOpen(true);
+  }, [openRequest]);
 
   useEffect(() => {
     if (!isOpen || creationCardType) return;

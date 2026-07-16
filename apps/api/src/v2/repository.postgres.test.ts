@@ -7,6 +7,7 @@ import { Client } from "pg";
 import { config } from "dotenv";
 import { createV2PostgresRepository, type V2Repository } from "./repository.js";
 import { createV2BoardService } from "./service.js";
+import { getV2BoardBlueprint } from "./blueprints.js";
 
 config({ path: new URL("../../../../.env", import.meta.url) });
 config();
@@ -232,6 +233,94 @@ describePostgres("v2 Postgres repository", () => {
     ]);
     expect(new Set(results.map((result) => result.workspace.id)).size).toBe(1);
     expect(results.filter((result) => result.created)).toHaveLength(1);
+  });
+
+  it("creates complete versioned blueprint boards atomically and reuses workspace types", async () => {
+    if (!repository?.createBoardFromBlueprint) {
+      throw new Error("Blueprint repository was not initialized");
+    }
+    const service = createV2BoardService(repository);
+    const processBoard = await service.createBoard(ownerContext, seedIds.workspace, {
+      name: "Process blueprint integration",
+      blueprint: "process_map_v1"
+    });
+    const firstProcessDetail = await service.getBoard(ownerContext, processBoard.id);
+
+    expect(firstProcessDetail.cards).toHaveLength(5);
+    expect(firstProcessDetail.connections).toHaveLength(6);
+    expect(firstProcessDetail.cardTypes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "process_activity_v1" })
+    ]));
+    expect(firstProcessDetail.connectionTypes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "process_next_v1" }),
+      expect.objectContaining({ key: "process_depends_on_v1" }),
+      expect.objectContaining({ key: "process_uses_v1" })
+    ]));
+    expect(firstProcessDetail.cards.every((card) => !("_yadraw" in card.data))).toBe(true);
+
+    const secondProcessBoard = await service.createBoard(ownerContext, seedIds.workspace, {
+      name: "Second process blueprint integration",
+      blueprint: "process_map_v1"
+    });
+    const secondProcessDetail = await service.getBoard(ownerContext, secondProcessBoard.id);
+    const firstActivityType = firstProcessDetail.cardTypes.find(
+      (cardType) => cardType.key === "process_activity_v1"
+    );
+    const secondActivityType = secondProcessDetail.cardTypes.find(
+      (cardType) => cardType.key === "process_activity_v1"
+    );
+    expect(secondProcessDetail.cards).toHaveLength(5);
+    expect(secondActivityType?.id).toBe(firstActivityType?.id);
+
+    const knowledgeBoard = await service.createBoard(ownerContext, seedIds.workspace, {
+      name: "Knowledge blueprint integration",
+      blueprint: "typed_knowledge_graph_v1"
+    });
+    const knowledgeDetail = await service.getBoard(ownerContext, knowledgeBoard.id);
+    expect(knowledgeDetail.cards).toHaveLength(5);
+    expect(knowledgeDetail.connections).toHaveLength(5);
+    expect(knowledgeDetail.cardTypes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "knowledge_source_v1" }),
+      expect.objectContaining({ key: "knowledge_claim_v1" }),
+      expect.objectContaining({ key: "knowledge_question_v1" }),
+      expect.objectContaining({ key: "knowledge_decision_v1" })
+    ]));
+
+    const invalidBlueprint = {
+      ...getV2BoardBlueprint("process_map_v1"),
+      connections: [
+        {
+          ...getV2BoardBlueprint("process_map_v1").connections[0]!,
+          sourceCardKey: "missing_card"
+        }
+      ]
+    };
+    const failedName = `Rollback blueprint ${randomUUID()}`;
+    await expect(
+      repository.createBoardFromBlueprint(seedIds.workspace, failedName, invalidBlueprint)
+    ).rejects.toThrow("unknown reference");
+
+    const client = new Client({ connectionString: isolatedDatabaseUrl });
+    await client.connect();
+    try {
+      const failedBoards = await client.query(
+        `select count(*)::int as count from boards where workspace_id = $1 and name = $2`,
+        [seedIds.workspace, failedName]
+      );
+      const attachmentRelations = await client.query(
+        `
+          select count(*)::int as count
+          from card_files cf
+          join cards c on c.id = cf.card_id
+          where c.board_id = any($1::uuid[]) and cf.deleted_at is null
+        `,
+        [[processBoard.id, secondProcessBoard.id, knowledgeBoard.id]]
+      );
+      expect(Number(failedBoards.rows[0]?.count)).toBe(0);
+      expect(Number(attachmentRelations.rows[0]?.count)).toBe(0);
+    } finally {
+      await client.end();
+    }
   });
 
   it("persists the authorized core board workflow", async () => {

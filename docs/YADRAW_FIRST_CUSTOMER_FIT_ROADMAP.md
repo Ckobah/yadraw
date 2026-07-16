@@ -1,13 +1,17 @@
 # Yadraw V2: roadmap достижения first-customer fit
 
-Статус: реализация начата; выполняется этап 1.
+Статус: реализация продолжается; выполняется этап 1.
 
 Текущий прогресс:
 
 - этап 0: baseline и рабочее дерево проверены; незавершённые quantitative-relationship изменения
   оставлены в своей области и не смешиваются с roadmap;
-- этап 1: public product page реализована отдельным статическим web slice; blueprints и новый
-  empty-board onboarding ещё не начинались.
+- этап 1: public product page реализована отдельным статическим web slice;
+- этап 1: server-controlled `process_map_v1` и `typed_knowledge_graph_v1` реализованы отдельным
+  stacked slice с транзакционным созданием board graph, dashboard chooser и новым empty-board
+  onboarding;
+- этап 1: contextual hints для первой карточки, первой связи, полей, filters и export остаются
+  следующим slice; prospect validation gate ещё не пройден.
 
 Это зонтичный roadmap, а не numbered task из `docs/plan`. Существующая очередь в
 `docs/plan/00_SHARED_EXECUTION_RULES.md` не меняется. Перед реализацией каждый этап нужно

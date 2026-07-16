@@ -1573,6 +1573,26 @@ describe("v2 dashboard and auth contracts", () => {
     expect(() => v2CreateBoardBodySchema.parse({ name: "Board", userId: cardId })).toThrow();
   });
 
+  it("accepts only server-controlled board blueprint keys", () => {
+    expect(v2CreateBoardBodySchema.parse({
+      name: "Process map",
+      blueprint: "process_map_v1"
+    })).toEqual({ name: "Process map", blueprint: "process_map_v1" });
+    expect(v2CreateBoardBodySchema.parse({
+      name: "Knowledge graph",
+      blueprint: "typed_knowledge_graph_v1"
+    })).toEqual({ name: "Knowledge graph", blueprint: "typed_knowledge_graph_v1" });
+    expect(v2CreateBoardBodySchema.parse({ name: "Blank" })).toEqual({ name: "Blank" });
+    expect(() => v2CreateBoardBodySchema.parse({
+      name: "Unsafe",
+      blueprint: { cards: [] }
+    })).toThrow();
+    expect(() => v2CreateBoardBodySchema.parse({
+      name: "Unknown",
+      blueprint: "custom_v1"
+    })).toThrow();
+  });
+
   it("accepts a personal bootstrap response", () => {
     expect(() =>
       v2BootstrapSessionResponseSchema.parse({
