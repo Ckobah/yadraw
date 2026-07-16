@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Settings2, Waypoints } from "lucide-react";
+import { Check, ChevronDown, Settings2 } from "lucide-react";
 import type { V2ConnectionType } from "@yadraw/shared";
 import { V2ConnectorStylePreview } from "./v2-connector-style-preview";
 
@@ -40,8 +40,11 @@ export function V2ConnectionTypeToolbar({
         title={`Connector type: ${activeConnectionType?.name ?? "Connector"}`}
         onClick={() => setIsOpen((current) => !current)}
       >
-        <Waypoints size={15} strokeWidth={2.2} aria-hidden="true" />
-        <span>Connector</span>
+        <V2ConnectorStylePreview
+          style={activeConnectionType?.defaultVisualStyle}
+          label={activeConnectionType?.name ?? "Relationship"}
+        />
+        <span>{activeConnectionType?.name ?? "Relationship"}</span>
         <ChevronDown size={14} strokeWidth={2.2} aria-hidden="true" />
       </button>
 
@@ -78,7 +81,7 @@ export function V2ConnectionTypeToolbar({
             }}
           >
             <Settings2 size={14} strokeWidth={2.2} aria-hidden="true" />
-            <span>Manage connector types</span>
+            <span>Manage relationship types</span>
           </button>
         </div>
       ) : null}

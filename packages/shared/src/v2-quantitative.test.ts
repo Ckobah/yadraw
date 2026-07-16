@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { V2BoardDetail, V2ConnectionType } from "./v2.js";
 import {
   buildV2ConnectionDefaultData,
+  buildV2RelationshipStatement,
   buildV2SemanticGraph,
   evaluateV2QuantitativeGraph,
   getV2ConnectionSemanticLabel,
+  getV2RelationshipGuidance,
   validateV2ConnectionData
 } from "./v2-quantitative.js";
 
@@ -45,6 +47,7 @@ const containsType: V2ConnectionType = {
     ],
     semantics: {
       version: 1,
+      kind: "contains",
       sourceRole: "component",
       targetRole: "assembly",
       quantity: {
@@ -169,6 +172,50 @@ describe("V2 quantitative relationships", () => {
   it("prioritizes semantic quantity in the connector label", () => {
     const connection = boardDetail().connections[0]!;
     expect(getV2ConnectionSemanticLabel(connection, containsType)).toBe("5 pcs / assembly");
+    expect(getV2ConnectionSemanticLabel(connection, containsType, {
+      id: `required:${connectionId}`,
+      metric: "required_quantity",
+      sourceCardId: componentId,
+      targetCardId: assemblyId,
+      connectionId,
+      value: 15,
+      unitCode: "piece",
+      formulaId: "bom.required.v1",
+      explanation: "5 pcs per Bracket assembly × 3 = 15 pcs",
+      inputs: [{
+        kind: "connection_field",
+        id: connectionId,
+        path: "data.quantity",
+        value: 5
+      }]
+    })).toBe("5 pcs each · 15 pcs total");
+    expect(buildV2RelationshipStatement("Bolt", "Bracket", containsType)).toBe(
+      "Bolt is part of Bracket"
+    );
+    expect(buildV2RelationshipStatement("Steel", "Table", {
+      ...containsType,
+      key: "needs",
+      schema: {
+        ...containsType.schema,
+        semantics: {
+          ...containsType.schema.semantics!,
+          kind: "needs"
+        }
+      }
+    })).toBe("Table needs Steel");
+    expect(buildV2RelationshipStatement("Factory", "Table", {
+      ...containsType,
+      key: "produces",
+      schema: {
+        fields: [],
+        semantics: {
+          version: 1,
+          kind: "produces",
+          sourceRole: "producer",
+          targetRole: "product"
+        }
+      }
+    })).toBe("Factory produces Table");
   });
 
   it("evaluates per-target requirements with explicit provenance and totals", () => {
@@ -184,6 +231,7 @@ describe("V2 quantitative relationships", () => {
         value: 15,
         unitCode: "piece",
         formulaId: "bom.required.v1",
+        explanation: "5 pcs per Bracket assembly × 3 = 15 pcs",
         inputs: expect.arrayContaining([
           expect.objectContaining({ kind: "connection_field", value: 5 }),
           expect.objectContaining({ kind: "card_field", value: 3 })
@@ -231,9 +279,15 @@ describe("V2 quantitative relationships", () => {
     ]);
     expect(graph.relations[0]).toMatchObject({
       predicate: "contains",
+      kind: "contains",
+      statement: "Bolt is part of Bracket assembly",
       source: { cardId: componentId, role: "component" },
       target: { cardId: assemblyId, role: "assembly" },
       quantity: { value: 5, unitCode: "piece", basis: "per_target" }
     });
+    expect(getV2ConnectionSemanticLabel(detail.connections[0]!, containsType)).toBe("Needs attention");
+    expect(getV2RelationshipGuidance(detail.connections[0]!, containsType)).toBe(
+      "Complete the relationship details to include it in totals."
+    );
   });
 });

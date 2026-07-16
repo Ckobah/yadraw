@@ -192,6 +192,7 @@ describe("v2 API contracts", () => {
         ],
         semantics: {
           version: 1,
+          kind: "contains",
           sourceRole: "component",
           targetRole: "assembly",
           quantity: {
@@ -202,7 +203,9 @@ describe("v2 API contracts", () => {
           }
         }
       })
-    ).toMatchObject({ semantics: { sourceRole: "component", targetRole: "assembly" } });
+    ).toMatchObject({
+      semantics: { kind: "contains", sourceRole: "component", targetRole: "assembly" }
+    });
 
     expect(() =>
       v2ConnectionTypeDefinitionSchema.parse({

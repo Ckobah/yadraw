@@ -31,6 +31,7 @@ import type {
   V2Card,
   V2CardAttachment,
   V2CalculationEvaluation,
+  V2CalculationResult,
   V2Connection,
   V2ConnectionType,
   V2ConnectionVisualStyle,
@@ -294,7 +295,8 @@ function applyConnectionTypeStyle(
 
 function buildConnectionEdge(
   connection: V2Connection,
-  connectionType?: V2ConnectionType | null
+  connectionType?: V2ConnectionType | null,
+  calculationResult?: V2CalculationResult | null
 ): V2StyledEdge {
   const visualStyle = connection.visualStyle ?? {};
   return {
@@ -303,7 +305,7 @@ function buildConnectionEdge(
     target: connection.targetCardId,
     sourceHandle: connection.sourcePortKey,
     targetHandle: connection.targetPortKey,
-    label: getV2ConnectionSemanticLabel(connection, connectionType),
+    label: getV2ConnectionSemanticLabel(connection, connectionType, calculationResult),
     type: "v2Connector",
     deletable: false,
     reconnectable: true,
@@ -332,13 +334,14 @@ function buildConnectionEdge(
 function applyConnectionToEdge(
   edge: Edge,
   connection: V2Connection,
-  connectionType?: V2ConnectionType | null
+  connectionType?: V2ConnectionType | null,
+  calculationResult?: V2CalculationResult | null
 ): V2StyledEdge {
   const resolvedConnectionType = connectionType ??
     (edge.data as V2ConnectorEdgeData | undefined)?.connectionType;
   return {
     ...edge,
-    ...buildConnectionEdge(connection, resolvedConnectionType),
+    ...buildConnectionEdge(connection, resolvedConnectionType, calculationResult),
     data: {
       ...(edge.data ?? {}),
       connection,
@@ -599,6 +602,12 @@ export function V2BoardCanvas({
     () => new Map(connectionTypes.map((connectionType) => [connectionType.id, connectionType])),
     [connectionTypes]
   );
+  const calculationResultByConnectionId = useMemo(
+    () => new Map(
+      (calculationEvaluation?.results ?? []).map((result) => [result.connectionId, result])
+    ),
+    [calculationEvaluation]
+  );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   useEffect(() => {
@@ -665,7 +674,8 @@ export function V2BoardCanvas({
     const edges: Edge[] = connections.map((conn: V2Connection) =>
       buildConnectionEdge(
         conn,
-        conn.connectionTypeId ? connectionTypeMap.get(conn.connectionTypeId) : null
+        conn.connectionTypeId ? connectionTypeMap.get(conn.connectionTypeId) : null,
+        calculationResultByConnectionId.get(conn.id) ?? null
       )
     );
 
@@ -675,6 +685,7 @@ export function V2BoardCanvas({
     connections,
     cardTypeMap,
     connectionTypeMap,
+    calculationResultByConnectionId,
     board.workspaceId,
     initialCardAttachmentCounts
   ]);
@@ -729,10 +740,15 @@ export function V2BoardCanvas({
         const connectionType = connection.connectionTypeId
           ? connectionTypeMap.get(connection.connectionTypeId) ?? null
           : null;
-        return applyConnectionToEdge(edge, connection, connectionType);
+        return applyConnectionToEdge(
+          edge,
+          connection,
+          connectionType,
+          calculationLoading ? null : calculationResultByConnectionId.get(connection.id) ?? null
+        );
       })
     );
-  }, [connectionRecords, connectionTypeMap, setEdges]);
+  }, [calculationLoading, calculationResultByConnectionId, connectionRecords, connectionTypeMap, setEdges]);
 
   const handleAttachmentsChange = useCallback(
     (cardId: string, attachments: V2CardAttachment[]) => {
@@ -1154,9 +1170,9 @@ export function V2BoardCanvas({
     if (lastCalculationSignatureRef.current === calculationInputSignature) return;
 
     const controller = new AbortController();
+    setCalculationLoading(true);
     const timeoutId = window.setTimeout(() => {
       lastCalculationSignatureRef.current = calculationInputSignature;
-      setCalculationLoading(true);
       setCalculationError(null);
       void evaluateV2BoardCalculations(board.id)
         .then((evaluation) => {
@@ -3300,7 +3316,7 @@ export function V2BoardCanvas({
         console.error(
           "Invalid connection: source handle must be output, target handle must be input"
         );
-        setConnectionCreateError("Connection could not be created.");
+        setConnectionCreateError("These ports cannot be connected.");
         setSaveStatus("error");
         return;
       }
@@ -3330,10 +3346,8 @@ export function V2BoardCanvas({
         isSameConnectionEndpoint(record, createInput)
       );
       if (duplicate) {
-        setSelectedConnectionId(duplicate.id);
-        clearCardSelection();
-        setConnectionCreateError("Connection already exists.");
-        setSaveStatus("error");
+        handleOpenConnectionEditor(duplicate.id);
+        setSaveStatus("saved");
         return;
       }
       const endpointKey = getConnectionEndpointKey(createInput);
@@ -3354,6 +3368,12 @@ export function V2BoardCanvas({
         const newEdge: Edge = buildConnectionEdge(created, activeConnectionType);
         setEdges((prev) => [...prev, newEdge]);
         setConnectionRecords((prev) => [...prev, created]);
+        if (activeConnectionType?.schema.semantics?.quantity) {
+          setSelectedConnectionId(created.id);
+          clearCardSelection();
+          setInspectedConnectionId(created.id);
+          setVisualEditingConnectionId(null);
+        }
         setSaveStatus("saved");
       } catch (err) {
         console.error("Failed to create connection:", err);
@@ -3361,22 +3381,30 @@ export function V2BoardCanvas({
         setConnectionRecords(previousConnectionRecords);
         setConnectionCreateError(
           err instanceof V2ApiError && err.status === 409
-            ? "Connection already exists."
-            : "Connection could not be created."
+            ? "This relationship already exists."
+            : "Relationship could not be created."
         );
         setSaveStatus("error");
       } finally {
         pendingConnectionKeysRef.current.delete(endpointKey);
       }
     },
-    [activeConnectionType, board.id, board.workspaceId, cardTypeMap, clearCardSelection, setEdges]
+    [
+      activeConnectionType,
+      board.id,
+      board.workspaceId,
+      cardTypeMap,
+      clearCardSelection,
+      handleOpenConnectionEditor,
+      setEdges,
+    ]
   );
 
   const handleReconnect = useCallback<OnReconnect>(
     async (oldEdge, connection) => {
       const { source, target, sourceHandle, targetHandle } = connection;
       if (!source || !target || !sourceHandle || !targetHandle) {
-        setConnectionCreateError("Connector could not be retargeted.");
+        setConnectionCreateError("Relationship endpoints could not be changed.");
         setSaveStatus("error");
         return;
       }
@@ -3400,7 +3428,7 @@ export function V2BoardCanvas({
         isValidHandle(sourceCard, sourceType, sourceHandle, "input");
 
       if (!canConnectAsDrawn && !canConnectReversed) {
-        setConnectionCreateError("Connector could not be retargeted.");
+        setConnectionCreateError("These ports cannot be connected.");
         setSaveStatus("error");
         return;
       }
@@ -3439,8 +3467,10 @@ export function V2BoardCanvas({
       if (duplicate) {
         setSelectedConnectionId(duplicate.id);
         clearCardSelection();
-        setConnectionCreateError("Connection already exists.");
-        setSaveStatus("error");
+        setInspectedConnectionId(duplicate.id);
+        setVisualEditingConnectionId(null);
+        setConnectionCreateError(null);
+        setSaveStatus("saved");
         return;
       }
 
@@ -3453,8 +3483,8 @@ export function V2BoardCanvas({
         console.error("Failed to retarget connection:", err);
         setConnectionCreateError(
           err instanceof V2ApiError && err.status === 409
-            ? "Connection already exists."
-            : "Connector could not be retargeted."
+            ? "This relationship already exists."
+            : "Relationship endpoints could not be changed."
         );
       }
     },
@@ -3969,6 +3999,9 @@ export function V2BoardCanvas({
           connectionTypes={connectionTypes}
           sourceCard={cardById.get(inspectedConnection.sourceCardId) ?? null}
           targetCard={cardById.get(inspectedConnection.targetCardId) ?? null}
+          calculationEvaluation={calculationEvaluation}
+          calculationLoading={calculationLoading}
+          calculationError={calculationError}
           saveStatus={saveStatus}
           onUpdateConnection={handleUpdateConnection}
           onDeleteConnection={handleDeleteConnection}
@@ -4005,6 +4038,7 @@ export function V2BoardCanvas({
       ) : null}
       {isConnectionTypeManagerOpen ? (
         <V2ConnectionTypeManager
+          cardTypes={cardTypes}
           connectionTypes={connectionTypes}
           initialConnectionTypeId={connectionTypeManagerInitialId}
           initialNewTypeSeed={connectionTypeManagerNewTypeSeed}

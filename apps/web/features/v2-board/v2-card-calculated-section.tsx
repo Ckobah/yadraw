@@ -51,9 +51,9 @@ export function V2CardCalculatedSection({
         <div>
           <h3 id="v2-calculated-title">
             <Calculator size={13} aria-hidden="true" />
-            Calculated
+            Totals
           </h3>
-          <span>Read-only values derived from active relationships.</span>
+          <span>Updates automatically from active relationships.</span>
         </div>
         {isLoading ? <span className="v2CalculatedStatus">Updating…</span> : null}
       </div>
@@ -65,7 +65,10 @@ export function V2CardCalculatedSection({
           <strong>Required components</strong>
           {requiredComponents.map((result) => (
             <div className="v2CalculatedRow" key={result.id}>
-              <span>{cardById.get(result.sourceCardId)?.title ?? "Unknown card"}</span>
+              <span className="v2CalculatedRowText">
+                <span>{cardById.get(result.sourceCardId)?.title ?? "Unknown card"}</span>
+                <small>{result.explanation}</small>
+              </span>
               <b>{formatNumber(result.value)} {formatV2UnitCode(result.unitCode)}</b>
             </div>
           ))}

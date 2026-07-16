@@ -290,9 +290,19 @@ export const v2ConnectionQuantitySemanticsSchema = z
     }
   });
 
+export const v2RelationshipKindSchema = z.enum([
+  "related",
+  "contains",
+  "needs",
+  "uses",
+  "produces",
+  "custom"
+]);
+
 export const v2ConnectionTypeSemanticsSchema = z
   .object({
     version: z.literal(1).default(1),
+    kind: v2RelationshipKindSchema.optional(),
     sourceRole: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
     targetRole: z.string().trim().regex(/^[a-z][a-z0-9_]*$/),
     quantity: v2ConnectionQuantitySemanticsSchema.optional()
@@ -1039,6 +1049,8 @@ export const v2SemanticQuantityFactSchema = z.object({
 export const v2SemanticGraphRelationSchema = z.object({
   id: v2UuidSchema,
   predicate: z.string().trim().min(1),
+  kind: v2RelationshipKindSchema,
+  statement: z.string().trim().min(1),
   connectionTypeId: v2UuidSchema.nullable(),
   connectionTypeName: z.string().trim().min(1),
   title: z.string().nullable(),
@@ -1085,6 +1097,7 @@ export const v2CalculationResultSchema = z.object({
   value: z.number().finite(),
   unitCode: z.string().trim().min(1),
   formulaId: z.literal("bom.required.v1"),
+  explanation: z.string().trim().min(1),
   inputs: z.array(v2CalculationInputSchema)
 });
 
@@ -1401,6 +1414,7 @@ export const V2CardLibraryEntrySchema = v2CardLibraryEntrySchema;
 export const V2CardLibraryEntryValidationIssueSchema =
   v2CardLibraryEntryValidationIssueSchema;
 export const V2ConnectionTypeDefinitionSchema = v2ConnectionTypeDefinitionSchema;
+export const V2RelationshipKindSchema = v2RelationshipKindSchema;
 
 export type V2Workspace = z.infer<typeof v2WorkspaceSchema>;
 export type V2Project = z.infer<typeof v2ProjectSchema>;
@@ -1428,6 +1442,7 @@ export type V2ConnectionTypeSchema = z.infer<typeof v2ConnectionTypeDefinitionSc
 export type V2NumberConstraints = z.infer<typeof v2NumberConstraintsSchema>;
 export type V2ConnectionQuantitySemantics = z.infer<typeof v2ConnectionQuantitySemanticsSchema>;
 export type V2ConnectionTypeSemantics = z.infer<typeof v2ConnectionTypeSemanticsSchema>;
+export type V2RelationshipKind = z.infer<typeof v2RelationshipKindSchema>;
 export type V2CardTypePort = z.infer<typeof v2CardTypePortSchema>;
 export type V2CardTypePortInput = z.infer<typeof v2CardTypePortInputSchema>;
 export type V2CardType = z.infer<typeof v2CardTypeSchema>;

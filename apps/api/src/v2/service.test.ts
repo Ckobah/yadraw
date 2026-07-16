@@ -451,7 +451,8 @@ describe("v2 board service", () => {
         sourceCardId: component.id,
         targetCardId: assembly.id,
         value: 10,
-        unitCode: "piece"
+        unitCode: "piece",
+        explanation: expect.stringContaining(" = 10 pcs")
       })
     ]);
     expect(evaluation.totals).toEqual([
@@ -464,6 +465,8 @@ describe("v2 board service", () => {
       expect.objectContaining({
         id: draft.id,
         predicate: "requires_quantity",
+        kind: "contains",
+        statement: expect.stringContaining(" is part of "),
         source: expect.objectContaining({ role: "component" }),
         target: expect.objectContaining({ role: "assembly" }),
         quantity: expect.objectContaining({ value: 5, unitCode: "piece" })

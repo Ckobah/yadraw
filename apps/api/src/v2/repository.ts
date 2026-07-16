@@ -734,6 +734,7 @@ export function createDefaultV2MemorySeed(): V2MemorySeed {
         ],
         semantics: {
           version: 1,
+          kind: "contains",
           sourceRole: "component",
           targetRole: "assembly",
           quantity: {
