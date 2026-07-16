@@ -445,19 +445,22 @@ function buildCardNode(
   fallbackZIndex = 1
 ): V2CardNode {
   const size = clampCardSize(card.size);
+  const cardType = resolveCardType(card, cardTypeMap, workspaceId);
+  const isContainer = isV2ContainerCard(card, cardType);
 
   return {
     id: card.id,
     type: "v2Card",
+    className: isContainer ? "v2ContainerFlowNode" : undefined,
     position: { x: card.position.x, y: card.position.y },
-    zIndex: card.visualStyle?.zIndex ?? fallbackZIndex,
+    zIndex: Math.max(1, card.visualStyle?.zIndex ?? fallbackZIndex),
     draggable: !isCardLocked(card),
     data: {
       card: {
         ...card,
         size,
       },
-      cardType: resolveCardType(card, cardTypeMap, workspaceId),
+      cardType,
       attachmentCount,
     },
     style: {
@@ -1708,6 +1711,13 @@ export function V2BoardCanvas({
       if (cardActionLockRef.current) return;
 
       const currentNodes = nodesRef.current;
+      const selectedNode = currentNodes.find((node) => node.id === cardId);
+      if (
+        !selectedNode ||
+        isV2ContainerCard(selectedNode.data.card, selectedNode.data.cardType)
+      ) {
+        return;
+      }
       const currentOrder = orderCardNodesByLayer(currentNodes);
       const nextOrder = moveCardInLayerOrder(currentNodes, cardId, action);
       if (currentOrder.every((node, index) => node.id === nextOrder[index]?.id)) return;
@@ -3723,6 +3733,7 @@ export function V2BoardCanvas({
           typeof edge.style?.strokeWidth === "number" ? edge.style.strokeWidth : 1.5;
         return {
           ...edge,
+          zIndex: 1,
           selected: isSelected,
           data: {
             ...(edge.data ?? {}),

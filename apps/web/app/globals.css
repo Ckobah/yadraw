@@ -4856,6 +4856,10 @@ button:disabled {
   overflow: visible;
 }
 
+.react-flow__node-v2Card.v2ContainerFlowNode {
+  z-index: 0 !important;
+}
+
 .v2CardTextToolbar {
   position: absolute;
   top: -78px;
