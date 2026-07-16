@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BookmarkPlus, GitBranch, Plus, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Calculator, GitBranch, Plus, Trash2, X } from "lucide-react";
 import type {
   V2Card,
+  V2CalculationEvaluation,
   V2Connection,
   V2ConnectionType,
   V2ConnectionVisualStyle,
 } from "@yadraw/shared";
 import {
-  buildV2EffectiveConnectionData,
-  validateV2ConnectionData
+  buildV2RelationshipStatement,
+  formatV2UnitCode,
+  getV2RelationshipGuidance,
 } from "@yadraw/shared";
 import {
   createDataDraftFromRecord,
@@ -35,6 +37,9 @@ type V2ConnectorInspectorProps = {
   connectionTypes: V2ConnectionType[];
   sourceCard: V2Card | null;
   targetCard: V2Card | null;
+  calculationEvaluation: V2CalculationEvaluation | null;
+  calculationLoading: boolean;
+  calculationError: string | null;
   saveStatus: SaveStatus;
   onUpdateConnection: (
     connectionId: string,
@@ -77,6 +82,10 @@ function formatDataValue(value: unknown): string {
   }
 }
 
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(value);
+}
+
 function typeAppearance(style: V2ConnectionVisualStyle | undefined): V2ConnectionVisualStyle {
   const normalizeMarker = (marker: V2ConnectionVisualStyle["markerStart"]) =>
     marker === "arrow" ||
@@ -102,6 +111,9 @@ export function V2ConnectorInspector({
   connectionTypes,
   sourceCard,
   targetCard,
+  calculationEvaluation,
+  calculationLoading,
+  calculationError,
   saveStatus,
   onUpdateConnection,
   onDeleteConnection,
@@ -177,10 +189,71 @@ export function V2ConnectorInspector({
     currentDataSignature !== initialDataSignature ||
     (hasSchemaFields && currentSchemaSignature !== initialSchemaSignature);
   const connectionAppearance = typeAppearance(connection.visualStyle);
-  const relationshipValidation = validateV2ConnectionData(
-    connectionType,
-    buildV2EffectiveConnectionData(connectionType, connection.data)
+  const relationshipGuidance = getV2RelationshipGuidance(connection, connectionType);
+  const relationshipStatement = buildV2RelationshipStatement(
+    cardTitle(sourceCard, connection.sourceCardId),
+    cardTitle(targetCard, connection.targetCardId),
+    connectionType
   );
+  const quantitySemantics = connectionType?.schema.semantics?.quantity;
+  const quantityField = quantitySemantics
+    ? schemaDraftFields.find((field) => field.key === quantitySemantics.valueField) ?? null
+    : null;
+  const unitField = quantitySemantics?.unitField
+    ? schemaDraftFields.find((field) => field.key === quantitySemantics.unitField) ?? null
+    : null;
+  const calculationResult = calculationEvaluation?.results.find(
+    (result) => result.connectionId === connection.id
+  ) ?? null;
+  const localQuantityValue = quantityField?.value.trim()
+    ? Number(quantityField.value)
+    : Number.NaN;
+  const localQuantityIsValid = Boolean(
+    quantityField &&
+    Number.isFinite(localQuantityValue) &&
+    (quantityField.numberConstraints?.min === undefined ||
+      localQuantityValue >= quantityField.numberConstraints.min) &&
+    (quantityField.numberConstraints?.max === undefined ||
+      localQuantityValue <= quantityField.numberConstraints.max) &&
+    (!quantityField.numberConstraints?.integer || Number.isInteger(localQuantityValue))
+  );
+  const localUnitCode = unitField?.value.trim() || quantitySemantics?.fixedUnitCode || "";
+  const rawTargetMultiplier = quantitySemantics?.targetMultiplierField
+    ? targetCard?.data[quantitySemantics.targetMultiplierField]
+    : undefined;
+  const localMultiplier =
+    quantitySemantics?.basis === "per_target" &&
+    typeof rawTargetMultiplier === "number" &&
+    Number.isFinite(rawTargetMultiplier) &&
+    rawTargetMultiplier >= 0
+      ? rawTargetMultiplier
+      : 1;
+  const localCalculationExplanation =
+    quantitySemantics && localQuantityIsValid && localUnitCode
+      ? quantitySemantics.basis === "per_target"
+        ? `${formatNumber(localQuantityValue)} ${formatV2UnitCode(localUnitCode)} per ${cardTitle(targetCard, connection.targetCardId)} × ${formatNumber(localMultiplier)} = ${formatNumber(localQuantityValue * localMultiplier)} ${formatV2UnitCode(localUnitCode)}`
+        : `${formatNumber(localQuantityValue)} ${formatV2UnitCode(localUnitCode)} total`
+      : null;
+  const calculationMatchesCurrentDraft = Boolean(
+    calculationResult &&
+    quantitySemantics &&
+    calculationResult.inputs.some(
+      (input) =>
+        input.id === connection.id &&
+        input.path === `data.${quantitySemantics.valueField}` &&
+        input.value === localQuantityValue
+    ) &&
+    (!quantitySemantics.targetMultiplierField ||
+      calculationResult.inputs.some(
+        (input) =>
+          input.id === connection.targetCardId &&
+          input.path === `data.${quantitySemantics.targetMultiplierField}` &&
+          input.value === localMultiplier
+      ))
+  );
+  const currentCalculationExplanation = calculationMatchesCurrentDraft
+    ? calculationResult?.explanation ?? null
+    : null;
   const hasCustomAppearance = Boolean(
     connectionType &&
       JSON.stringify(connectionAppearance) !==
@@ -250,18 +323,18 @@ export function V2ConnectorInspector({
       });
       return true;
     } catch {
-      setBasicError("Could not save connector details.");
+      setBasicError("Could not save relationship details.");
       return false;
     }
   }
 
   async function updateConnectionTypeSelection(connectionTypeId: string) {
     if (!connectionTypeId) {
-      setTypeError("Select a connection type.");
+      setTypeError("Select a relationship.");
       return;
     }
     if (!connectionTypeIds.has(connectionTypeId)) {
-      setTypeError("Connection type is not available.");
+      setTypeError("This relationship type is not available.");
       return;
     }
     if (connectionTypeId === connection.connectionTypeId) {
@@ -274,7 +347,7 @@ export function V2ConnectorInspector({
     try {
       await onUpdateConnection(connection.id, { connectionTypeId });
     } catch {
-      setTypeError("Could not update connection type.");
+      setTypeError("Could not update the relationship.");
     } finally {
       setIsTypeSaving(false);
     }
@@ -376,7 +449,7 @@ export function V2ConnectorInspector({
       setIsDataEditing(false);
       return true;
     } catch {
-      setDataError("Could not save connector data.");
+      setDataError("Could not save relationship data.");
       return false;
     }
   }
@@ -429,7 +502,10 @@ export function V2ConnectorInspector({
     if (basicsSaved && dataSaved) onClose();
   }
 
-  function renderSchemaValueControl(field: SchemaFieldDraft) {
+  function renderSchemaValueControl(
+    field: SchemaFieldDraft,
+    options: { autoFocus?: boolean } = {}
+  ) {
     if (field.type === "boolean") {
       return (
         <select
@@ -485,6 +561,7 @@ export function V2ConnectorInspector({
         value={field.value}
         placeholder={field.placeholder ?? (field.type === "number" ? "0" : "Value")}
         aria-label={`${field.label} value`}
+        autoFocus={options.autoFocus}
         onChange={(event) => updateSchemaField(field.id, { value: event.target.value })}
       />
     );
@@ -493,7 +570,7 @@ export function V2ConnectorInspector({
   return (
     <aside
       className="v2CardInspector v2ConnectorInspector"
-      aria-label="Connector inspector"
+      aria-label="Relationship inspector"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     >
@@ -502,7 +579,7 @@ export function V2ConnectorInspector({
           <GitBranch size={18} strokeWidth={2.1} />
         </span>
         <div className="v2InspectorHeaderText">
-          <span>Connector</span>
+          <span>Relationship</span>
           <strong title={connectionType?.name}>{connectionType?.name ?? "Generic"}</strong>
         </div>
         <V2InspectorActionMenu
@@ -512,7 +589,7 @@ export function V2ConnectorInspector({
         <button
           type="button"
           className="v2InspectorCloseButton"
-          aria-label="Close connector inspector"
+          aria-label="Close relationship inspector"
           onClick={() => void closeInspector()}
         >
           <X size={16} strokeWidth={2.2} />
@@ -520,70 +597,21 @@ export function V2ConnectorInspector({
       </header>
 
       <div className="v2InspectorContent">
-        {connection.status === "draft" || relationshipValidation.validity !== "valid" ? (
+        {relationshipGuidance ? (
           <p className="v2ConnectorDraftNotice" role="status">
-            Complete the required relationship fields to include this connector in calculations.
+            {relationshipGuidance}
           </p>
         ) : null}
-        <section className="v2InspectorHero v2InspectorEditor">
-          <div className="v2InspectorField">
-            <label htmlFor={`connector-title-${connection.id}`}>Name</label>
-            <input
-              id={`connector-title-${connection.id}`}
-              className="v2InspectorTextInput"
-              value={titleDraft}
-              placeholder="Connector"
-              onChange={(event) => setTitleDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void saveBasics();
-              }}
-            />
-          </div>
-          <div className="v2InspectorField">
-            <label htmlFor={`connector-description-${connection.id}`}>Description</label>
-            <textarea
-              id={`connector-description-${connection.id}`}
-              className="v2InspectorTextarea"
-              rows={4}
-              value={descriptionDraft}
-              placeholder="Description"
-              onChange={(event) => setDescriptionDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void saveBasics();
-              }}
-            />
-          </div>
-          {(basicError || saveStatus === "error") ? <div className="v2InspectorEditFooter">
-            <span className="v2InspectorSaveStatusError">
-              {basicError ?? "Save failed"}
-            </span>
-          </div> : null}
+
+        <section className="v2RelationshipSentence" aria-label="Relationship meaning">
+          <span>{connectionType?.name ?? "Related to"}</span>
+          <strong>{relationshipStatement}</strong>
         </section>
 
         <section className="v2InspectorSection">
-          <h3>Route</h3>
-          <div className="v2ConnectorRouteFlow">
-            <strong>
-              {cardTitle(sourceCard, connection.sourceCardId)}
-              {connectionType?.schema.semantics?.sourceRole ? (
-                <small>{connectionType.schema.semantics.sourceRole}</small>
-              ) : null}
-            </strong>
-            <span aria-hidden="true">→</span>
-            <strong>
-              {cardTitle(targetCard, connection.targetCardId)}
-              {connectionType?.schema.semantics?.targetRole ? (
-                <small>{connectionType.schema.semantics.targetRole}</small>
-              ) : null}
-            </strong>
-          </div>
-          <div className="v2ConnectorPortPair"><span>{connection.sourcePortKey}</span><span>{connection.targetPortKey}</span></div>
-        </section>
-
-        <section className="v2InspectorSection">
-          <h3>Type</h3>
+          <h3>Meaning</h3>
           <label className="v2ConnectorTypeSelector">
-            <span>Type</span>
+            <span>Relationship</span>
             <select
               className="v2InspectorDataValue"
               value={selectedConnectionTypeValue}
@@ -591,10 +619,10 @@ export function V2ConnectorInspector({
               onChange={(event) => void updateConnectionTypeSelection(event.target.value)}
             >
               {connection.connectionTypeId && !connectionTypeIds.has(connection.connectionTypeId) ? (
-                <option value="">Missing type</option>
+                <option value="">Missing relationship type</option>
               ) : null}
               {sortedConnectionTypes.length === 0 ? (
-                <option value="">No connection types available</option>
+                <option value="">No relationship types available</option>
               ) : null}
               {sortedConnectionTypes.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -605,6 +633,112 @@ export function V2ConnectorInspector({
           </label>
           {typeError ? <p className="v2InspectorDataError">{typeError}</p> : null}
         </section>
+
+        {quantitySemantics && quantityField ? (
+          <section className="v2InspectorSection v2RelationshipQuantitySection">
+            <div className="v2InspectorSectionHeader">
+              <div>
+                <h3>Quantity</h3>
+                <span>
+                  {quantitySemantics.basis === "per_target"
+                    ? `How many ${cardTitle(sourceCard, connection.sourceCardId)} for each ${cardTitle(targetCard, connection.targetCardId)}?`
+                    : `How many ${cardTitle(sourceCard, connection.sourceCardId)} in total?`}
+                </span>
+              </div>
+            </div>
+            <div className="v2RelationshipQuantityControls">
+              <div>
+                {renderSchemaValueControl(quantityField, {
+                  autoFocus: connection.status === "draft",
+                })}
+                {schemaFieldErrors[quantityField.id] ? (
+                  <p className="v2InspectorDataError">{schemaFieldErrors[quantityField.id]}</p>
+                ) : null}
+              </div>
+              {unitField ? (
+                <div>
+                  {renderSchemaValueControl(unitField)}
+                  {schemaFieldErrors[unitField.id] ? (
+                    <p className="v2InspectorDataError">{schemaFieldErrors[unitField.id]}</p>
+                  ) : null}
+                </div>
+              ) : quantitySemantics.fixedUnitCode ? (
+                <strong className="v2RelationshipFixedUnit">{quantitySemantics.fixedUnitCode}</strong>
+              ) : null}
+            </div>
+            <div className="v2RelationshipLiveTotal" role="status">
+              <Calculator size={15} aria-hidden="true" />
+              <div>
+                <span>{calculationLoading ? "Updating total…" : "Live total"}</span>
+                <strong>
+                  {(dataDirty ? localCalculationExplanation : currentCalculationExplanation) ??
+                    localCalculationExplanation ??
+                    (calculationError
+                      ? "Total is temporarily unavailable."
+                      : "Enter a valid quantity to see the total.")}
+                </strong>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <details className="v2InspectorAdvancedDetails">
+          <summary>Advanced details</summary>
+          <div className="v2InspectorAdvancedBody">
+            <section className="v2InspectorHero v2InspectorEditor">
+              <div className="v2InspectorField">
+                <label htmlFor={`connector-title-${connection.id}`}>Name</label>
+                <input
+                  id={`connector-title-${connection.id}`}
+                  className="v2InspectorTextInput"
+                  value={titleDraft}
+                  placeholder="Relationship"
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveBasics();
+                  }}
+                />
+              </div>
+              <div className="v2InspectorField">
+                <label htmlFor={`connector-description-${connection.id}`}>Description</label>
+                <textarea
+                  id={`connector-description-${connection.id}`}
+                  className="v2InspectorTextarea"
+                  rows={4}
+                  value={descriptionDraft}
+                  placeholder="Description"
+                  onChange={(event) => setDescriptionDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void saveBasics();
+                  }}
+                />
+              </div>
+              {(basicError || saveStatus === "error") ? <div className="v2InspectorEditFooter">
+                <span className="v2InspectorSaveStatusError">
+                  {basicError ?? "Save failed"}
+                </span>
+              </div> : null}
+            </section>
+
+            <section className="v2InspectorSection">
+              <h3>Technical route</h3>
+              <div className="v2ConnectorRouteFlow">
+                <strong>
+                  {cardTitle(sourceCard, connection.sourceCardId)}
+                  {connectionType?.schema.semantics?.sourceRole ? (
+                    <small>{connectionType.schema.semantics.sourceRole}</small>
+                  ) : null}
+                </strong>
+                <span aria-hidden="true">→</span>
+                <strong>
+                  {cardTitle(targetCard, connection.targetCardId)}
+                  {connectionType?.schema.semantics?.targetRole ? (
+                    <small>{connectionType.schema.semantics.targetRole}</small>
+                  ) : null}
+                </strong>
+              </div>
+              <div className="v2ConnectorPortPair"><span>{connection.sourcePortKey}</span><span>{connection.targetPortKey}</span></div>
+            </section>
 
         <section className="v2InspectorSection">
           <div className="v2InspectorSectionHeader">
@@ -683,7 +817,7 @@ export function V2ConnectorInspector({
                         <button
                           type="button"
                           className="v2InspectorDataDeleteButton"
-                          aria-label="Delete extra connector data field"
+                          aria-label="Delete extra relationship data field"
                           onClick={() => deleteDataField(field.id)}
                         >
                           <Trash2 size={14} strokeWidth={2.1} />
@@ -744,7 +878,7 @@ export function V2ConnectorInspector({
                     <button
                       type="button"
                       className="v2InspectorDataDeleteButton"
-                      aria-label="Delete connector data field"
+                      aria-label="Delete relationship data field"
                       onClick={() => deleteDataField(field.id)}
                     >
                       <Trash2 size={14} strokeWidth={2.1} />
@@ -766,6 +900,8 @@ export function V2ConnectorInspector({
             </div>
           ) : null}
         </section>
+          </div>
+        </details>
 
         <V2ConnectorFilesSection connectionId={connection.id} />
 
@@ -784,7 +920,7 @@ export function V2ConnectorInspector({
               }
             >
               <BookmarkPlus size={14} strokeWidth={2.2} aria-hidden="true" />
-              <span>Save as new connector type</span>
+              <span>Save as new relationship type</span>
             </button>
           </section>
         ) : null}

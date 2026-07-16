@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import type {
   V2ConnectionMarker,
+  V2CardType,
   V2ConnectionType,
   V2ConnectionTypeSchema,
   V2ConnectionTypeSemantics,
   V2ConnectionVisualStyle,
   V2CreateConnectionTypeRequest,
+  V2RelationshipKind,
   V2UpdateConnectionTypeRequest,
 } from "@yadraw/shared";
 import { v2ConnectionTypeDefinitionSchema } from "@yadraw/shared";
@@ -47,6 +49,7 @@ export type V2NewConnectionTypeSeed = {
 };
 
 type Props = {
+  cardTypes: V2CardType[];
   connectionTypes: V2ConnectionType[];
   initialConnectionTypeId?: string | null;
   initialNewTypeSeed?: V2NewConnectionTypeSeed | null;
@@ -75,6 +78,58 @@ const DEFAULT_STYLE: V2ConnectionVisualStyle = {
   markerEnd: "arrow",
   showLabel: true,
 };
+
+type RelationshipPreset = {
+  kind: Exclude<V2RelationshipKind, "custom">;
+  name: string;
+  description: string;
+  sourceRole: string;
+  targetRole: string;
+  quantitative: boolean;
+};
+
+const RELATIONSHIP_PRESETS: RelationshipPreset[] = [
+  {
+    kind: "contains",
+    name: "Part of",
+    description: "A component belongs to a larger item.",
+    sourceRole: "component",
+    targetRole: "assembly",
+    quantitative: true,
+  },
+  {
+    kind: "needs",
+    name: "Needs",
+    description: "The target needs an amount of the source.",
+    sourceRole: "resource",
+    targetRole: "consumer",
+    quantitative: true,
+  },
+  {
+    kind: "uses",
+    name: "Uses",
+    description: "The source is used by the target.",
+    sourceRole: "resource",
+    targetRole: "user",
+    quantitative: true,
+  },
+  {
+    kind: "produces",
+    name: "Produces",
+    description: "The source creates the target.",
+    sourceRole: "producer",
+    targetRole: "product",
+    quantitative: false,
+  },
+  {
+    kind: "related",
+    name: "Related to",
+    description: "A simple relationship without calculations.",
+    sourceRole: "source",
+    targetRole: "target",
+    quantitative: false,
+  },
+];
 
 function normalizeStyle(style: V2ConnectionVisualStyle | undefined): V2ConnectionVisualStyle {
   return { ...DEFAULT_STYLE, ...style };
@@ -109,6 +164,56 @@ function schemaDrafts(schema: V2ConnectionTypeSchema | null | undefined): V2Card
   return createV2CardTypeSchemaFieldDrafts(schema);
 }
 
+function ensureQuantityFields(
+  currentFields: V2CardTypeSchemaFieldDraft[]
+): V2CardTypeSchemaFieldDraft[] {
+  const fields = [...currentFields];
+  if (!fields.some((field) => field.key === "quantity")) {
+    fields.push({
+      id: "schema-quantity",
+      key: "quantity",
+      label: "Quantity",
+      type: "number",
+      required: true,
+      placeholder: "Enter amount",
+      description: "Amount contributed by this relationship.",
+      optionsText: "",
+      numberConstraints: { min: 0 },
+    });
+  }
+  if (!fields.some((field) => field.key === "unit")) {
+    fields.push({
+      id: "schema-unit",
+      key: "unit",
+      label: "Unit",
+      type: "select",
+      required: true,
+      placeholder: "",
+      description: "Unit used for totals.",
+      optionsText: "piece:Pieces\nkg:Kilograms\nm:Meters",
+      defaultValue: "piece",
+    });
+  }
+  return fields;
+}
+
+function inferDraftKind(draft: ConnectionTypeDraft): V2RelationshipKind {
+  if (draft.semantics?.kind) return draft.semantics.kind;
+  if (
+    draft.semantics?.sourceRole === "component" &&
+    draft.semantics.targetRole === "assembly"
+  ) {
+    return "contains";
+  }
+  const key = draft.key.toLowerCase();
+  if (key === "contains" || key === "part_of" || key === "component_of") return "contains";
+  if (key === "needs" || key === "requires") return "needs";
+  if (key === "uses" || key === "used_by") return "uses";
+  if (key === "produces" || key === "produced_by") return "produces";
+  if (key === "generic" || key === "related" || key === "related_to") return "related";
+  return "custom";
+}
+
 function buildSchema(
   fields: V2CardTypeSchemaFieldDraft[],
   semantics: V2ConnectionTypeSemantics | undefined
@@ -127,7 +232,7 @@ function buildSchema(
   if (!parsed.success) {
     return {
       ok: false as const,
-      error: parsed.error.issues[0]?.message ?? "Invalid connector semantics."
+      error: parsed.error.issues[0]?.message ?? "Invalid relationship settings."
     };
   }
   return { ok: true as const, schema: parsed.data as V2ConnectionTypeSchema };
@@ -145,6 +250,27 @@ function fromType(connectionType: V2ConnectionType): ConnectionTypeDraft {
 }
 
 function emptyDraft(seed?: V2NewConnectionTypeSeed | null): ConnectionTypeDraft {
+  if (!seed) {
+    return {
+      id: null,
+      key: "",
+      name: "Part of",
+      fields: ensureQuantityFields([]),
+      semantics: {
+        version: 1,
+        kind: "contains",
+        sourceRole: "component",
+        targetRole: "assembly",
+        quantity: {
+          valueField: "quantity",
+          unitField: "unit",
+          basis: "per_target",
+          aggregation: "sum",
+        },
+      },
+      defaultVisualStyle: normalizeStyle(undefined),
+    };
+  }
   return {
     id: null,
     key: "",
@@ -156,6 +282,7 @@ function emptyDraft(seed?: V2NewConnectionTypeSeed | null): ConnectionTypeDraft 
 }
 
 export function V2ConnectionTypeManager({
+  cardTypes,
   connectionTypes,
   initialConnectionTypeId,
   initialNewTypeSeed,
@@ -247,7 +374,7 @@ export function V2ConnectionTypeManager({
       }
       return true;
     } catch {
-      setError("Could not save connector type.");
+      setError("Could not save relationship type.");
       return false;
     } finally {
       setIsSaving(false);
@@ -277,59 +404,135 @@ export function V2ConnectionTypeManager({
 
   const showLabel = draft.defaultVisualStyle.showLabel !== false;
   const quantitySemantics = draft.semantics?.quantity;
+  const selectedKind = inferDraftKind(draft);
   const numberFields = draft.fields.filter((field) => field.type === "number");
   const unitFields = draft.fields.filter(
     (field) => field.type === "text" || field.type === "select"
   );
+  const targetNumberFields = useMemo(() => {
+    const fieldsByKey = new Map<string, { key: string; label: string; typeNames: string[] }>();
+    for (const cardType of cardTypes) {
+      for (const field of cardType.schema.fields) {
+        if (field.type !== "number") continue;
+        const existing = fieldsByKey.get(field.key);
+        if (existing) {
+          if (!existing.typeNames.includes(cardType.name)) existing.typeNames.push(cardType.name);
+        } else {
+          fieldsByKey.set(field.key, {
+            key: field.key,
+            label: field.label,
+            typeNames: [cardType.name],
+          });
+        }
+      }
+    }
+    return [...fieldsByKey.values()].sort(
+      (a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key)
+    );
+  }, [cardTypes]);
+  const suggestedMultiplierField = useMemo(() => {
+    const preferred = targetNumberFields.find((field) =>
+      ["plannedquantity", "planned_quantity", "quantity"].includes(
+        field.key.toLowerCase().replace(/[^a-z0-9_]/g, "")
+      )
+    );
+    return preferred?.key ?? (targetNumberFields.length === 1 ? targetNumberFields[0]?.key : undefined);
+  }, [targetNumberFields]);
+
+  useEffect(() => {
+    if (
+      mode !== "new" ||
+      !suggestedMultiplierField ||
+      draft.semantics?.quantity?.basis !== "per_target" ||
+      draft.semantics.quantity.targetMultiplierField
+    ) {
+      return;
+    }
+    setDraft((current) => {
+      if (!current.semantics?.quantity) return current;
+      return {
+        ...current,
+        semantics: {
+          ...current.semantics,
+          quantity: {
+            ...current.semantics.quantity,
+            targetMultiplierField: suggestedMultiplierField,
+          },
+        },
+      };
+    });
+  }, [draft.semantics?.quantity, mode, suggestedMultiplierField]);
+
+  function applyPreset(kind: RelationshipPreset["kind"]) {
+    const preset = RELATIONSHIP_PRESETS.find((item) => item.kind === kind);
+    if (!preset) return;
+    const previousPreset = RELATIONSHIP_PRESETS.find((item) => item.kind === selectedKind);
+    const shouldUsePresetName =
+      mode === "new" &&
+      (!draft.name.trim() || draft.name.trim() === previousPreset?.name);
+    const fields = preset.quantitative
+      ? ensureQuantityFields(draft.fields)
+      : mode === "new"
+        ? draft.fields.filter((field) => field.key !== "quantity" && field.key !== "unit")
+        : draft.fields;
+    const currentQuantity = draft.semantics?.quantity;
+    updateDraft({
+      ...(shouldUsePresetName ? { name: preset.name } : {}),
+      fields,
+      semantics: {
+        version: 1,
+        kind: preset.kind,
+        sourceRole: preset.sourceRole,
+        targetRole: preset.targetRole,
+        ...(preset.quantitative
+          ? {
+              quantity: currentQuantity ?? {
+                valueField: fields.find((field) => field.key === "quantity")?.key ?? "quantity",
+                unitField: fields.find((field) => field.key === "unit")?.key ?? "unit",
+                basis: "per_target" as const,
+                ...(suggestedMultiplierField
+                  ? { targetMultiplierField: suggestedMultiplierField }
+                  : {}),
+                aggregation: "sum" as const,
+              },
+            }
+          : {}),
+      },
+    });
+  }
 
   function setQuantitative(enabled: boolean) {
     if (!enabled) {
-      updateDraft({ semantics: undefined });
+      updateDraft({
+        ...(mode === "new"
+          ? { fields: draft.fields.filter((field) => field.key !== "quantity" && field.key !== "unit") }
+          : {}),
+        semantics: {
+          version: 1,
+          kind: selectedKind === "custom" ? "related" : selectedKind,
+          sourceRole: draft.semantics?.sourceRole ?? "source",
+          targetRole: draft.semantics?.targetRole ?? "target",
+        },
+      });
       return;
     }
-
-    const fields = [...draft.fields];
-    if (!fields.some((field) => field.key === "quantity")) {
-      fields.push({
-        id: "schema-quantity",
-        key: "quantity",
-        label: "Quantity",
-        type: "number",
-        required: true,
-        placeholder: "",
-        description: "Quantity contributed by this relationship.",
-        optionsText: "",
-        defaultValue: 1,
-        numberConstraints: { min: 0 }
-      });
-    }
-    if (!fields.some((field) => field.key === "unit")) {
-      fields.push({
-        id: "schema-unit",
-        key: "unit",
-        label: "Unit",
-        type: "select",
-        required: true,
-        placeholder: "",
-        description: "Stable unit code used for aggregation.",
-        optionsText: "piece:Pieces\nkg:Kilograms\nm:Meters",
-        defaultValue: "piece"
-      });
-    }
+    const fields = ensureQuantityFields(draft.fields);
+    const preset = RELATIONSHIP_PRESETS.find((item) => item.kind === selectedKind);
     updateDraft({
       fields,
       semantics: {
         version: 1,
-        sourceRole: "component",
-        targetRole: "assembly",
+        kind: selectedKind === "custom" ? "contains" : selectedKind,
+        sourceRole: draft.semantics?.sourceRole ?? preset?.sourceRole ?? "component",
+        targetRole: draft.semantics?.targetRole ?? preset?.targetRole ?? "assembly",
         quantity: {
           valueField: "quantity",
           unitField: "unit",
           basis: "per_target",
-          targetMultiplierField: "plannedQuantity",
-          aggregation: "sum"
-        }
-      }
+          ...(suggestedMultiplierField ? { targetMultiplierField: suggestedMultiplierField } : {}),
+          aggregation: "sum",
+        },
+      },
     });
   }
 
@@ -351,26 +554,26 @@ export function V2ConnectionTypeManager({
       className="v2ModalOverlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Connector Type Manager"
+      aria-label="Relationship type manager"
       onPointerDown={(event) => { if (event.target === event.currentTarget) void closeManager(); }}
     >
       <section className="v2CardTypeManager" onPointerDown={(event) => event.stopPropagation()}>
         <header className="v2CardTypeManagerHeader">
-          <h2>Connector Type Manager</h2>
+          <h2>Relationship types</h2>
           <button type="button" className="v2InspectorCloseButton" aria-label="Close manager" onClick={() => void closeManager()}>
             <X size={16} strokeWidth={2.2} />
           </button>
         </header>
 
         <div className="v2CardTypeManagerBody">
-          <aside className="v2CardTypeManagerList" aria-label="Connector types">
+          <aside className="v2CardTypeManagerList" aria-label="Relationship types">
             <button
               type="button"
               className={`v2CardTypeManagerNewButton${mode === "new" ? " v2CardTypeManagerRowActive" : ""}`}
               onClick={() => void selectNew()}
             >
               <Plus size={14} strokeWidth={2.2} />
-              <span>New type</span>
+              <span>New relationship</span>
             </button>
             {sortedTypes.map((connectionType) => (
               <button
@@ -387,85 +590,68 @@ export function V2ConnectionTypeManager({
 
           <div className="v2CardTypeManagerEditor">
             <section className="v2ConnectionTypePreviewPanel">
-              <V2ConnectorStylePreview style={draft.defaultVisualStyle} label={draft.name || "Connector"} />
-              {showLabel ? <span>{draft.name || "Connector"}</span> : null}
+              <V2ConnectorStylePreview style={draft.defaultVisualStyle} label={draft.name || "Relationship"} />
+              {showLabel ? <span>{draft.name || "Relationship"}</span> : null}
             </section>
 
-            <section className="v2CardTypeManagerSection">
-              <input
-                ref={nameInputRef}
-                className="v2InspectorDataValue"
-                value={draft.name}
-                placeholder="Type name"
-                aria-label="Type name"
-                onChange={(event) => updateDraft({ name: event.target.value })}
-              />
+            <section className="v2CardTypeManagerSection v2RelationshipMeaningSection">
+              <div className="v2CardTypeManagerSectionHeader">
+                <div>
+                  <h3>What does this relationship mean?</h3>
+                  <p>Choose the sentence that best describes the two cards.</p>
+                </div>
+              </div>
+              <div className="v2RelationshipPresetGrid">
+                {RELATIONSHIP_PRESETS.map((preset) => (
+                  <button
+                    key={preset.kind}
+                    type="button"
+                    className={selectedKind === preset.kind
+                      ? "v2RelationshipPreset v2RelationshipPresetActive"
+                      : "v2RelationshipPreset"}
+                    aria-pressed={selectedKind === preset.kind}
+                    onClick={() => applyPreset(preset.kind)}
+                  >
+                    <strong>{preset.name}</strong>
+                    <span>{preset.description}</span>
+                  </button>
+                ))}
+              </div>
+              <label className="v2RelationshipNameField">
+                <span>Name shown in menus</span>
+                <input
+                  ref={nameInputRef}
+                  className="v2InspectorDataValue"
+                  value={draft.name}
+                  placeholder="Relationship name"
+                  aria-label="Relationship name"
+                  onChange={(event) => updateDraft({ name: event.target.value })}
+                />
+              </label>
             </section>
 
-            <V2CardTypeSchemaEditor fields={draft.fields} onChange={(fields) => updateDraft({ fields })} />
-
-            <section className="v2CardTypeManagerSection v2ConnectionTypeSemantics" aria-label="Relationship meaning">
+            <section className="v2CardTypeManagerSection v2ConnectionTypeSemantics" aria-label="Quantity settings">
               <label className="v2ConnectionTypeSemanticToggle">
                 <input
                   type="checkbox"
                   checked={Boolean(quantitySemantics)}
+                  disabled={selectedKind === "produces" && !quantitySemantics}
                   onChange={(event) => setQuantitative(event.target.checked)}
                 />
                 <span>
-                  <strong>Quantitative relationship</strong>
-                  <small>Use this connector in totals and assembly calculations.</small>
+                  <strong>Count quantities</strong>
+                  <small>
+                    {selectedKind === "produces" && !quantitySemantics
+                      ? "Output calculations need a separate production formula."
+                      : "Ask for an amount and show automatic totals."}
+                  </small>
                 </span>
               </label>
 
               {draft.semantics && quantitySemantics ? (
-                <div className="v2ConnectionTypeSemanticGrid">
+                <div className="v2RelationshipSimpleSettings">
                   <label>
-                    <span>Source role</span>
-                    <input
-                      className="v2InspectorDataValue"
-                      value={draft.semantics.sourceRole}
-                      placeholder="component"
-                      onChange={(event) => updateSemantics({ sourceRole: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span>Target role</span>
-                    <input
-                      className="v2InspectorDataValue"
-                      value={draft.semantics.targetRole}
-                      placeholder="assembly"
-                      onChange={(event) => updateSemantics({ targetRole: event.target.value })}
-                    />
-                  </label>
-                  <label>
-                    <span>Quantity field</span>
-                    <select
-                      className="v2InspectorDataValue"
-                      value={quantitySemantics.valueField}
-                      onChange={(event) => updateQuantity({ valueField: event.target.value })}
-                    >
-                      {numberFields.map((field) => (
-                        <option key={field.id} value={field.key}>{field.label || field.key}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Unit field</span>
-                    <select
-                      className="v2InspectorDataValue"
-                      value={quantitySemantics.unitField ?? ""}
-                      onChange={(event) => updateQuantity({
-                        unitField: event.target.value,
-                        fixedUnitCode: undefined
-                      })}
-                    >
-                      {unitFields.map((field) => (
-                        <option key={field.id} value={field.key}>{field.label || field.key}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Quantity basis</span>
+                    <span>How should the amount be counted?</span>
                     <select
                       className="v2InspectorDataValue"
                       value={quantitySemantics.basis}
@@ -475,32 +661,120 @@ export function V2ConnectionTypeManager({
                           basis,
                           targetMultiplierField: basis === "absolute"
                             ? undefined
-                            : quantitySemantics.targetMultiplierField ?? "plannedQuantity"
+                            : quantitySemantics.targetMultiplierField ?? suggestedMultiplierField,
                         });
                       }}
                     >
-                      <option value="absolute">Absolute quantity</option>
-                      <option value="per_target">Per target item</option>
+                      <option value="per_target">For each target card</option>
+                      <option value="absolute">One total amount</option>
                     </select>
                   </label>
                   {quantitySemantics.basis === "per_target" ? (
                     <label>
-                      <span>Target multiplier field</span>
-                      <input
+                      <span>Multiply by a number on the target card</span>
+                      <select
                         className="v2InspectorDataValue"
                         value={quantitySemantics.targetMultiplierField ?? ""}
-                        placeholder="plannedQuantity"
                         onChange={(event) => updateQuantity({
-                          targetMultiplierField: event.target.value || undefined
+                          targetMultiplierField: event.target.value || undefined,
                         })}
-                      />
+                      >
+                        <option value="">Do not multiply — count one target</option>
+                        {quantitySemantics.targetMultiplierField &&
+                        !targetNumberFields.some((field) => field.key === quantitySemantics.targetMultiplierField) ? (
+                          <option value={quantitySemantics.targetMultiplierField}>
+                            Current target field
+                          </option>
+                        ) : null}
+                        {targetNumberFields.map((field) => (
+                          <option key={field.key} value={field.key}>
+                            {field.label} · {field.typeNames.join(", ")}
+                          </option>
+                        ))}
+                      </select>
+                      <small>
+                        {targetNumberFields.length > 0
+                          ? "The technical field key is selected automatically."
+                          : "Add a Number field such as Planned quantity to a target card type if needed."}
+                      </small>
                     </label>
                   ) : null}
+                  <div className="v2RelationshipExample" aria-label="Calculation example">
+                    {quantitySemantics.basis === "per_target"
+                      ? "Example: 5 parts for each assembly × planned assemblies = total parts."
+                      : "Example: 5 parts means 5 parts in total."}
+                  </div>
                 </div>
               ) : null}
             </section>
 
-            <section className="v2CardTypeManagerSection v2ConnectionTypeVisualControls" aria-label="Connector appearance">
+            <details className="v2CardTypeManagerSection v2RelationshipAdvanced">
+              <summary>Advanced</summary>
+              <div className="v2RelationshipAdvancedBody">
+                <V2CardTypeSchemaEditor
+                  fields={draft.fields}
+                  onChange={(fields) => updateDraft({ fields })}
+                  title="Relationship fields"
+                />
+                {draft.semantics ? (
+                  <section className="v2ConnectionTypeSemantics" aria-label="Technical relationship semantics">
+                    <div className="v2ConnectionTypeSemanticGrid">
+                      <label>
+                        <span>Source role</span>
+                        <input
+                          className="v2InspectorDataValue"
+                          value={draft.semantics.sourceRole}
+                          placeholder="component"
+                          onChange={(event) => updateSemantics({ sourceRole: event.target.value })}
+                        />
+                      </label>
+                      <label>
+                        <span>Target role</span>
+                        <input
+                          className="v2InspectorDataValue"
+                          value={draft.semantics.targetRole}
+                          placeholder="assembly"
+                          onChange={(event) => updateSemantics({ targetRole: event.target.value })}
+                        />
+                      </label>
+                      {quantitySemantics ? (
+                        <>
+                          <label>
+                            <span>Quantity field</span>
+                            <select
+                              className="v2InspectorDataValue"
+                              value={quantitySemantics.valueField}
+                              onChange={(event) => updateQuantity({ valueField: event.target.value })}
+                            >
+                              {numberFields.map((field) => (
+                                <option key={field.id} value={field.key}>{field.label || field.key}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            <span>Unit field</span>
+                            <select
+                              className="v2InspectorDataValue"
+                              value={quantitySemantics.unitField ?? ""}
+                              onChange={(event) => updateQuantity({
+                                unitField: event.target.value,
+                                fixedUnitCode: undefined,
+                              })}
+                            >
+                              {unitFields.map((field) => (
+                                <option key={field.id} value={field.key}>{field.label || field.key}</option>
+                              ))}
+                            </select>
+                          </label>
+                        </>
+                      ) : null}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            </details>
+
+            <section className="v2CardTypeManagerSection v2ConnectionTypeVisualControls" aria-label="Relationship appearance">
               <label className="v2ConnectionTypeColor" title="Color">
                 <input
                   type="color"
@@ -558,8 +832,8 @@ export function V2ConnectionTypeManager({
               <button
                 type="button"
                 className={showLabel ? "v2ConnectionTypeLabelToggle v2ConnectionTypeLabelToggleActive" : "v2ConnectionTypeLabelToggle"}
-                title={showLabel ? "Hide connector names" : "Show connector names"}
-                aria-label={showLabel ? "Hide connector names" : "Show connector names"}
+                title={showLabel ? "Hide relationship labels" : "Show relationship labels"}
+                aria-label={showLabel ? "Hide relationship labels" : "Show relationship labels"}
                 aria-pressed={showLabel}
                 onClick={() => updateStyle({ showLabel: !showLabel })}
               >
@@ -573,7 +847,7 @@ export function V2ConnectionTypeManager({
                 <span />
                 <button type="button" className="v2InspectorPrimaryAction" disabled={isSaving} onClick={() => void saveDraft()}>
                   <Plus size={13} strokeWidth={2.2} />
-                  <span>{isSaving ? "Creating..." : "Create connector type"}</span>
+                  <span>{isSaving ? "Creating..." : "Create relationship"}</span>
                 </button>
               </div>
             ) : error ? <p className="v2ConnectionTypeAutosaveError">Auto-save failed</p> : null}

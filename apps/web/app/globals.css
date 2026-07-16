@@ -5482,6 +5482,29 @@ button:disabled {
   white-space: nowrap;
 }
 
+.v2CalculatedRowText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow: visible !important;
+  white-space: normal !important;
+}
+
+.v2CalculatedRowText > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2CalculatedRowText small {
+  color: #667085;
+  font-size: 9px;
+  font-weight: 560;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .v2CalculatedWarnings,
 .v2CalculatedError {
   margin: 0;
@@ -5511,6 +5534,116 @@ button:disabled {
   color: #93370d;
   font-size: 11px;
   line-height: 1.4;
+}
+
+.v2RelationshipSentence {
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border: 1px solid #b2ddff;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #eff8ff, #f8fbff);
+}
+
+.v2RelationshipSentence > span {
+  color: #175cd3;
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.v2RelationshipSentence > strong {
+  color: #182230;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.v2RelationshipQuantitySection {
+  gap: 10px;
+}
+
+.v2RelationshipQuantityControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.65fr);
+  gap: 8px;
+}
+
+.v2RelationshipQuantityControls > div {
+  display: grid;
+  gap: 4px;
+}
+
+.v2RelationshipFixedUnit {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #f9fafb;
+  color: #344054;
+  font-size: 12px;
+}
+
+.v2RelationshipLiveTotal {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #abefc6;
+  border-radius: 9px;
+  background: #ecfdf3;
+  color: #067647;
+}
+
+.v2RelationshipLiveTotal > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.v2RelationshipLiveTotal > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.v2RelationshipLiveTotal span {
+  font-size: 9px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.v2RelationshipLiveTotal strong {
+  color: #085d3a;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.v2InspectorAdvancedDetails {
+  border-top: 1px solid #edf1f7;
+}
+
+.v2InspectorAdvancedDetails > summary {
+  padding: 12px 0 0;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.v2InspectorAdvancedBody {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+@media (max-width: 520px) {
+  .v2RelationshipQuantityControls {
+    grid-template-columns: 1fr;
+  }
 }
 
 .v2ConnectorRouteFlow strong small {
@@ -6297,12 +6430,128 @@ button:disabled {
   font-weight: 650;
 }
 
+.v2RelationshipMeaningSection {
+  gap: 14px;
+}
+
+.v2RelationshipMeaningSection .v2CardTypeManagerSectionHeader p {
+  margin: 3px 0 0;
+  color: #667085;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.v2RelationshipPresetGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.v2RelationshipPreset {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid #e4e7ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #475467;
+  text-align: left;
+  cursor: pointer;
+}
+
+.v2RelationshipPreset strong {
+  color: #1d2939;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.v2RelationshipPreset span {
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.v2RelationshipPreset:hover,
+.v2RelationshipPreset:focus-visible,
+.v2RelationshipPresetActive {
+  border-color: #84adff;
+  background: #eff4ff;
+  outline: 0;
+}
+
+.v2RelationshipPresetActive strong {
+  color: #175cd3;
+}
+
+.v2RelationshipNameField,
+.v2RelationshipSimpleSettings > label {
+  display: grid;
+  gap: 5px;
+}
+
+.v2RelationshipNameField > span,
+.v2RelationshipSimpleSettings label > span {
+  color: #475467;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.v2RelationshipSimpleSettings {
+  display: grid;
+  gap: 10px;
+}
+
+.v2RelationshipSimpleSettings label > small {
+  color: #667085;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.v2RelationshipExample {
+  padding: 9px 10px;
+  border: 1px solid #b2ddff;
+  border-radius: 8px;
+  background: #eff8ff;
+  color: #175cd3;
+  font-size: 11px;
+  font-weight: 620;
+  line-height: 1.4;
+}
+
+.v2RelationshipAdvanced {
+  padding: 0;
+  overflow: hidden;
+}
+
+.v2RelationshipAdvanced > summary {
+  padding: 12px 14px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.v2RelationshipAdvanced[open] > summary {
+  border-bottom: 1px solid #e4e7ec;
+  background: #f9fafb;
+}
+
+.v2RelationshipAdvancedBody {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
 @media (max-width: 980px) {
   .v2ConnectionTypeVisualControls {
     grid-template-columns: 44px repeat(2, minmax(130px, 1fr));
   }
 
   .v2ConnectionTypeSemanticGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .v2RelationshipPresetGrid {
     grid-template-columns: 1fr;
   }
 }

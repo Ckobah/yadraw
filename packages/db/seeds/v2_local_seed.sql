@@ -229,7 +229,7 @@ values
     'contains',
     'Contains',
     'One card contains another.',
-    '{"fields":[{"key":"quantity","label":"Quantity per assembly","type":"number","required":true,"defaultValue":1,"numberConstraints":{"min":0,"integer":true}},{"key":"unit","label":"Unit","type":"select","required":true,"defaultValue":"piece","options":[{"value":"piece","label":"pcs"},{"value":"pcs","label":"pcs (legacy)"}]},{"key":"note","label":"Note","type":"text"}],"semantics":{"version":1,"sourceRole":"component","targetRole":"assembly","quantity":{"valueField":"quantity","unitField":"unit","basis":"per_target","targetMultiplierField":"plannedQuantity","aggregation":"sum"}}}'::jsonb,
+    '{"fields":[{"key":"quantity","label":"Quantity per assembly","type":"number","required":true,"defaultValue":1,"numberConstraints":{"min":0,"integer":true}},{"key":"unit","label":"Unit","type":"select","required":true,"defaultValue":"piece","options":[{"value":"piece","label":"pcs"},{"value":"pcs","label":"pcs (legacy)"}]},{"key":"note","label":"Note","type":"text"}],"semantics":{"version":1,"kind":"contains","sourceRole":"component","targetRole":"assembly","quantity":{"valueField":"quantity","unitField":"unit","basis":"per_target","targetMultiplierField":"plannedQuantity","aggregation":"sum"}}}'::jsonb,
     '{}'::jsonb
   ),
   (

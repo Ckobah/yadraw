@@ -8,6 +8,7 @@ import type {
   V2ConnectionType,
   V2ConnectionTypeFieldSchema,
   V2JsonObject,
+  V2RelationshipKind,
   V2SemanticGraph,
   V2SemanticGraphRelation,
   V2SemanticIssue,
@@ -197,21 +198,104 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 }).format(value);
 }
 
+export function resolveV2RelationshipKind(
+  connectionType: V2ConnectionType | null | undefined
+): V2RelationshipKind {
+  if (connectionType?.schema.semantics?.kind) return connectionType.schema.semantics.kind;
+  const key = connectionType?.key.toLowerCase() ?? "";
+  if (key === "contains" || key === "part_of" || key === "component_of") return "contains";
+  if (key === "needs" || key === "requires" || key === "required_by") return "needs";
+  if (key === "uses" || key === "used_by") return "uses";
+  if (key === "produces" || key === "produced_by") return "produces";
+  if (key === "generic" || key === "related" || key === "related_to") return "related";
+  const semantics = connectionType?.schema.semantics;
+  if (semantics?.sourceRole === "component" && semantics.targetRole === "assembly") {
+    return "contains";
+  }
+  return "custom";
+}
+
+export function buildV2RelationshipStatement(
+  sourceTitle: string,
+  targetTitle: string,
+  connectionType: V2ConnectionType | null | undefined
+): string {
+  switch (resolveV2RelationshipKind(connectionType)) {
+    case "contains":
+      return `${sourceTitle} is part of ${targetTitle}`;
+    case "needs":
+      return `${targetTitle} needs ${sourceTitle}`;
+    case "uses":
+      return `${sourceTitle} is used by ${targetTitle}`;
+    case "produces":
+      return `${sourceTitle} produces ${targetTitle}`;
+    case "related":
+      return `${sourceTitle} is related to ${targetTitle}`;
+    default:
+      return `${sourceTitle} connects to ${targetTitle}`;
+  }
+}
+
+export function getV2RelationshipGuidance(
+  connection: V2Connection,
+  connectionType: V2ConnectionType | null | undefined
+): string | null {
+  const effectiveData = buildV2EffectiveConnectionData(connectionType, connection.data);
+  const validation = validateV2ConnectionData(connectionType, effectiveData);
+  if (validation.validity === "valid" && connection.status !== "draft") return null;
+  const quantity = connectionType?.schema.semantics?.quantity;
+  if (quantity && validation.issues.some((item) => item.path === `data.${quantity.valueField}`)) {
+    return "Enter a quantity to include this relationship in totals.";
+  }
+  if (
+    quantity?.unitField &&
+    validation.issues.some((item) => item.path === `data.${quantity.unitField}`)
+  ) {
+    return "Choose a unit to include this relationship in totals.";
+  }
+  const firstIssue = validation.issues[0];
+  return firstIssue?.message ?? "Complete the relationship details to include it in totals.";
+}
+
 export function getV2ConnectionSemanticLabel(
   connection: V2Connection,
-  connectionType?: V2ConnectionType | null
+  connectionType?: V2ConnectionType | null,
+  calculationResult?: V2CalculationResult | null
 ): string | undefined {
-  if (connection.status === "draft") return "Incomplete";
-  const effectiveData = buildV2EffectiveConnectionData(connectionType, connection.data);
-  if (validateV2ConnectionData(connectionType, effectiveData).validity !== "valid") {
-    return "Incomplete";
+  const guidance = getV2RelationshipGuidance(connection, connectionType);
+  if (guidance) {
+    const quantity = connectionType?.schema.semantics?.quantity;
+    const valuePath = quantity ? `data.${quantity.valueField}` : null;
+    const effectiveData = buildV2EffectiveConnectionData(connectionType, connection.data);
+    const validation = validateV2ConnectionData(connectionType, effectiveData);
+    return valuePath && validation.issues.some((item) => item.path === valuePath)
+      ? "Enter quantity"
+      : "Needs attention";
   }
+  const effectiveData = buildV2EffectiveConnectionData(connectionType, connection.data);
   const quantity = resolveV2SemanticQuantityFact(connectionType, effectiveData);
   if (quantity) {
     const value = `${formatNumber(quantity.value)} ${formatV2UnitCode(quantity.unitCode)}`;
+    const quantityPath = connectionType?.schema.semantics?.quantity
+      ? `data.${connectionType.schema.semantics.quantity.valueField}`
+      : null;
+    const calculationMatchesCurrentQuantity = Boolean(
+      calculationResult?.connectionId === connection.id &&
+      quantityPath &&
+      calculationResult.inputs.some(
+        (input) => input.id === connection.id && input.path === quantityPath && input.value === quantity.value
+      )
+    );
+    if (calculationResult && calculationMatchesCurrentQuantity) {
+      const total = `${formatNumber(calculationResult.value)} ${formatV2UnitCode(calculationResult.unitCode)}`;
+      if (quantity.basis === "absolute") return `${total} total`;
+      return calculationResult.value === quantity.value
+        ? `${value} each`
+        : `${value} each · ${total} total`;
+    }
     return quantity.basis === "per_target"
       ? `${value} / ${connectionType?.schema.semantics?.targetRole ?? "target"}`
-      : value;
+      : `${value} total`;
   }
 
   const legacyQuantity = connection.data.quantity;
@@ -224,12 +308,15 @@ export function getV2ConnectionSemanticLabel(
     return unitText ? `${legacyQuantity} ${unitText}` : String(legacyQuantity);
   }
   if (connection.title?.trim()) return connection.title.trim();
+  if (connectionType?.name.trim()) return connectionType.name.trim();
   return connection.label || undefined;
 }
 
 function relationFromConnection(
   connection: V2Connection,
-  connectionType: V2ConnectionType | undefined
+  connectionType: V2ConnectionType | undefined,
+  sourceTitle: string,
+  targetTitle: string
 ): V2SemanticGraphRelation {
   const effectiveData = buildV2EffectiveConnectionData(connectionType, connection.data);
   const validation = validateV2ConnectionData(connectionType, effectiveData);
@@ -237,6 +324,8 @@ function relationFromConnection(
   return {
     id: connection.id,
     predicate: connectionType?.key ?? connection.type,
+    kind: resolveV2RelationshipKind(connectionType),
+    statement: buildV2RelationshipStatement(sourceTitle, targetTitle, connectionType),
     connectionTypeId: connection.connectionTypeId,
     connectionTypeName: connectionType?.name ?? "Generic",
     title: connection.title,
@@ -268,6 +357,7 @@ export function buildV2SemanticGraph(
 ): V2SemanticGraph {
   const cardTypeById = new Map(detail.cardTypes.map((cardType) => [cardType.id, cardType]));
   const connectionTypeById = new Map(detail.connectionTypes.map((type) => [type.id, type]));
+  const cardById = new Map(detail.cards.map((card) => [card.id, card]));
   return {
     schemaVersion: 1,
     boardId: detail.board.id,
@@ -292,7 +382,9 @@ export function buildV2SemanticGraph(
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((connection) => relationFromConnection(
         connection,
-        connection.connectionTypeId ? connectionTypeById.get(connection.connectionTypeId) : undefined
+        connection.connectionTypeId ? connectionTypeById.get(connection.connectionTypeId) : undefined,
+        cardById.get(connection.sourceCardId)?.title ?? "Unknown card",
+        cardById.get(connection.targetCardId)?.title ?? "Unknown card"
       ))
   };
 }
@@ -335,7 +427,7 @@ function detectQuantitativeCycles(
   for (const cardId of outgoing.keys()) visit(cardId);
   return [...cycleConnections].sort().map((connectionId) => ({
     code: "quantitative_cycle",
-    message: "Quantitative relationship participates in a cycle; recursive expansion is not evaluated.",
+    message: "This relationship creates a quantity cycle. Direct totals are shown, but nested expansion was skipped.",
     connectionId
   }));
 }
@@ -345,6 +437,7 @@ export function evaluateV2QuantitativeGraph(
   options: EvaluationOptions
 ): V2CalculationEvaluation {
   const connectionTypeById = new Map(detail.connectionTypes.map((type) => [type.id, type]));
+  const cardById = new Map(detail.cards.map((card) => [card.id, card]));
   const cardDataById = buildCardData(detail, options);
   const results: V2CalculationResult[] = [];
   const warnings: V2CalculationWarning[] = detectQuantitativeCycles(detail.connections, connectionTypeById);
@@ -358,7 +451,7 @@ export function evaluateV2QuantitativeGraph(
     if (connection.status === "draft") {
       warnings.push({
         code: "draft_quantitative_connection",
-        message: "Draft quantitative relationship was excluded from calculations.",
+        message: "Enter the missing relationship values to include it in totals.",
         connectionId: connection.id
       });
       continue;
@@ -417,7 +510,7 @@ export function evaluateV2QuantitativeGraph(
         if (rawMultiplier === undefined || rawMultiplier === null || rawMultiplier === "") {
           warnings.push({
             code: "missing_target_multiplier",
-            message: `Target field ${quantity.targetMultiplierField} is missing; one target unit was used.`,
+            message: "Planned target quantity is missing, so one target item was used.",
             cardId: connection.targetCardId,
             connectionId: connection.id
           });
@@ -430,7 +523,7 @@ export function evaluateV2QuantitativeGraph(
         } else if (typeof rawMultiplier !== "number" || !Number.isFinite(rawMultiplier) || rawMultiplier < 0) {
           warnings.push({
             code: "invalid_target_multiplier",
-            message: `Target field ${quantity.targetMultiplierField} must be a non-negative finite number.`,
+            message: "Planned target quantity must be a non-negative number.",
             cardId: connection.targetCardId,
             connectionId: connection.id
           });
@@ -474,6 +567,9 @@ export function evaluateV2QuantitativeGraph(
       value,
       unitCode: quantity.unitCode,
       formulaId: "bom.required.v1",
+      explanation: quantity.basis === "per_target"
+        ? `${formatNumber(quantity.value)} ${formatV2UnitCode(quantity.unitCode)} per ${cardById.get(connection.targetCardId)?.title ?? "target"} × ${formatNumber(multiplier)} = ${formatNumber(value)} ${formatV2UnitCode(quantity.unitCode)}`
+        : `${formatNumber(value)} ${formatV2UnitCode(quantity.unitCode)} total`,
       inputs
     });
   }

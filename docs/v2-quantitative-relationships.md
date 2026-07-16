@@ -2,6 +2,22 @@
 
 Quantitative meaning belongs to a connection type. Values entered for one relationship belong to `connection.data`; calculated values are projections and are never persisted in `card.data`.
 
+## Simple product flow
+
+The default UI describes a relationship as a sentence and keeps technical semantics behind an `Advanced` disclosure:
+
+1. The user chooses `Part of`, `Needs`, `Uses`, `Produces`, or `Related to`.
+2. Quantitative presets ask only for an amount and unit.
+3. A newly drawn quantitative relationship opens its inspector automatically.
+4. The inspector shows a sentence such as `Bolt is part of Table` and an immediate calculation preview.
+5. The canvas label shows both per-target and total amounts when a calculation is available.
+
+`Part of` is the default new relationship template. Its quantity has no silent business default, so a new connection remains a draft until the user enters an amount. Unit defaults to `piece`. If card types expose a single number field, or a field named like `Planned quantity`, the relationship type manager selects it as the target multiplier without asking the user for its technical key.
+
+Power users can expand `Advanced` to edit schema fields, source and target roles, and field mappings. Existing relationship types without a `kind` remain compatible; their kind is inferred from their key and roles for display and API projections.
+
+`Produces` is currently a semantic, non-quantitative preset. Output/yield calculations require a separate versioned formula and are not silently mapped onto the input-requirement formula.
+
 ## Connection type contract
 
 ```json
@@ -28,6 +44,7 @@ Quantitative meaning belongs to a connection type. Values entered for one relati
     ],
     "semantics": {
       "version": 1,
+      "kind": "contains",
       "sourceRole": "component",
       "targetRole": "assembly",
       "quantity": {
@@ -66,7 +83,7 @@ The active uniqueness identity is endpoint cards, endpoint port keys, and semant
 The response is a deterministic, machine-readable projection with:
 
 - semantic nodes containing business card JSON;
-- relations with a predicate, source/target roles, ports, status, validity, issues, effective relationship data (including schema defaults), and normalized quantity;
+- relations with a stable kind, predicate, human-readable statement, source/target roles, ports, status, validity, issues, effective relationship data (including schema defaults), and normalized quantity;
 - `schemaVersion` for the response contract;
 - a SHA-256 `graphRevision` over calculation-relevant board state;
 - `generatedAt` for observation time.
@@ -103,6 +120,8 @@ required quantity = relationship quantity × target multiplier
 ```
 
 Each result includes the source card, target card, connection, normalized unit, formula identifier, and every input used. Input provenance distinguishes persisted connection fields, persisted card fields, what-if overrides, and defaults. Totals are grouped by source card and normalized unit. Warnings identify drafts, invalid inputs, missing or invalid multipliers, and quantitative cycles.
+
+Each result also includes a concise `explanation`, for example `5 pcs per Table × 3 = 15 pcs`. This string is for presentation and AI explanations; consumers should continue to use the structured quantity, roles, formula identifier, and provenance as the source of truth.
 
 The current engine evaluates direct quantitative relationships. It detects cycles but deliberately does not recursively expand multi-level bills of materials; a future recursive formula must use a new formula identifier and explicit cycle policy.
 
