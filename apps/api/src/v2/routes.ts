@@ -272,6 +272,49 @@ export function registerV2Routes(server: FastifyInstance, service: V2BoardServic
     }
   );
 
+  server.post(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/imports/csv/preview",
+    { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+        };
+        return await service.previewCsvLibraryImport(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          request.body as any
+        );
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
+  server.post(
+    "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/imports/csv/commit",
+    { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } },
+    async (request, reply) => {
+      try {
+        const { workspaceId, cardTypeId } = request.params as {
+          workspaceId: string;
+          cardTypeId: string;
+        };
+        const result = await service.commitCsvLibraryImport(
+          request.requestContext,
+          workspaceId,
+          cardTypeId,
+          request.body as any
+        );
+        return reply.code(201).send(result);
+      } catch (error) {
+        return handleV2ServiceError(reply, error);
+      }
+    }
+  );
+
   server.patch(
     "/v2/workspaces/:workspaceId/card-types/:cardTypeId/library-entries/:libraryEntryId",
     async (request, reply) => {

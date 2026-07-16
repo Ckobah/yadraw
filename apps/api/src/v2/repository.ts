@@ -51,6 +51,13 @@ import {
   type V2WorkspaceRole
 } from "@yadraw/shared";
 import type { V2BoardBlueprint } from "./blueprints.js";
+import {
+  fingerprintV2CsvLibraryImportPlan,
+  planV2CsvLibraryImport,
+  v2CsvLibraryImportDuplicateValue,
+  type V2CsvLibraryImportPlan,
+  type V2PreparedCsvLibraryRow
+} from "./csv-library-import.js";
 
 export type V2CreateCardRecordInput = {
   workspaceId: string;
@@ -96,6 +103,27 @@ export type V2CreateCardLibraryEntryRecordInput = V2CreateCardLibraryEntryInput 
   workspaceId: string;
   cardTypeId: string;
 };
+
+export type V2CsvLibraryImportBatchInput = {
+  workspaceId: string;
+  cardTypeId: string;
+  rows: V2PreparedCsvLibraryRow[];
+  duplicatePolicy: import("@yadraw/shared").V2CsvLibraryImportDuplicatePolicy;
+};
+
+export type V2CommitCsvLibraryImportInput = V2CsvLibraryImportBatchInput & {
+  expectedFingerprint: string;
+};
+
+export type V2CommitCsvLibraryImportResult =
+  | {
+      status: "committed";
+      entries: V2CardLibraryEntry[];
+      createdCount: number;
+      updatedCount: number;
+      skippedCount: number;
+    }
+  | { status: "preview_conflict" };
 
 export type V2UpdateCardLibraryEntryResult =
   | { status: "updated"; entry: V2CardLibraryEntry }
@@ -233,6 +261,12 @@ export type V2Repository = {
   createCardLibraryEntry?(
     input: V2CreateCardLibraryEntryRecordInput
   ): Promise<V2CardLibraryEntry>;
+  previewCsvLibraryImport?(
+    input: V2CsvLibraryImportBatchInput
+  ): Promise<V2CsvLibraryImportPlan>;
+  commitCsvLibraryImport?(
+    input: V2CommitCsvLibraryImportInput
+  ): Promise<V2CommitCsvLibraryImportResult>;
   updateCardLibraryEntry?(
     libraryEntryId: string,
     input: V2UpdateCardLibraryEntryInput
@@ -1428,6 +1462,103 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
       return cloneJson(entry);
     },
 
+    async previewCsvLibraryImport(input) {
+      const existingEntries = state.libraryEntries
+        .filter(
+          (entry) =>
+            entry.workspaceId === input.workspaceId &&
+            entry.cardTypeId === input.cardTypeId &&
+            !deletedLibraryEntryIds.has(entry.id)
+        )
+        .map((entry) =>
+          v2CardLibraryEntrySchema.parse({
+            ...cloneJson(entry),
+            usageCount: activeStoredCards().filter(
+              (card) => card.libraryEntryId === entry.id
+            ).length
+          })
+        );
+      return planV2CsvLibraryImport(input.rows, existingEntries, input.duplicatePolicy);
+    },
+
+    async commitCsvLibraryImport(input) {
+      const existingEntries = state.libraryEntries
+        .filter(
+          (entry) =>
+            entry.workspaceId === input.workspaceId &&
+            entry.cardTypeId === input.cardTypeId &&
+            !deletedLibraryEntryIds.has(entry.id)
+        )
+        .map((entry) =>
+          v2CardLibraryEntrySchema.parse({
+            ...cloneJson(entry),
+            usageCount: activeStoredCards().filter(
+              (card) => card.libraryEntryId === entry.id
+            ).length
+          })
+        );
+      const plan = planV2CsvLibraryImport(
+        input.rows,
+        existingEntries,
+        input.duplicatePolicy
+      );
+      if (
+        plan.invalidRows > 0 ||
+        fingerprintV2CsvLibraryImportPlan(plan, input.duplicatePolicy) !== input.expectedFingerprint
+      ) {
+        return { status: "preview_conflict" };
+      }
+
+      const timestamp = nowIso();
+      const entries: V2CardLibraryEntry[] = [];
+      const replacements = new Map<string, V2CardLibraryEntry>();
+      const creations: V2CardLibraryEntry[] = [];
+      for (const operation of plan.operations) {
+        if (operation.kind === "create") {
+          const entry = v2CardLibraryEntrySchema.parse({
+            id: randomUUID(),
+            workspaceId: input.workspaceId,
+            cardTypeId: input.cardTypeId,
+            title: operation.row.title,
+            description: operation.row.description,
+            data: cloneJson(operation.row.data),
+            version: 1,
+            archivedAt: null,
+            usageCount: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp
+          });
+          creations.push(entry);
+          entries.push(entry);
+        } else if (operation.kind === "update") {
+          const updated = v2CardLibraryEntrySchema.parse({
+            ...operation.entry,
+            title: operation.row.title,
+            description: operation.row.description,
+            data: cloneJson(operation.row.data),
+            version: operation.entry.version + 1,
+            updatedAt: timestamp
+          });
+          replacements.set(operation.entry.id, updated);
+          entries.push(updated);
+        }
+      }
+
+      for (const [entryId, updated] of replacements) {
+        const index = state.libraryEntries.findIndex((entry) => entry.id === entryId);
+        if (index === -1) return { status: "preview_conflict" };
+        state.libraryEntries[index] = updated;
+      }
+      state.libraryEntries.push(...creations);
+      return {
+        status: "committed",
+        entries: cloneJson(entries),
+        createdCount: plan.createRows,
+        updatedCount: plan.updateRows,
+        skippedCount: plan.skippedRows
+      };
+    },
+
     async updateCardLibraryEntry(libraryEntryId, input) {
       if (deletedLibraryEntryIds.has(libraryEntryId)) return { status: "not_found" };
       const index = state.libraryEntries.findIndex((entry) => entry.id === libraryEntryId);
@@ -2290,6 +2421,57 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
 
   function roleFromRow(row: QueryResultRow | undefined): V2WorkspaceRole | null {
     return row?.role ? (String(row.role) as V2WorkspaceRole) : null;
+  }
+
+  async function loadCsvLibraryImportMatches(
+    client: PoolClient,
+    input: V2CsvLibraryImportBatchInput,
+    forUpdate: boolean
+  ): Promise<V2CardLibraryEntry[]> {
+    if (input.duplicatePolicy.mode === "create_new") return [];
+    const duplicateKey = input.duplicatePolicy.key;
+    const duplicateValues = [
+      ...new Set(
+        input.rows
+          .map((row) => v2CsvLibraryImportDuplicateValue(row, duplicateKey))
+          .filter((value): value is string => value !== null)
+      )
+    ];
+    if (duplicateValues.length === 0) return [];
+
+    const values: unknown[] = [input.workspaceId, input.cardTypeId];
+    let duplicateFilter: string;
+    if (duplicateKey.kind === "title") {
+      values.push(duplicateValues);
+      duplicateFilter = `lower(btrim(e.title)) = any($3::text[])`;
+    } else {
+      values.push(duplicateKey.fieldKey, duplicateValues);
+      duplicateFilter = `
+        case jsonb_typeof(e.data -> $3)
+          when 'string' then lower(btrim(e.data ->> $3))
+          else (e.data -> $3)::text
+        end = any($4::text[])
+      `;
+    }
+
+    const result = await client.query(
+      `
+        select e.*,
+               (select count(*)::int
+                  from cards c
+                 where c.library_entry_id = e.id
+                   and c.deleted_at is null) as usage_count
+        from card_library_entries e
+        where e.workspace_id = $1
+          and e.card_type_id = $2
+          and e.deleted_at is null
+          and (${duplicateFilter})
+        order by e.id
+        ${forUpdate ? "for update of e" : ""}
+      `,
+      values
+    );
+    return result.rows.map(cardLibraryEntryFromRow);
   }
 
   return {
@@ -3583,6 +3765,123 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
         ]
       );
       return cardLibraryEntryFromRow({ ...result.rows[0], usage_count: 0 });
+    },
+
+    async previewCsvLibraryImport(input) {
+      const client = await pool.connect();
+      try {
+        const existingEntries = await loadCsvLibraryImportMatches(client, input, false);
+        return planV2CsvLibraryImport(input.rows, existingEntries, input.duplicatePolicy);
+      } finally {
+        client.release();
+      }
+    },
+
+    async commitCsvLibraryImport(input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(
+          `select pg_advisory_xact_lock(hashtextextended($1, 0))`,
+          [`csv-library-import:${input.workspaceId}:${input.cardTypeId}`]
+        );
+        const cardTypeResult = await client.query(
+          `
+            select id
+            from card_types
+            where id = $1
+              and workspace_id = $2
+              and deleted_at is null
+            for update
+          `,
+          [input.cardTypeId, input.workspaceId]
+        );
+        if (!cardTypeResult.rows[0]) {
+          await client.query("rollback");
+          return { status: "preview_conflict" };
+        }
+
+        const existingEntries = await loadCsvLibraryImportMatches(client, input, true);
+        const plan = planV2CsvLibraryImport(
+          input.rows,
+          existingEntries,
+          input.duplicatePolicy
+        );
+        if (
+          plan.invalidRows > 0 ||
+          fingerprintV2CsvLibraryImportPlan(plan, input.duplicatePolicy) !== input.expectedFingerprint
+        ) {
+          await client.query("rollback");
+          return { status: "preview_conflict" };
+        }
+
+        const entries: V2CardLibraryEntry[] = [];
+        for (const operation of plan.operations) {
+          if (operation.kind === "create") {
+            const result = await client.query(
+              `
+                insert into card_library_entries (
+                  workspace_id, card_type_id, title, description, data
+                ) values ($1, $2, $3, $4, $5::jsonb)
+                returning *
+              `,
+              [
+                input.workspaceId,
+                input.cardTypeId,
+                operation.row.title,
+                operation.row.description,
+                JSON.stringify(operation.row.data)
+              ]
+            );
+            entries.push(cardLibraryEntryFromRow({ ...result.rows[0], usage_count: 0 }));
+          } else if (operation.kind === "update") {
+            const result = await client.query(
+              `
+                update card_library_entries
+                set title = $2,
+                    description = $3,
+                    data = $4::jsonb
+                where id = $1
+                  and version = $5
+                  and deleted_at is null
+                returning *
+              `,
+              [
+                operation.entry.id,
+                operation.row.title,
+                operation.row.description,
+                JSON.stringify(operation.row.data),
+                operation.entry.version
+              ]
+            );
+            const row = result.rows[0];
+            if (!row) {
+              await client.query("rollback");
+              return { status: "preview_conflict" };
+            }
+            entries.push(
+              cardLibraryEntryFromRow({
+                ...row,
+                usage_count: operation.entry.usageCount
+              })
+            );
+          }
+        }
+
+        await client.query("commit");
+        return {
+          status: "committed",
+          entries,
+          createdCount: plan.createRows,
+          updatedCount: plan.updateRows,
+          skippedCount: plan.skippedRows
+        };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
     },
 
     async updateCardLibraryEntry(libraryEntryId, input) {
