@@ -8,6 +8,7 @@ type V2CardBasicsSectionProps = {
   card: V2Card;
   saveStatus: SaveStatus;
   readOnly?: boolean;
+  allowEmptyTitle?: boolean;
   onUpdateCardBasics: (
     cardId: string,
     input: { title?: string; description?: string | null }
@@ -18,6 +19,7 @@ export function V2CardBasicsSection({
   card,
   saveStatus,
   readOnly = false,
+  allowEmptyTitle = false,
   onUpdateCardBasics,
 }: V2CardBasicsSectionProps) {
   const [draftTitle, setDraftTitle] = useState(card.title ?? "");
@@ -43,14 +45,23 @@ export function V2CardBasicsSection({
     if (readOnly || !hasChanges || saveStatus === "saving") return;
     const timeout = window.setTimeout(() => void saveAll(), 600);
     return () => window.clearTimeout(timeout);
-  }, [draftTitle, draftDescription, card.id, card.title, card.description, readOnly, saveStatus]);
+  }, [
+    draftTitle,
+    draftDescription,
+    card.id,
+    card.title,
+    card.description,
+    readOnly,
+    allowEmptyTitle,
+    saveStatus,
+  ]);
 
   async function saveAll() {
     if (readOnly) return;
     const input: { title?: string; description?: string } = {};
     const nextTitle = draftTitle.trim();
     if (nextTitle !== card.title) {
-      if (!nextTitle) {
+      if (!nextTitle && !allowEmptyTitle) {
         setDraftTitle(card.title ?? "");
         setFieldError("Title cannot be empty");
         return;
@@ -83,7 +94,7 @@ export function V2CardBasicsSection({
           id={`v2-title-${card.id}`}
           className="v2InspectorTextInput"
           value={draftTitle}
-          placeholder="Card title"
+          placeholder={allowEmptyTitle ? "Optional title" : "Card title"}
           readOnly={readOnly}
           onChange={(event) => setDraftTitle(event.target.value)}
           onKeyDown={(event) => {

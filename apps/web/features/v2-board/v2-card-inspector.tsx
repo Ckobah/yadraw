@@ -183,6 +183,7 @@ export function V2CardInspector({
           card={card}
           saveStatus={saveStatus}
           readOnly={Boolean(card.libraryEntryId)}
+          allowEmptyTitle={isContainer}
           onUpdateCardBasics={onUpdateCardBasics}
         />
         {isContainer ? (

@@ -96,7 +96,9 @@ Editor changes save automatically.
 
 - Do not add Save or Cancel buttons to card, connection, type, or visual editors.
 - Use the existing debounced autosave patterns.
-- Show progress only while saving and show concise actionable errors.
+- Show autosave progress only in the board-level traffic-light indicator. Never render
+  saving text, spinners, or duplicate save-state indicators inside inspectors or editors.
+  Keep concise actionable errors near the affected editor.
 - Closing an editor must flush valid pending changes.
 - Do not open an editor during selection-only interactions.
 

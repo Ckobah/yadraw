@@ -422,7 +422,7 @@ export const v2CardSchema = z.object({
   cardTypeId: v2UuidSchema,
   containerId: v2UuidSchema.nullable().optional(),
   libraryEntryId: v2UuidSchema.nullable().optional(),
-  title: z.string().min(1),
+  title: z.string().max(240),
   description: z.string(),
   data: v2JsonObjectSchema,
   position: v2PositionSchema,
@@ -946,7 +946,7 @@ export const v2CreateCardBodySchema = z
       .strict()
       .optional(),
     libraryEntryId: v2UuidSchema.optional(),
-    title: z.string().trim().min(1).optional(),
+    title: z.string().trim().max(240).optional(),
     description: z.string().optional(),
     data: v2JsonObjectSchema.optional(),
     position: v2PositionSchema.optional(),
@@ -968,6 +968,17 @@ export const v2CreateCardBodySchema = z
         code: z.ZodIssueCode.custom,
         path: ["libraryEntryId"],
         message: "Container cards cannot use library entries"
+      });
+    }
+    if (
+      input.container === undefined &&
+      input.title !== undefined &&
+      input.title.length === 0
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["title"],
+        message: "Card title cannot be empty"
       });
     }
     if (
@@ -995,7 +1006,7 @@ export const v2SetCardLibraryEntryBodySchema = z
 
 export const v2UpdateCardBodySchema = z
   .object({
-    title: z.string().trim().min(1).optional(),
+    title: z.string().trim().max(240).optional(),
     description: z.string().optional(),
     data: v2JsonObjectSchema.optional(),
     position: v2PositionSchema.optional(),

@@ -61,15 +61,6 @@ export function V2ContainerSettings({
 
   return (
     <section className="v2InspectorSection v2ContainerSettings">
-      <div className="v2InspectorSectionHeader">
-        <div>
-          <h3>Box</h3>
-          <p>Cards inside belong to this group automatically.</p>
-        </div>
-        <span className="v2ContainerSaveState">
-          {saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Not saved" : ""}
-        </span>
-      </div>
       <div className="v2ContainerThemeChoice" role="group" aria-label="Box color">
         {Object.entries(V2_CONTAINER_THEMES).map(([key, appearance]) => (
           <button

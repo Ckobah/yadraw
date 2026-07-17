@@ -1853,13 +1853,7 @@ export function createV2BoardService(
           title:
             libraryEntry?.title ??
             input.title ??
-            (input.container?.variant === "box"
-              ? "Box"
-              : input.container?.variant === "frame"
-                ? "Frame"
-                : input.container
-                  ? "Sticky note"
-                  : cardType.name),
+            (input.container ? "" : cardType.name),
           description: libraryEntry?.description ?? input.description ?? "",
           data: cloneJson(libraryEntry?.data ?? input.data ?? {}),
           position: input.position ?? { x: 0, y: 0 },
@@ -1920,8 +1914,14 @@ export function createV2BoardService(
         notFound("Card not found");
       }
       await authorizeWorkspace(context, existing.workspaceId, "write");
+      let cardType: V2CardType | null = null;
+      if (input.visualStyle || input.title === "") {
+        cardType = await repository.getCardType(existing.cardTypeId);
+      }
+      if (input.title === "" && cardType?.kind !== "container") {
+        validationFailed("Card title cannot be empty");
+      }
       if (input.visualStyle) {
-        const cardType = await repository.getCardType(existing.cardTypeId);
         if (
           (input.visualStyle.containerVariant !== undefined ||
             input.visualStyle.containerTheme !== undefined) &&

@@ -180,6 +180,21 @@ describe("v2 card API", () => {
       });
     expect(container.visualStyle).not.toHaveProperty("connectorSlots");
 
+    const clearContainerTitleResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/cards/${container.id}`,
+      payload: { title: "" }
+    });
+    expect(clearContainerTitleResponse.statusCode).toBe(200);
+    expect(clearContainerTitleResponse.json()).toMatchObject({ title: "" });
+
+    const clearEntityTitleResponse = await server.inject({
+      method: "PATCH",
+      url: `/v2/cards/${seed.cards[0]!.id}`,
+      payload: { title: "" }
+    });
+    expect(clearEntityTitleResponse.statusCode).toBe(400);
+
     const connectionToBoxResponse = await server.inject({
       method: "POST",
       url: `/v2/boards/${seed.board.id}/connections`,
@@ -258,7 +273,7 @@ describe("v2 card API", () => {
     });
     expect(boxResponse.statusCode).toBe(201);
     expect(boxResponse.json()).toMatchObject({
-      title: "Box",
+      title: "",
       size: { width: 480, height: 320 },
       visualStyle: {
         containerVariant: "box",
@@ -275,6 +290,7 @@ describe("v2 card API", () => {
     });
     expect(stickyResponse.statusCode).toBe(201);
     expect(stickyResponse.json()).toMatchObject({
+      title: "",
       visualStyle: {
         containerVariant: "sticky",
         containerTheme: "yellow",
@@ -289,6 +305,7 @@ describe("v2 card API", () => {
     });
     expect(frameResponse.statusCode).toBe(201);
     expect(frameResponse.json()).toMatchObject({
+      title: "",
       visualStyle: {
         containerVariant: "frame",
         containerTheme: "white",

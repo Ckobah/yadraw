@@ -523,9 +523,9 @@ describePostgres("v2 Postgres repository", () => {
     if (!repository) throw new Error("Repository was not initialized");
     const service = createV2BoardService(repository);
     const container = await service.createCard(ownerContext, seedIds.board, {
-      container: { variant: "frame", theme: "green" },
-      title: "Postgres frame"
+      container: { variant: "frame", theme: "green" }
     });
+    expect(container.title).toBe("");
     const child = await service.createCard(ownerContext, seedIds.board, {
       cardTypeId: seedIds.sourceType,
       title: "Contained source"

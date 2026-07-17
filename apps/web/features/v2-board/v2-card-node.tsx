@@ -637,10 +637,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
   );
   const visibleDataPreviewRows = dataPreviewRows.slice(0, visibleDataPreviewRowCount);
   const cardSummary = isContainer ? card.description.trim() : getCardSummary(card);
-  const cardDisplayTitle =
-    isContainer && (card.title === "Box" || card.title === "Sticky note" || card.title === "Frame")
-      ? ""
-      : card.title;
+  const cardDisplayTitle = card.title;
   const canInlineEdit = !card.libraryEntryId && Boolean(data.onUpdateCardBasics);
   const [inlineField, setInlineField] = useState<V2InlineCardField | null>(null);
   const [inlineDraft, setInlineDraft] = useState("");
@@ -769,7 +766,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
     (field: V2InlineCardField, rawValue: string): Promise<boolean> => {
       const value = field === "title" ? rawValue.trim() : rawValue;
       const task = inlineSaveQueueRef.current.then(async () => {
-        if (field === "title" && !value) {
+        if (field === "title" && !value && !isContainer) {
           if (mountedRef.current && inlineFieldRef.current === field) {
             setInlineEditError("Title cannot be empty");
           }
@@ -808,14 +805,14 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       );
       return task;
     },
-    [card.id, card.libraryEntryId, data.onUpdateCardBasics]
+    [card.id, card.libraryEntryId, data.onUpdateCardBasics, isContainer]
   );
 
   useEffect(() => {
     if (!inlineField) return;
     const value = inlineField === "title" ? inlineDraft.trim() : inlineDraft;
     if (
-      (inlineField === "title" && !value) ||
+      (inlineField === "title" && !value && !isContainer) ||
       (inlineSavedValueRef.current?.field === inlineField &&
         inlineSavedValueRef.current.value === value)
     ) {
@@ -825,7 +822,7 @@ export function V2CardNodeComponent({ data, selected }: NodeProps<V2CardNode>) {
       void queueInlineSave(inlineField, inlineDraft);
     }, 600);
     return () => window.clearTimeout(timeout);
-  }, [inlineDraft, inlineField, queueInlineSave]);
+  }, [inlineDraft, inlineField, isContainer, queueInlineSave]);
 
   useLayoutEffect(() => {
     if (inlineField === "title") {

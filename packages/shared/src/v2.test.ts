@@ -732,6 +732,12 @@ describe("v2 API contracts", () => {
         container: { variant: "frame", theme: "white" }
       })
     ).toMatchObject({ container: { variant: "frame", theme: "white" } });
+    expect(
+      v2CreateCardBodySchema.parse({
+        container: { variant: "box" },
+        title: ""
+      })
+    ).toMatchObject({ container: { variant: "box" }, title: "" });
     expect(() =>
       v2CreateCardBodySchema.parse({
         container: { variant: "box" },
@@ -756,6 +762,9 @@ describe("v2 API contracts", () => {
       })
     ).toThrow();
     expect(() => v2CreateCardBodySchema.parse({ title: "Missing type" })).toThrow();
+    expect(() =>
+      v2CreateCardBodySchema.parse({ cardTypeId, title: "" })
+    ).toThrow();
     expect(() =>
       v2CreateCardBodySchema.parse({
         container: { variant: "sticky" },
@@ -1364,6 +1373,11 @@ describe("v2CardSchema with visualStyle", () => {
     expect(card.data).toEqual({ key: "value" });
   });
 
+  it("allows an empty persisted title for a Box", () => {
+    const card = v2CardSchema.parse({ ...baseCard, title: "" });
+    expect(card.title).toBe("");
+  });
+
   it("accepts card with visualStyle", () => {
     const card = v2CardSchema.parse({
       ...baseCard,
@@ -1585,6 +1599,10 @@ describe("v2 file attachment schemas", () => {
 });
 
 describe("v2UpdateCardBodySchema with visualStyle", () => {
+  it("accepts an empty title so the service can allow it for Box cards", () => {
+    expect(v2UpdateCardBodySchema.parse({ title: "" })).toEqual({ title: "" });
+  });
+
   it("allows updating visualStyle alone", () => {
     const result = v2UpdateCardBodySchema.parse({
       visualStyle: { textAlign: "center" }
