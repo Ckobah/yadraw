@@ -1636,14 +1636,12 @@ export function V2BoardCanvas({
   }, [selectOnlyCard]);
 
   const handleStartInlineEditor = useCallback((cardId: string) => {
-    setSelectedCardId(cardId);
-    setInspectedCardId(null);
+    selectOnlyCard(cardId);
     setSelectedConnectionId(null);
-    setVisualEditingCardId(null);
     setVisualEditingConnectionId(null);
     setCardActionError(null);
     setConnectionCreateError(null);
-  }, []);
+  }, [selectOnlyCard]);
 
   useEffect(() => {
     if (cardInspectorRequest <= 0) return;
