@@ -935,6 +935,117 @@ export const v2CsvLibraryImportResultSchema = z
   })
   .strict();
 
+export const v2XlsxLibraryWorkbookParamsSchema = v2CsvLibraryImportParamsSchema;
+
+export const v2XlsxLibraryWorkbookExportBodySchema = z.object({}).strict();
+
+export const v2XlsxLibraryWorkbookFileSchema = z
+  .object({
+    filename: z.string().trim().min(1).max(240),
+    contentType: z.literal(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ),
+    workbookBase64: z.string().min(4).max(7_200_000),
+    entryCount: z.number().int().nonnegative().max(1000),
+    fieldCount: z.number().int().nonnegative().max(50)
+  })
+  .strict();
+
+export const v2XlsxLibraryNewFieldInputSchema = z
+  .object({
+    columnId: z.string().regex(/^column_[1-9][0-9]*$/),
+    type: v2CardTypeFieldTypeSchema
+  })
+  .strict();
+
+const v2XlsxLibraryImportBaseShape = {
+  filename: z.string().trim().min(1).max(240).regex(/\.xlsx$/i),
+  workbookBase64: z.string().min(4).max(7_200_000),
+  newFields: z.array(v2XlsxLibraryNewFieldInputSchema).max(20).default([])
+};
+
+export const v2XlsxLibraryImportPreviewBodySchema = z
+  .object(v2XlsxLibraryImportBaseShape)
+  .strict();
+
+export const v2XlsxLibraryImportExpectedPreviewSchema = z
+  .object({
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    totalRows: z.number().int().nonnegative().max(1000),
+    createRows: z.number().int().nonnegative().max(1000),
+    updateRows: z.number().int().nonnegative().max(1000),
+    unchangedRows: z.number().int().nonnegative().max(1000),
+    invalidRows: z.number().int().nonnegative().max(1000),
+    newFieldCount: z.number().int().nonnegative().max(20)
+  })
+  .strict();
+
+export const v2XlsxLibraryImportCommitBodySchema = z
+  .object({
+    ...v2XlsxLibraryImportBaseShape,
+    expectedPreview: v2XlsxLibraryImportExpectedPreviewSchema
+  })
+  .strict();
+
+export const v2XlsxLibraryNewFieldProposalSchema = z
+  .object({
+    columnId: z.string().regex(/^column_[1-9][0-9]*$/),
+    header: z.string().trim().min(1).max(120),
+    fieldKey: z.string().trim().min(1).max(120),
+    suggestedType: v2CardTypeFieldTypeSchema,
+    confirmedType: v2CardTypeFieldTypeSchema.nullable(),
+    distinctValueCount: z.number().int().nonnegative().max(1000),
+    sampleValues: z.array(z.string().max(240)).max(3)
+  })
+  .strict();
+
+export const v2XlsxLibraryImportIssueSchema = z
+  .object({
+    rowNumber: z.number().int().min(2).nullable(),
+    columnId: z.string().nullable(),
+    message: z.string().trim().min(1)
+  })
+  .strict();
+
+export const v2XlsxLibraryImportPreviewRowSchema = z
+  .object({
+    rowNumber: z.number().int().min(2),
+    entryId: v2UuidSchema.nullable(),
+    title: z.string().max(240),
+    status: z.enum(["create", "update", "unchanged", "invalid"]),
+    issues: z.array(z.string().trim().min(1))
+  })
+  .strict();
+
+export const v2XlsxLibraryImportPreviewSchema = z
+  .object({
+    fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    totalRows: z.number().int().nonnegative().max(1000),
+    createRows: z.number().int().nonnegative().max(1000),
+    updateRows: z.number().int().nonnegative().max(1000),
+    unchangedRows: z.number().int().nonnegative().max(1000),
+    invalidRows: z.number().int().nonnegative().max(1000),
+    newFieldCount: z.number().int().nonnegative().max(20),
+    requiresFieldConfirmation: z.boolean(),
+    proposedFields: z.array(v2XlsxLibraryNewFieldProposalSchema).max(20),
+    issues: z.array(v2XlsxLibraryImportIssueSchema),
+    warnings: z.array(z.string().trim().min(1)).max(50),
+    previewRows: z.array(v2XlsxLibraryImportPreviewRowSchema).max(10)
+  })
+  .strict();
+
+export const v2XlsxLibraryImportResultSchema = z
+  .object({
+    cardType: v2CardTypeSchema,
+    totalRows: z.number().int().nonnegative().max(1000),
+    createdCount: z.number().int().nonnegative().max(1000),
+    updatedCount: z.number().int().nonnegative().max(1000),
+    unchangedCount: z.number().int().nonnegative().max(1000),
+    addedFieldCount: z.number().int().nonnegative().max(20),
+    synchronizedWorkbook: v2XlsxLibraryWorkbookFileSchema
+  })
+  .strict();
+
 export const v2CreateCardBodySchema = z
   .object({
     cardTypeId: v2UuidSchema.optional(),
@@ -1456,6 +1567,27 @@ export const v2ApiContracts = {
     body: v2CsvLibraryImportCommitBodySchema,
     response: v2CsvLibraryImportResultSchema
   },
+  exportXlsxLibraryWorkbook: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/workbook/export",
+    params: v2XlsxLibraryWorkbookParamsSchema,
+    body: v2XlsxLibraryWorkbookExportBodySchema,
+    response: v2XlsxLibraryWorkbookFileSchema
+  },
+  previewXlsxLibraryImport: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/imports/xlsx/preview",
+    params: v2XlsxLibraryWorkbookParamsSchema,
+    body: v2XlsxLibraryImportPreviewBodySchema,
+    response: v2XlsxLibraryImportPreviewSchema
+  },
+  commitXlsxLibraryImport: {
+    method: "POST",
+    path: "/v2/workspaces/{workspaceId}/card-types/{cardTypeId}/library-entries/imports/xlsx/commit",
+    params: v2XlsxLibraryWorkbookParamsSchema,
+    body: v2XlsxLibraryImportCommitBodySchema,
+    response: v2XlsxLibraryImportResultSchema
+  },
   updateCard: {
     method: "PATCH",
     path: "/v2/cards/{cardId}",
@@ -1669,6 +1801,14 @@ export type V2CsvLibraryImportPreviewInput = z.infer<typeof v2CsvLibraryImportPr
 export type V2CsvLibraryImportCommitInput = z.infer<typeof v2CsvLibraryImportCommitBodySchema>;
 export type V2CsvLibraryImportPreview = z.infer<typeof v2CsvLibraryImportPreviewSchema>;
 export type V2CsvLibraryImportResult = z.infer<typeof v2CsvLibraryImportResultSchema>;
+export type V2XlsxLibraryWorkbookFile = z.infer<typeof v2XlsxLibraryWorkbookFileSchema>;
+export type V2XlsxLibraryNewFieldInput = z.infer<typeof v2XlsxLibraryNewFieldInputSchema>;
+export type V2XlsxLibraryImportPreviewInput = z.infer<typeof v2XlsxLibraryImportPreviewBodySchema>;
+export type V2XlsxLibraryImportCommitInput = z.infer<typeof v2XlsxLibraryImportCommitBodySchema>;
+export type V2XlsxLibraryNewFieldProposal = z.infer<typeof v2XlsxLibraryNewFieldProposalSchema>;
+export type V2XlsxLibraryImportIssue = z.infer<typeof v2XlsxLibraryImportIssueSchema>;
+export type V2XlsxLibraryImportPreview = z.infer<typeof v2XlsxLibraryImportPreviewSchema>;
+export type V2XlsxLibraryImportResult = z.infer<typeof v2XlsxLibraryImportResultSchema>;
 export type V2UpdateCardInput = z.infer<typeof v2UpdateCardBodySchema>;
 export type V2UpdateBoardLayoutInput = z.infer<typeof v2UpdateBoardLayoutBodySchema>;
 export type V2UpdateBoardLayoutRequest = z.input<typeof v2UpdateBoardLayoutBodySchema>;
@@ -1714,6 +1854,9 @@ export type V2UpdateConnectionTypeRequest = z.input<typeof v2UpdateConnectionTyp
 export type V2CreateCardRequest = z.input<typeof v2CreateCardBodySchema>;
 export type V2CsvLibraryImportPreviewRequest = z.input<typeof v2CsvLibraryImportPreviewBodySchema>;
 export type V2CsvLibraryImportCommitRequest = z.input<typeof v2CsvLibraryImportCommitBodySchema>;
+export type V2XlsxLibraryWorkbookExportRequest = z.input<typeof v2XlsxLibraryWorkbookExportBodySchema>;
+export type V2XlsxLibraryImportPreviewRequest = z.input<typeof v2XlsxLibraryImportPreviewBodySchema>;
+export type V2XlsxLibraryImportCommitRequest = z.input<typeof v2XlsxLibraryImportCommitBodySchema>;
 export type V2UpdateCardRequest = z.input<typeof v2UpdateCardBodySchema>;
 export type V2UpdateCardTypeSchemaRequest = z.input<typeof v2UpdateCardTypeSchemaBodySchema>;
 export type V2CreateConnectionRequest = z.input<typeof v2CreateConnectionBodySchema>;

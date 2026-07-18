@@ -9525,7 +9525,105 @@ svg.v2ContainerPinUnpinned {
 
 .v2CsvImportStatus-update { background: #f4ebff; color: #6941c6; }
 .v2CsvImportStatus-skipped { background: #f2f4f7; color: #475467; }
+.v2CsvImportStatus-unchanged { background: #f2f4f7; color: #475467; }
 .v2CsvImportStatus-invalid { background: #fef3f2; color: #b42318; }
+
+.v2XlsxImportStep .v2CsvImportSectionHeading {
+  align-items: center;
+}
+
+.v2XlsxImportStep .v2CsvImportSectionHeading h3 > span {
+  display: inline-grid;
+  width: 19px;
+  height: 19px;
+  margin-right: 5px;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #175cd3;
+  font-size: 9px;
+}
+
+.v2XlsxImportFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.v2XlsxImportFieldGrid label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  background: #f9fafb;
+  padding: 8px;
+}
+
+.v2XlsxImportFieldGrid label > span {
+  overflow: hidden;
+  color: #344054;
+  font-size: 10.5px;
+  font-weight: 740;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2XlsxImportFieldGrid select {
+  width: 100%;
+  height: 32px;
+  border: 1px solid #d9e0ec;
+  border-radius: 7px;
+  background: #fff;
+  padding: 0 8px;
+  color: #344054;
+  font: inherit;
+  font-size: 11px;
+}
+
+.v2XlsxImportFieldGrid small {
+  overflow: hidden;
+  color: #667085;
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2XlsxImportReviewAction {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.v2CsvImportCounts.v2XlsxImportCounts {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.v2XlsxImportSuccess {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #abefc6;
+  border-radius: 10px;
+  background: #ecfdf3;
+  padding: 12px;
+  color: #067647;
+}
+
+.v2XlsxImportSuccess > div {
+  display: grid;
+  gap: 3px;
+}
+
+.v2XlsxImportSuccess strong,
+.v2XlsxImportSuccess span,
+.v2XlsxImportSuccess p {
+  margin: 0;
+}
+
+.v2XlsxImportSuccess strong { font-size: 12px; }
+.v2XlsxImportSuccess span { font-size: 10.5px; font-weight: 680; }
+.v2XlsxImportSuccess p { color: #087443; font-size: 10px; line-height: 1.4; }
 
 .v2CsvImportLoading,
 .v2CsvImportEmpty {
@@ -9562,6 +9660,9 @@ svg.v2ContainerPinUnpinned {
   .v2CsvImportFileSection { align-items: flex-start; }
   .v2CsvImportDuplicateControls { grid-template-columns: minmax(0, 1fr); }
   .v2CsvImportCounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v2CsvImportCounts.v2XlsxImportCounts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .v2XlsxImportSuccess { grid-template-columns: auto minmax(0, 1fr); }
+  .v2XlsxImportSuccess > button { grid-column: 1 / -1; justify-self: stretch; }
   .v2CsvImportFooter { justify-content: flex-end; }
 }
 

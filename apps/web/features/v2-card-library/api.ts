@@ -7,6 +7,11 @@ import type {
   V2CsvLibraryImportPreview,
   V2CsvLibraryImportPreviewRequest,
   V2CsvLibraryImportResult,
+  V2XlsxLibraryImportCommitRequest,
+  V2XlsxLibraryImportPreview,
+  V2XlsxLibraryImportPreviewRequest,
+  V2XlsxLibraryImportResult,
+  V2XlsxLibraryWorkbookFile,
   V2ListCardLibraryEntriesQueryRequest,
   V2SetCardLibraryEntryRequest,
   V2UpdateCardLibraryEntryRequest
@@ -33,6 +38,14 @@ function csvImportUrl(
   action: "preview" | "commit"
 ): string {
   return `${collectionUrl(workspaceId, cardTypeId)}?csvImport=${action}`;
+}
+
+function xlsxActionUrl(
+  workspaceId: string,
+  cardTypeId: string,
+  action: "export" | "preview" | "commit"
+): string {
+  return `${collectionUrl(workspaceId, cardTypeId)}?xlsxAction=${action}`;
 }
 
 export async function listV2CardLibraryEntries(
@@ -125,6 +138,53 @@ export async function commitV2CsvLibraryImport(
   return readV2JsonResponse<V2CsvLibraryImportResult>(
     response,
     `CSV library import failed with ${response.status}`
+  );
+}
+
+export async function exportV2XlsxLibraryWorkbook(
+  workspaceId: string,
+  cardTypeId: string
+): Promise<V2XlsxLibraryWorkbookFile> {
+  const response = await fetch(xlsxActionUrl(workspaceId, cardTypeId, "export"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  });
+  return readV2JsonResponse<V2XlsxLibraryWorkbookFile>(
+    response,
+    `XLSX library export failed with ${response.status}`
+  );
+}
+
+export async function previewV2XlsxLibraryImport(
+  workspaceId: string,
+  cardTypeId: string,
+  input: V2XlsxLibraryImportPreviewRequest
+): Promise<V2XlsxLibraryImportPreview> {
+  const response = await fetch(xlsxActionUrl(workspaceId, cardTypeId, "preview"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return readV2JsonResponse<V2XlsxLibraryImportPreview>(
+    response,
+    `XLSX library import preview failed with ${response.status}`
+  );
+}
+
+export async function commitV2XlsxLibraryImport(
+  workspaceId: string,
+  cardTypeId: string,
+  input: V2XlsxLibraryImportCommitRequest
+): Promise<V2XlsxLibraryImportResult> {
+  const response = await fetch(xlsxActionUrl(workspaceId, cardTypeId, "commit"), {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+  return readV2JsonResponse<V2XlsxLibraryImportResult>(
+    response,
+    `XLSX library import failed with ${response.status}`
   );
 }
 

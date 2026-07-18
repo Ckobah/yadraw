@@ -58,6 +58,7 @@ import {
   type V2CsvLibraryImportPlan,
   type V2PreparedCsvLibraryRow
 } from "./csv-library-import.js";
+import type { V2PreparedXlsxLibraryRow } from "./xlsx-library-round-trip.js";
 
 export type V2CreateCardRecordInput = {
   workspaceId: string;
@@ -123,6 +124,28 @@ export type V2CommitCsvLibraryImportResult =
       updatedCount: number;
       skippedCount: number;
     }
+  | { status: "preview_conflict" };
+
+export type V2XlsxLibraryMutation =
+  | { kind: "create"; row: V2PreparedXlsxLibraryRow }
+  | {
+      kind: "update";
+      row: V2PreparedXlsxLibraryRow;
+      entryId: string;
+      expectedVersion: number;
+    };
+
+export type V2CommitXlsxLibraryImportInput = {
+  workspaceId: string;
+  cardTypeId: string;
+  expectedCardTypeUpdatedAt: string;
+  schema: V2CardTypeSchema;
+  schemaChanged: boolean;
+  mutations: V2XlsxLibraryMutation[];
+};
+
+export type V2CommitXlsxLibraryImportResult =
+  | { status: "committed" }
   | { status: "preview_conflict" };
 
 export type V2UpdateCardLibraryEntryResult =
@@ -267,6 +290,14 @@ export type V2Repository = {
   commitCsvLibraryImport?(
     input: V2CommitCsvLibraryImportInput
   ): Promise<V2CommitCsvLibraryImportResult>;
+  listAllCardLibraryEntries?(
+    workspaceId: string,
+    cardTypeId: string,
+    limit: number
+  ): Promise<V2CardLibraryEntry[]>;
+  commitXlsxLibraryImport?(
+    input: V2CommitXlsxLibraryImportInput
+  ): Promise<V2CommitXlsxLibraryImportResult>;
   updateCardLibraryEntry?(
     libraryEntryId: string,
     input: V2UpdateCardLibraryEntryInput
@@ -1557,6 +1588,95 @@ export function createV2MemoryRepository(seed: V2MemorySeed = createDefaultV2Mem
         updatedCount: plan.updateRows,
         skippedCount: plan.skippedRows
       };
+    },
+
+    async listAllCardLibraryEntries(workspaceId, cardTypeId, limit) {
+      return state.libraryEntries
+        .filter(
+          (entry) =>
+            entry.workspaceId === workspaceId &&
+            entry.cardTypeId === cardTypeId &&
+            !deletedLibraryEntryIds.has(entry.id)
+        )
+        .sort((left, right) => left.title.localeCompare(right.title) || left.id.localeCompare(right.id))
+        .slice(0, limit)
+        .map((entry) =>
+          v2CardLibraryEntrySchema.parse({
+            ...cloneJson(entry),
+            usageCount: activeStoredCards().filter((card) => card.libraryEntryId === entry.id).length
+          })
+        );
+    },
+
+    async commitXlsxLibraryImport(input) {
+      const cardTypeIndex = state.cardTypes.findIndex(
+        (cardType) =>
+          cardType.id === input.cardTypeId &&
+          cardType.workspaceId === input.workspaceId &&
+          !deletedCardTypeIds.has(cardType.id)
+      );
+      const cardType = state.cardTypes[cardTypeIndex];
+      if (!cardType || cardType.updatedAt !== input.expectedCardTypeUpdatedAt) {
+        return { status: "preview_conflict" };
+      }
+      const updateTargets = new Map<string, { index: number; entry: V2CardLibraryEntry }>();
+      for (const mutation of input.mutations) {
+        if (mutation.kind !== "update") continue;
+        const index = state.libraryEntries.findIndex(
+          (entry) =>
+            entry.id === mutation.entryId &&
+            entry.workspaceId === input.workspaceId &&
+            entry.cardTypeId === input.cardTypeId &&
+            !deletedLibraryEntryIds.has(entry.id)
+        );
+        const entry = state.libraryEntries[index];
+        if (!entry || entry.version !== mutation.expectedVersion || updateTargets.has(entry.id)) {
+          return { status: "preview_conflict" };
+        }
+        updateTargets.set(entry.id, { index, entry });
+      }
+
+      const timestamp = nowIso();
+      const replacements = new Map<number, V2CardLibraryEntry>();
+      const creations: V2CardLibraryEntry[] = [];
+      for (const mutation of input.mutations) {
+        if (mutation.kind === "create") {
+          creations.push(v2CardLibraryEntrySchema.parse({
+            id: randomUUID(),
+            workspaceId: input.workspaceId,
+            cardTypeId: input.cardTypeId,
+            title: mutation.row.title,
+            description: mutation.row.description,
+            data: cloneJson(mutation.row.data),
+            version: 1,
+            archivedAt: mutation.row.archived ? timestamp : null,
+            usageCount: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp
+          }));
+          continue;
+        }
+        const target = updateTargets.get(mutation.entryId)!;
+        replacements.set(target.index, v2CardLibraryEntrySchema.parse({
+          ...target.entry,
+          title: mutation.row.title,
+          description: mutation.row.description,
+          data: cloneJson(mutation.row.data),
+          archivedAt: mutation.row.archived ? target.entry.archivedAt ?? timestamp : null,
+          version: target.entry.version + 1,
+          updatedAt: timestamp
+        }));
+      }
+      if (input.schemaChanged) {
+        state.cardTypes[cardTypeIndex] = v2CardTypeSchema.parse({
+          ...cardType,
+          schema: cloneJson(input.schema),
+          updatedAt: timestamp
+        });
+      }
+      for (const [index, entry] of replacements) state.libraryEntries[index] = entry;
+      state.libraryEntries.push(...creations);
+      return { status: "committed" };
     },
 
     async updateCardLibraryEntry(libraryEntryId, input) {
@@ -3876,6 +3996,125 @@ export function createV2PostgresRepository(databaseUrl: string): V2Repository {
           updatedCount: plan.updateRows,
           skippedCount: plan.skippedRows
         };
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+
+    async listAllCardLibraryEntries(workspaceId, cardTypeId, limit) {
+      const result = await pool.query(
+        `
+          select e.*,
+                 (select count(*)::int
+                    from cards c
+                   where c.library_entry_id = e.id
+                     and c.deleted_at is null) as usage_count
+          from card_library_entries e
+          where e.workspace_id = $1
+            and e.card_type_id = $2
+            and e.deleted_at is null
+          order by lower(e.title), e.id
+          limit $3
+        `,
+        [workspaceId, cardTypeId, limit]
+      );
+      return result.rows.map(cardLibraryEntryFromRow);
+    },
+
+    async commitXlsxLibraryImport(input) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query(
+          `select pg_advisory_xact_lock(hashtextextended($1, 0))`,
+          [`xlsx-library-import:${input.workspaceId}:${input.cardTypeId}`]
+        );
+        const cardTypeResult = await client.query(
+          `
+            select id, updated_at
+            from card_types
+            where id = $1
+              and workspace_id = $2
+              and deleted_at is null
+            for update
+          `,
+          [input.cardTypeId, input.workspaceId]
+        );
+        const cardTypeRow = cardTypeResult.rows[0];
+        if (!cardTypeRow || toIso(cardTypeRow.updated_at) !== input.expectedCardTypeUpdatedAt) {
+          await client.query("rollback");
+          return { status: "preview_conflict" };
+        }
+
+        for (const mutation of input.mutations) {
+          if (mutation.kind === "create") {
+            await client.query(
+              `
+                insert into card_library_entries (
+                  workspace_id, card_type_id, title, description, data, archived_at
+                ) values ($1, $2, $3, $4, $5::jsonb, case when $6::boolean then now() else null end)
+              `,
+              [
+                input.workspaceId,
+                input.cardTypeId,
+                mutation.row.title,
+                mutation.row.description,
+                JSON.stringify(mutation.row.data),
+                mutation.row.archived
+              ]
+            );
+            continue;
+          }
+          const result = await client.query(
+            `
+              update card_library_entries
+              set title = $4,
+                  description = $5,
+                  data = $6::jsonb,
+                  archived_at = case
+                    when $7::boolean then coalesce(archived_at, now())
+                    else null
+                  end
+              where id = $1
+                and workspace_id = $2
+                and card_type_id = $3
+                and version = $8
+                and deleted_at is null
+              returning id
+            `,
+            [
+              mutation.entryId,
+              input.workspaceId,
+              input.cardTypeId,
+              mutation.row.title,
+              mutation.row.description,
+              JSON.stringify(mutation.row.data),
+              mutation.row.archived,
+              mutation.expectedVersion
+            ]
+          );
+          if (!result.rows[0]) {
+            await client.query("rollback");
+            return { status: "preview_conflict" };
+          }
+        }
+        if (input.schemaChanged) {
+          await client.query(
+            `
+              update card_types
+              set schema = $3::jsonb
+              where id = $1
+                and workspace_id = $2
+                and deleted_at is null
+            `,
+            [input.cardTypeId, input.workspaceId, JSON.stringify(input.schema)]
+          );
+        }
+        await client.query("commit");
+        return { status: "committed" };
       } catch (error) {
         await client.query("rollback");
         throw error;

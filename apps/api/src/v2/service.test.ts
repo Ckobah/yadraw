@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import {
   createDefaultV2MemorySeed,
   createV2MemoryRepository,
@@ -28,6 +29,27 @@ function getSeedParts() {
   }
 
   return { seed, sourceType, taskType, genericConnectionType, containsConnectionType };
+}
+
+function editServiceXlsxRoundTrip(workbookBase64: string): string {
+  const files = unzipSync(Buffer.from(workbookBase64, "base64"));
+  const path = "xl/worksheets/sheet2.xml";
+  let sheet = strFromU8(files[path]!);
+  sheet = sheet.replace(
+    /(<row r="1"[^>]*>)(.*?)(<\/row>)/,
+    '$1$2<c r="G1" t="inlineStr" s="1"><is><t>Owner</t></is></c>$3'
+  );
+  sheet = sheet.replace(">Northwind<", ">Northwind updated<");
+  sheet = sheet.replace(
+    /(<row r="2">)(.*?)(<\/row>)/,
+    '$1$2<c r="G2" t="inlineStr"><is><t>Alice</t></is></c>$3'
+  );
+  sheet = sheet.replace(
+    "</sheetData>",
+    '<row r="3"><c r="A3" t="inlineStr"><is><t>Contoso</t></is></c><c r="D3" t="inlineStr"><is><t>No</t></is></c><c r="G3" t="inlineStr"><is><t>Bob</t></is></c></row></sheetData>'
+  );
+  files[path] = strToU8(sheet);
+  return Buffer.from(zipSync(files, { level: 6 })).toString("base64");
 }
 
 describe("v2 board service", () => {
@@ -1502,6 +1524,123 @@ describe("v2 board service", () => {
         { expectedVersion: 1 }
       )
     ).resolves.toEqual({ deleted: true, id: entry.id });
+  });
+
+  it("round-trips a library workbook with atomic schema additions and server-assigned IDs", async () => {
+    const { seed } = getSeedParts();
+    const repository = createV2MemoryRepository(seed);
+    const service = createV2BoardService(repository);
+    const customerType = await service.createCardType(ownerContext, seed.board.id, {
+      key: "xlsx_customer_test",
+      name: "Customer",
+      schema: {
+        fields: [{ key: "segment", label: "Segment", type: "text", required: false }]
+      },
+      ports: []
+    });
+    const entry = await service.createCardLibraryEntry(
+      ownerContext,
+      seed.workspace.id,
+      customerType.id,
+      { title: "Northwind", description: "Existing", data: { segment: "Enterprise" } }
+    );
+    const linkedCard = await service.createCard(ownerContext, seed.board.id, {
+      cardTypeId: customerType.id,
+      libraryEntryId: entry.id
+    });
+
+    const exported = await service.exportXlsxLibraryWorkbook(
+      viewerContext,
+      seed.workspace.id,
+      customerType.id,
+      {}
+    );
+    const editedBase64 = editServiceXlsxRoundTrip(exported.workbookBase64);
+    await expect(service.previewXlsxLibraryImport(
+      viewerContext,
+      seed.workspace.id,
+      customerType.id,
+      { filename: exported.filename, workbookBase64: editedBase64, newFields: [] }
+    )).rejects.toMatchObject({ code: "forbidden" });
+
+    const discovery = await service.previewXlsxLibraryImport(
+      ownerContext,
+      seed.workspace.id,
+      customerType.id,
+      { filename: exported.filename, workbookBase64: editedBase64, newFields: [] }
+    );
+    expect(discovery).toMatchObject({
+      createRows: 1,
+      updateRows: 1,
+      invalidRows: 0,
+      requiresFieldConfirmation: true,
+      proposedFields: [expect.objectContaining({ columnId: "column_7", fieldKey: "owner" })]
+    });
+
+    const newFields = [{ columnId: "column_7", type: "text" as const }];
+    const preview = await service.previewXlsxLibraryImport(
+      ownerContext,
+      seed.workspace.id,
+      customerType.id,
+      { filename: exported.filename, workbookBase64: editedBase64, newFields }
+    );
+    const result = await service.commitXlsxLibraryImport(
+      ownerContext,
+      seed.workspace.id,
+      customerType.id,
+      {
+        filename: exported.filename,
+        workbookBase64: editedBase64,
+        newFields,
+        expectedPreview: {
+          fingerprint: preview.fingerprint,
+          totalRows: preview.totalRows,
+          createRows: preview.createRows,
+          updateRows: preview.updateRows,
+          unchangedRows: preview.unchangedRows,
+          invalidRows: preview.invalidRows,
+          newFieldCount: preview.newFieldCount
+        }
+      }
+    );
+    expect(result).toMatchObject({
+      createdCount: 1,
+      updatedCount: 1,
+      unchangedCount: 0,
+      addedFieldCount: 1,
+      cardType: {
+        schema: {
+          fields: expect.arrayContaining([
+            expect.objectContaining({ key: "owner", label: "Owner", type: "text", required: false })
+          ])
+        }
+      },
+      synchronizedWorkbook: { entryCount: 2, fieldCount: 2 }
+    });
+    await expect(service.getBoard(ownerContext, seed.board.id)).resolves.toMatchObject({
+      cards: expect.arrayContaining([
+        expect.objectContaining({ id: linkedCard.id, title: "Northwind updated", data: { segment: "Enterprise", owner: "Alice" } })
+      ])
+    });
+
+    const synchronizedPreview = await service.previewXlsxLibraryImport(
+      ownerContext,
+      seed.workspace.id,
+      customerType.id,
+      {
+        filename: result.synchronizedWorkbook.filename,
+        workbookBase64: result.synchronizedWorkbook.workbookBase64,
+        newFields: []
+      }
+    );
+    expect(synchronizedPreview).toMatchObject({
+      totalRows: 2,
+      createRows: 0,
+      updateRows: 0,
+      unchangedRows: 2,
+      invalidRows: 0,
+      proposedFields: []
+    });
   });
 });
 

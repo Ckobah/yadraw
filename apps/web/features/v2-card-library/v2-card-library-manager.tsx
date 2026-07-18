@@ -14,6 +14,7 @@ import {
   ArchiveRestore,
   ArrowLeft,
   AlertTriangle,
+  FileSpreadsheet,
   FileUp,
   LoaderCircle,
   Plus,
@@ -39,6 +40,7 @@ import {
   V2ApiError,
 } from "./api";
 import { V2CsvLibraryImportDialog } from "./v2-csv-library-import-dialog";
+import { V2XlsxLibraryRoundTripDialog } from "./v2-xlsx-library-round-trip-dialog";
 
 type LibraryStatusFilter = "active" | "archived" | "all";
 
@@ -577,9 +579,14 @@ export function V2CardLibraryManager({
   onClose,
 }: V2CardLibraryManagerProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [cardTypeOverrides, setCardTypeOverrides] = useState<Record<string, V2CardType>>({});
+  const effectiveCardTypes = useMemo(
+    () => cardTypes.map((cardType) => cardTypeOverrides[cardType.id] ?? cardType),
+    [cardTypeOverrides, cardTypes]
+  );
   const sortedCardTypes = useMemo(
-    () => [...cardTypes].sort((left, right) => left.name.localeCompare(right.name)),
-    [cardTypes]
+    () => [...effectiveCardTypes].sort((left, right) => left.name.localeCompare(right.name)),
+    [effectiveCardTypes]
   );
   const [selectedCardTypeId, setSelectedCardTypeId] = useState(
     sortedCardTypes.some((cardType) => cardType.id === initialCardTypeId)
@@ -600,6 +607,7 @@ export function V2CardLibraryManager({
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [xlsxRoundTripOpen, setXlsxRoundTripOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const rowHandlesRef = useRef(new Map<string, V2CardLibraryRowHandle>());
@@ -627,7 +635,7 @@ export function V2CardLibraryManager({
     if (flushed) onClose();
   }, [flushRows, isSavingAll, isTransitioning, onClose]);
 
-  useDialogFocus(dialogRef, () => { void closeManager(); }, !importOpen);
+  useDialogFocus(dialogRef, () => { void closeManager(); }, !importOpen && !xlsxRoundTripOpen);
 
   useEffect(() => {
     if (!selectedCardType) return;
@@ -707,6 +715,16 @@ export function V2CardLibraryManager({
     setImportOpen(true);
   }
 
+  async function openXlsxRoundTrip() {
+    if (!selectedCardType || isTransitioning || isSavingAll) return;
+    setIsTransitioning(true);
+    const flushed = await flushRows(true);
+    setIsTransitioning(false);
+    if (!flushed) return;
+    setImportMessage(null);
+    setXlsxRoundTripOpen(true);
+  }
+
   function addRow() {
     setPendingRowIds((current) => [createLocalRowId(), ...current]);
   }
@@ -765,7 +783,7 @@ export function V2CardLibraryManager({
         role="dialog"
         aria-modal="true"
         aria-label="Card libraries"
-        aria-hidden={importOpen || undefined}
+        aria-hidden={importOpen || xlsxRoundTripOpen || undefined}
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) void closeManager();
         }}
@@ -844,6 +862,15 @@ export function V2CardLibraryManager({
                 <option value="all">All</option>
               </select>
               <div className="v2CardLibraryToolbarActions">
+                <button
+                  type="button"
+                  className="v2SchemaEditButton"
+                  disabled={!selectedCardType || isLoading || isTransitioning || isSavingAll}
+                  onClick={() => void openXlsxRoundTrip()}
+                >
+                  <FileSpreadsheet size={14} />
+                  <span>Edit in Excel</span>
+                </button>
                 <button
                   type="button"
                   className="v2SchemaEditButton"
@@ -948,6 +975,19 @@ export function V2CardLibraryManager({
             setReloadNonce((current) => current + 1);
             setImportMessage(
               `Import complete: ${result.createdCount} created, ${result.updatedCount} updated, ${result.skippedCount} skipped.`
+            );
+          }}
+        />
+      ) : null}
+      {xlsxRoundTripOpen && selectedCardType ? (
+        <V2XlsxLibraryRoundTripDialog
+          cardType={selectedCardType}
+          onClose={() => setXlsxRoundTripOpen(false)}
+          onImported={(result) => {
+            setCardTypeOverrides((current) => ({ ...current, [result.cardType.id]: result.cardType }));
+            setReloadNonce((current) => current + 1);
+            setImportMessage(
+              `Workbook applied: ${result.createdCount} created, ${result.updatedCount} updated, ${result.addedFieldCount} fields added.`
             );
           }}
         />

@@ -24,6 +24,11 @@ import {
   v2CsvLibraryImportCommitBodySchema,
   v2CsvLibraryImportPreviewBodySchema,
   v2CsvLibraryImportPreviewSchema,
+  v2XlsxLibraryImportCommitBodySchema,
+  v2XlsxLibraryImportPreviewBodySchema,
+  v2XlsxLibraryImportPreviewSchema,
+  v2XlsxLibraryWorkbookExportBodySchema,
+  v2XlsxLibraryWorkbookFileSchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2ConnectionSchema,
@@ -653,6 +658,15 @@ describe("v2 API contracts", () => {
     expect(v2ApiContracts.commitCsvLibraryImport.body).toBe(
       v2CsvLibraryImportCommitBodySchema
     );
+    expect(v2ApiContracts.exportXlsxLibraryWorkbook.body).toBe(
+      v2XlsxLibraryWorkbookExportBodySchema
+    );
+    expect(v2ApiContracts.previewXlsxLibraryImport.body).toBe(
+      v2XlsxLibraryImportPreviewBodySchema
+    );
+    expect(v2ApiContracts.commitXlsxLibraryImport.body).toBe(
+      v2XlsxLibraryImportCommitBodySchema
+    );
     expect(v2ApiContracts.setCardLibraryEntry.body).toBe(v2SetCardLibraryEntryBodySchema);
     expect(v2ApiContracts.runBoardDryRun.body).toBe(v2RunDryRunBodySchema);
     expect(v2ApiContracts.createLinkedFieldBinding.body).toBe(v2CreateLinkedFieldBindingBodySchema);
@@ -1023,6 +1037,70 @@ describe("v2 API contracts", () => {
         ]
       })
     ).toMatchObject({ fingerprint: "a".repeat(64), createRows: 1 });
+  });
+
+  it("validates strict XLSX round-trip payloads and previews", () => {
+    expect(v2XlsxLibraryWorkbookExportBodySchema.parse({})).toEqual({});
+    expect(() => v2XlsxLibraryWorkbookExportBodySchema.parse({ includeSecrets: true })).toThrow();
+    expect(v2XlsxLibraryImportPreviewBodySchema.parse({
+      filename: "library.xlsx",
+      workbookBase64: "AAAA"
+    })).toEqual({ filename: "library.xlsx", workbookBase64: "AAAA", newFields: [] });
+    expect(() => v2XlsxLibraryImportPreviewBodySchema.parse({
+      filename: "library.xlsm",
+      workbookBase64: "AAAA"
+    })).toThrow();
+    expect(() => v2XlsxLibraryImportCommitBodySchema.parse({
+      filename: "library.xlsx",
+      workbookBase64: "AAAA",
+      newFields: [{ columnId: "column_7", type: "text" }],
+      expectedPreview: {
+        fingerprint: "bad",
+        totalRows: 1,
+        createRows: 1,
+        updateRows: 0,
+        unchangedRows: 0,
+        invalidRows: 0,
+        newFieldCount: 1
+      }
+    })).toThrow();
+
+    expect(v2XlsxLibraryImportPreviewSchema.parse({
+      fingerprint: "b".repeat(64),
+      totalRows: 2,
+      createRows: 1,
+      updateRows: 1,
+      unchangedRows: 0,
+      invalidRows: 0,
+      newFieldCount: 1,
+      requiresFieldConfirmation: false,
+      proposedFields: [{
+        columnId: "column_7",
+        header: "Owner",
+        fieldKey: "owner",
+        suggestedType: "text",
+        confirmedType: "text",
+        distinctValueCount: 2,
+        sampleValues: ["Alice", "Bob"]
+      }],
+      issues: [],
+      warnings: [],
+      previewRows: [{
+        rowNumber: 2,
+        entryId: libraryEntryId,
+        title: "Northwind",
+        status: "update",
+        issues: []
+      }]
+    })).toMatchObject({ newFieldCount: 1, requiresFieldConfirmation: false });
+
+    expect(v2XlsxLibraryWorkbookFileSchema.parse({
+      filename: "yadraw-library.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      workbookBase64: "AAAA",
+      entryCount: 2,
+      fieldCount: 1
+    })).toMatchObject({ entryCount: 2, fieldCount: 1 });
   });
 
   it("parses dry-run requests and results", () => {

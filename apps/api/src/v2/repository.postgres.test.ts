@@ -3,6 +3,7 @@ import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { Client } from "pg";
 import { config } from "dotenv";
 import { createV2PostgresRepository, type V2Repository } from "./repository.js";
@@ -49,6 +50,27 @@ function withSearchPath(connectionString: string, schemaName: string): string {
   const existingOptions = url.searchParams.get("options");
   url.searchParams.set("options", existingOptions ? `${existingOptions} ${searchPathOption}` : searchPathOption);
   return url.toString();
+}
+
+function editPostgresXlsxRoundTrip(workbookBase64: string): string {
+  const files = unzipSync(Buffer.from(workbookBase64, "base64"));
+  const path = "xl/worksheets/sheet2.xml";
+  let sheet = strFromU8(files[path]!);
+  sheet = sheet.replace(
+    /(<row r="1"[^>]*>)(.*?)(<\/row>)/,
+    '$1$2<c r="G1" t="inlineStr" s="1"><is><t>Owner</t></is></c>$3'
+  );
+  sheet = sheet.replace(">Northwind XLSX<", ">Northwind XLSX updated<");
+  sheet = sheet.replace(
+    /(<row r="2">)(.*?)(<\/row>)/,
+    '$1$2<c r="G2" t="inlineStr"><is><t>Alice</t></is></c>$3'
+  );
+  sheet = sheet.replace(
+    "</sheetData>",
+    '<row r="3"><c r="A3" t="inlineStr"><is><t>Contoso XLSX</t></is></c><c r="D3" t="inlineStr"><is><t>No</t></is></c><c r="G3" t="inlineStr"><is><t>Bob</t></is></c></row></sheetData>'
+  );
+  files[path] = strToU8(sheet);
+  return Buffer.from(zipSync(files, { level: 6 })).toString("base64");
 }
 
 async function applySqlFiles(connectionString: string) {
@@ -734,5 +756,132 @@ describePostgres("v2 Postgres repository", () => {
     );
     expect(updated).toMatchObject({ createdCount: 0, updatedCount: 1 });
     expect(updated.entries[0]).toMatchObject({ version: 3, description: "Concurrent change" });
+  });
+
+  it("commits XLSX schema and row changes atomically after optimistic version checks", async () => {
+    if (!repository) throw new Error("Repository was not initialized");
+    const service = createV2BoardService(repository);
+    const suffix = randomUUID().slice(0, 8);
+    const cardType = await service.createCardType(ownerContext, seedIds.board, {
+      key: `xlsx_customer_${suffix}`,
+      name: `XLSX Customer ${suffix}`,
+      schema: {
+        fields: [{ key: "segment", label: "Segment", type: "text", required: false }]
+      },
+      ports: []
+    });
+    const entry = await service.createCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      { title: "Northwind XLSX", description: "Before", data: { segment: "Enterprise" } }
+    );
+
+    const exported = await service.exportXlsxLibraryWorkbook(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      {}
+    );
+    const editedBase64 = editPostgresXlsxRoundTrip(exported.workbookBase64);
+    const newFields = [{ columnId: "column_7", type: "text" as const }];
+    const stalePreview = await service.previewXlsxLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      { filename: exported.filename, workbookBase64: editedBase64, newFields }
+    );
+    await service.updateCardLibraryEntry(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      entry.id,
+      { description: "Concurrent", expectedVersion: entry.version }
+    );
+    await expect(service.commitXlsxLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      {
+        filename: exported.filename,
+        workbookBase64: editedBase64,
+        newFields,
+        expectedPreview: {
+          fingerprint: stalePreview.fingerprint,
+          totalRows: stalePreview.totalRows,
+          createRows: stalePreview.createRows,
+          updateRows: stalePreview.updateRows,
+          unchangedRows: stalePreview.unchangedRows,
+          invalidRows: stalePreview.invalidRows,
+          newFieldCount: stalePreview.newFieldCount
+        }
+      }
+    )).rejects.toMatchObject({ code: "conflict" });
+    await expect(repository.getCardType(cardType.id)).resolves.toMatchObject({
+      schema: { fields: [expect.objectContaining({ key: "segment" })] }
+    });
+    await expect(service.listCardLibraryEntries(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      { status: "all", limit: 100 }
+    )).resolves.toMatchObject({
+      entries: [expect.objectContaining({ title: "Northwind XLSX", description: "Concurrent", version: 2 })]
+    });
+
+    const freshExport = await service.exportXlsxLibraryWorkbook(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      {}
+    );
+    const freshEditedBase64 = editPostgresXlsxRoundTrip(freshExport.workbookBase64);
+    const freshPreview = await service.previewXlsxLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      { filename: freshExport.filename, workbookBase64: freshEditedBase64, newFields }
+    );
+    const result = await service.commitXlsxLibraryImport(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      {
+        filename: freshExport.filename,
+        workbookBase64: freshEditedBase64,
+        newFields,
+        expectedPreview: {
+          fingerprint: freshPreview.fingerprint,
+          totalRows: freshPreview.totalRows,
+          createRows: freshPreview.createRows,
+          updateRows: freshPreview.updateRows,
+          unchangedRows: freshPreview.unchangedRows,
+          invalidRows: freshPreview.invalidRows,
+          newFieldCount: freshPreview.newFieldCount
+        }
+      }
+    );
+    expect(result).toMatchObject({
+      createdCount: 1,
+      updatedCount: 1,
+      addedFieldCount: 1,
+      cardType: {
+        schema: {
+          fields: expect.arrayContaining([expect.objectContaining({ key: "owner", type: "text" })])
+        }
+      },
+      synchronizedWorkbook: { entryCount: 2 }
+    });
+    await expect(service.listCardLibraryEntries(
+      ownerContext,
+      seedIds.workspace,
+      cardType.id,
+      { status: "all", limit: 100 }
+    )).resolves.toMatchObject({
+      entries: expect.arrayContaining([
+        expect.objectContaining({ title: "Northwind XLSX updated", data: { segment: "Enterprise", owner: "Alice" }, version: 3 }),
+        expect.objectContaining({ title: "Contoso XLSX", data: { owner: "Bob" }, version: 1 })
+      ])
+    });
   });
 });

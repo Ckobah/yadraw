@@ -16,6 +16,9 @@ import {
   v2CreateCardLibraryEntryBodySchema,
   v2CsvLibraryImportCommitBodySchema,
   v2CsvLibraryImportPreviewBodySchema,
+  v2XlsxLibraryImportCommitBodySchema,
+  v2XlsxLibraryImportPreviewBodySchema,
+  v2XlsxLibraryWorkbookExportBodySchema,
   v2CreateCardTypeBodySchema,
   v2CreateConnectionBodySchema,
   v2CreateConnectionTypeBodySchema,
@@ -57,6 +60,12 @@ import {
   type V2CsvLibraryImportPreview,
   type V2CsvLibraryImportPreviewRequest,
   type V2CsvLibraryImportResult,
+  type V2XlsxLibraryImportCommitRequest,
+  type V2XlsxLibraryImportPreview,
+  type V2XlsxLibraryImportPreviewRequest,
+  type V2XlsxLibraryImportResult,
+  type V2XlsxLibraryWorkbookExportRequest,
+  type V2XlsxLibraryWorkbookFile,
   type V2CreateConnectionRequest,
   type V2DryRunResult,
   type V2EvaluateCalculationsRequest,
@@ -86,7 +95,8 @@ import type {
   V2CreateConnectionAttachmentRecordInput,
   V2BootstrapUserInput,
   V2FileDownloadRecord,
-  V2Repository
+  V2Repository,
+  V2XlsxLibraryMutation
 } from "./repository.js";
 import type { GetObjectResult, V2ObjectStorage } from "./storage.js";
 import {
@@ -95,6 +105,13 @@ import {
   prepareV2CsvLibraryImport,
   V2CsvLibraryImportError
 } from "./csv-library-import.js";
+import {
+  buildV2XlsxLibraryWorkbook,
+  prepareV2XlsxLibraryImport,
+  V2_XLSX_LIBRARY_MAX_ROWS,
+  V2XlsxLibraryError,
+  type V2XlsxLibraryImportPlan
+} from "./xlsx-library-round-trip.js";
 
 export const V2_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const CONTAINER_CARD_TYPE_KEY = "yadraw_system_container";
@@ -210,6 +227,24 @@ export type V2BoardService = {
     cardTypeId: string,
     input: V2CsvLibraryImportCommitRequest
   ): Promise<V2CsvLibraryImportResult>;
+  exportXlsxLibraryWorkbook(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2XlsxLibraryWorkbookExportRequest
+  ): Promise<V2XlsxLibraryWorkbookFile>;
+  previewXlsxLibraryImport(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2XlsxLibraryImportPreviewRequest
+  ): Promise<V2XlsxLibraryImportPreview>;
+  commitXlsxLibraryImport(
+    context: RequestContext,
+    workspaceId: string,
+    cardTypeId: string,
+    input: V2XlsxLibraryImportCommitRequest
+  ): Promise<V2XlsxLibraryImportResult>;
   updateCardLibraryEntry(
     context: RequestContext,
     workspaceId: string,
@@ -839,6 +874,71 @@ export function createV2BoardService(
         previewRows
       },
       validRows
+    };
+  }
+
+  function requireXlsxLibraryRepository() {
+    if (!repository.listAllCardLibraryEntries || !repository.commitXlsxLibraryImport) {
+      throw new V2ServiceError("conflict", "XLSX library round trip is not available");
+    }
+    return {
+      listAll: repository.listAllCardLibraryEntries.bind(repository),
+      commit: repository.commitXlsxLibraryImport.bind(repository)
+    };
+  }
+
+  async function loadAllXlsxLibraryEntries(
+    workspaceId: string,
+    cardTypeId: string
+  ): Promise<V2CardLibraryEntry[]> {
+    return requireXlsxLibraryRepository().listAll(
+      workspaceId,
+      cardTypeId,
+      V2_XLSX_LIBRARY_MAX_ROWS + 1
+    );
+  }
+
+  function prepareXlsxLibraryPlan(
+    cardType: V2CardType,
+    entries: V2CardLibraryEntry[],
+    input: import("@yadraw/shared").V2XlsxLibraryImportPreviewInput
+  ): V2XlsxLibraryImportPlan {
+    try {
+      return prepareV2XlsxLibraryImport(cardType, entries, input);
+    } catch (error) {
+      if (error instanceof V2XlsxLibraryError) validationFailed(error.message);
+      throw error;
+    }
+  }
+
+  function xlsxPreviewFromPlan(plan: V2XlsxLibraryImportPlan): V2XlsxLibraryImportPreview {
+    return {
+      fingerprint: plan.fingerprint,
+      totalRows: plan.totalRows,
+      createRows: plan.createRows,
+      updateRows: plan.updateRows,
+      unchangedRows: plan.unchangedRows,
+      invalidRows: plan.invalidRows,
+      newFieldCount: plan.proposedFields.length,
+      requiresFieldConfirmation: plan.requiresFieldConfirmation,
+      proposedFields: plan.proposedFields,
+      issues: plan.issues,
+      warnings: plan.warnings,
+      previewRows: plan.operations.slice(0, 10).map((operation) => operation.kind === "invalid"
+        ? {
+            rowNumber: operation.rowNumber,
+            entryId: operation.entryId,
+            title: operation.title,
+            status: "invalid" as const,
+            issues: operation.issues
+          }
+        : {
+            rowNumber: operation.row.rowNumber,
+            entryId: operation.row.entryId,
+            title: operation.row.title,
+            status: operation.kind,
+            issues: []
+          })
     };
   }
 
@@ -1472,6 +1572,117 @@ export function createV2BoardService(
         createdCount: result.createdCount,
         updatedCount: result.updatedCount,
         skippedCount: result.skippedCount
+      };
+    },
+
+    async exportXlsxLibraryWorkbook(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2XlsxLibraryWorkbookExportBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid XLSX workbook export payload");
+      await authorizeWorkspace(context, workspaceId, "read");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) notFound("Card type not found");
+      if (cardType.kind === "container") conflict("Container cards do not use library entries");
+      const entries = await loadAllXlsxLibraryEntries(workspaceId, cardTypeId);
+      try {
+        return buildV2XlsxLibraryWorkbook(cardType, entries);
+      } catch (error) {
+        if (error instanceof V2XlsxLibraryError) validationFailed(error.message);
+        throw error;
+      }
+    },
+
+    async previewXlsxLibraryImport(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2XlsxLibraryImportPreviewBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid XLSX library import payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) notFound("Card type not found");
+      if (cardType.kind === "container") conflict("Container cards do not use library entries");
+      const entries = await loadAllXlsxLibraryEntries(workspaceId, cardTypeId);
+      return xlsxPreviewFromPlan(prepareXlsxLibraryPlan(cardType, entries, parsedInput.data));
+    },
+
+    async commitXlsxLibraryImport(context, workspaceId, cardTypeId, rawInput) {
+      requireV2Uuid(workspaceId, "workspace ID");
+      requireV2Uuid(cardTypeId, "card type ID");
+      const parsedInput = v2XlsxLibraryImportCommitBodySchema.safeParse(rawInput);
+      if (!parsedInput.success) validationFailed("Invalid XLSX library import payload");
+      await authorizeWorkspace(context, workspaceId, "write");
+
+      const cardType = await repository.getCardType(cardTypeId);
+      if (!cardType || cardType.workspaceId !== workspaceId) notFound("Card type not found");
+      if (cardType.kind === "container") conflict("Container cards do not use library entries");
+      const entries = await loadAllXlsxLibraryEntries(workspaceId, cardTypeId);
+      const { expectedPreview, ...previewInput } = parsedInput.data;
+      const plan = prepareXlsxLibraryPlan(cardType, entries, previewInput);
+      const preview = xlsxPreviewFromPlan(plan);
+      const previewChanged =
+        preview.fingerprint !== expectedPreview.fingerprint ||
+        preview.totalRows !== expectedPreview.totalRows ||
+        preview.createRows !== expectedPreview.createRows ||
+        preview.updateRows !== expectedPreview.updateRows ||
+        preview.unchangedRows !== expectedPreview.unchangedRows ||
+        preview.invalidRows !== expectedPreview.invalidRows ||
+        preview.newFieldCount !== expectedPreview.newFieldCount;
+      if (previewChanged) {
+        conflict("The workbook or library changed after preview. Review the refreshed import and try again.");
+      }
+      if (preview.requiresFieldConfirmation || preview.invalidRows > 0 || preview.issues.length > 0) {
+        validationFailed("Resolve every XLSX import issue before committing");
+      }
+
+      const mutations: V2XlsxLibraryMutation[] = [];
+      for (const operation of plan.operations) {
+        if (operation.kind === "create") {
+          mutations.push({ kind: "create", row: operation.row });
+        }
+        if (operation.kind === "update") {
+          mutations.push({
+            kind: "update",
+            row: operation.row,
+            entryId: operation.entry.id,
+            expectedVersion: operation.entry.version
+          });
+        }
+      }
+      const result = await requireXlsxLibraryRepository().commit({
+        workspaceId,
+        cardTypeId,
+        expectedCardTypeUpdatedAt: cardType.updatedAt,
+        schema: plan.schema,
+        schemaChanged: plan.addedFields.length > 0,
+        mutations
+      });
+      if (result.status === "preview_conflict") {
+        conflict("The card type or library changed during import. Preview the workbook again before retrying.");
+      }
+
+      const updatedCardType = await repository.getCardType(cardTypeId);
+      if (!updatedCardType || updatedCardType.workspaceId !== workspaceId) {
+        conflict("The imported card type could not be reloaded");
+      }
+      const synchronizedEntries = await loadAllXlsxLibraryEntries(workspaceId, cardTypeId);
+      let synchronizedWorkbook: V2XlsxLibraryWorkbookFile;
+      try {
+        synchronizedWorkbook = buildV2XlsxLibraryWorkbook(updatedCardType, synchronizedEntries);
+      } catch (error) {
+        if (error instanceof V2XlsxLibraryError) conflict(error.message);
+        throw error;
+      }
+      return {
+        cardType: updatedCardType,
+        totalRows: preview.totalRows,
+        createdCount: preview.createRows,
+        updatedCount: preview.updateRows,
+        unchangedCount: preview.unchangedRows,
+        addedFieldCount: plan.addedFields.length,
+        synchronizedWorkbook
       };
     },
 
